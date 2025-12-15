@@ -1,0 +1,121 @@
+/* Jaldi COD Form Storefront Styles */
+
+/* Reset */
+#jaldi-cod-form-popup *,
+#jaldi-cod-form-embedded * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Container */
+#jaldi-cod-form-popup,
+#jaldi-cod-form-embedded {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Modal overlay */
+.jaldi-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 2147483647 !important;
+  padding: 20px !important;
+}
+
+/* Modal content */
+.jaldi-modal-content {
+  background-color: white;
+  border-radius: 8px;
+  max-width: 650px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  position: relative;
+}
+
+/* Form inputs */
+.jaldi-form input,
+.jaldi-form select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.jaldi-form input:focus,
+.jaldi-form select:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Button hover states */
+.jaldi-form button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.jaldi-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .jaldi-modal-overlay {
+    padding: 10px;
+  }
+
+  .jaldi-modal-content {
+    max-height: 95vh;
+  }
+}
+
+/* Loading spinner */
+.jaldi-loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: jaldi-spin 0.6s linear infinite;
+}
+
+@keyframes jaldi-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Button animations */
+@keyframes jaldi-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes jaldi-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+@keyframes jaldi-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.jaldi-button-pulse {
+  animation: jaldi-pulse 2s ease-in-out infinite;
+}
+
+.jaldi-button-shake {
+  animation: jaldi-shake 2s ease-in-out infinite;
+}
+
+.jaldi-button-bounce {
+  animation: jaldi-bounce 1s ease-in-out infinite;
+}
