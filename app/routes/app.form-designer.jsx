@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -20,12 +20,14 @@ export const loader = async ({ request }) => {
       sections: JSON.parse(shop.formConfig.sections),
       fields: JSON.parse(shop.formConfig.fields),
     },
+    settings: shop.settings,
   };
 };
 
 export default function FormDesigner() {
-  const { formConfig: initialConfig } = useLoaderData();
+  const { formConfig: initialConfig, settings } = useLoaderData();
   const shopify = useAppBridge();
+  const saveButtonRef = useRef(null)
 
   const [formConfig, setFormConfig] = useState(initialConfig);
   const [sections, setSections] = useState(initialConfig.sections);
@@ -91,12 +93,23 @@ export default function FormDesigner() {
     }
   };
 
+  // Attach event listener to save button (web components don't support React's onClick)                                                  
+  useEffect(() => {                                                                                                                       
+    const button = saveButtonRef.current;                                                                                                 
+    if (button) {                                                                                                                         
+      button.addEventListener("click", handleSave);                                                                                       
+      return () => {                                                                                                                      
+        button.removeEventListener("click", handleSave);                                                                                  
+      };                                                                                                                                  
+    }                                                                                                                                     
+  }, [handleSave]);
+
   return (
     <>
       <s-page heading="Form Designer">
         <s-button
           slot="primary-action"
-          onClick={handleSave}
+          ref={saveButtonRef}
           {...(isSaving ? { loading: true } : {})}
           variant="primary"
         >
@@ -137,6 +150,7 @@ export default function FormDesigner() {
                     formConfig={formConfig}
                     sections={sections}
                     fields={fields}
+                    settings={settings}
                   />
                 </div>
               </s-stack>

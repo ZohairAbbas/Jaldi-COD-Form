@@ -32,14 +32,18 @@ model Session {
 }
 
 model Shop {
-  id            String       @id @default(cuid())
-  shopifyDomain String       @unique
-  accessToken   String
-  settings      Settings?
-  formConfig    FormConfig?
-  orders        Order[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String          @id @default(cuid())
+  shopifyDomain   String          @unique
+  accessToken     String
+  country         String          @default("PAK") // PAK, UAE, QATAR, KUWAIT, KSA
+  settings        Settings?
+  formConfig      FormConfig?
+  upsells         Upsell[]
+  orders          Order[]
+  orderSessions   OrderSession[]
+  abandonedCarts  AbandonedCart[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model Settings {
@@ -48,9 +52,24 @@ model Settings {
   shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   // Deployment settings
-  formMode           String   @default("popup") // "popup" | "embedded" | "both"
-  enablePopup        Boolean  @default(true)
-  enableEmbedded     Boolean  @default(false)
+  formMode           String   @default("popup") // "popup" | "embedded"
+
+  // Cart settings
+  allowCartItems     Boolean  @default(true) // Allow cart items in popup mode
+
+  // RTL settings
+  enableRTL          Boolean  @default(false) // Enable right-to-left layout for Arabic languages
+
+  // Button visibility settings
+  buttonPageVisibility String @default("both") // "product" | "cart" | "both"
+
+  // Hide native buttons settings
+  hideCheckoutButton   Boolean @default(false) // Hide checkout button on cart page
+  hideAddToCartButton  Boolean @default(false) // Hide Add to Cart button on product pages
+  hideBuyNowButton     Boolean @default(false) // Hide Buy Now button on product pages
+
+  // Pay with Card settings
+  enableCartPermalink  Boolean @default(false) // Enable Pay with Card option via cart permalink
 
   // Buy Button settings
   buttonText         String   @default("Buy with Cash on Delivery")
@@ -132,6 +151,9 @@ model Order {
   // Cart items (JSON array)
   items              Json
 
+  // Payment method
+  paymentMethod      String   @default("cod") // "cod" | "card"
+
   status             String   @default("pending") // "pending" | "confirmed" | "cancelled"
 
   createdAt          DateTime @default(now())
@@ -140,4 +162,138 @@ model Order {
   @@index([shopId])
   @@index([status])
   @@index([createdAt])
+}
+
+model OrderSession {
+  id               String    @id @default(cuid())
+  shopId           String
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Session tracking
+  sessionId        String    @unique // Unique session identifier
+  userEmail        String?
+  userPhone        String?
+
+  // Cart data
+  cartItems        String    // JSON string of cart items
+  totalAmount      Float     @default(0)
+
+  // Form data (partially filled)
+  formData         String?   // JSON string of form data
+
+  // Tracking
+  startedAt        DateTime  @default(now())
+  lastActivityAt   DateTime  @default(now())
+  completedAt      DateTime? // Set when order is completed
+  abandonedAt      DateTime? // Set when marked as abandoned
+
+  // Status
+  status           String    @default("active") // "active" | "completed" | "abandoned"
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model AbandonedCart {
+  id                  String    @id @default(cuid())
+  shopId              String
+  shop                Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Reference to session
+  sessionId           String    @unique
+
+  // Customer info
+  customerEmail       String?
+  customerPhone       String?
+  customerFirstName   String?
+  customerLastName    String?
+
+  // Cart data
+  cartItems           String    // JSON string of cart items
+  totalAmount         Float     @default(0)
+
+  // Shopify draft order
+  shopifyDraftOrderId String?   // Shopify draft order ID
+  draftOrderUrl       String?   // URL to view draft order in Shopify admin
+
+  // Tracking
+  abandonedAt         DateTime  @default(now())
+  recovered           Boolean   @default(false)
+  recoveredAt         DateTime?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([sessionId])
+  @@index([abandonedAt])
+  @@index([recovered])
+}
+
+model Upsell {
+  id                     String   @id @default(cuid())
+  shopId                 String
+  shop                   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Upsell identification
+  name                   String   @default("My Upsell")
+  priority               Int      @default(1) // Lower number = higher priority
+
+  // Upsell type: "pre-purchase", "post-purchase", or "one-tick"
+  upsellType             String   @default("pre-purchase")
+
+  // Enable/disable
+  enabled                Boolean  @default(false)
+
+  // Upsell product
+  productId              String?
+  productTitle           String?
+  productImage           String?
+  productPrice           Float?
+  variantId              String?
+
+  // Discount settings (for one-click upsells)
+  discountType           String   @default("none") // "none", "fixed", "percentage"
+  discountValue          Float    @default(0)
+
+  // One-Click Upsell Customization
+  modalTitle             String   @default("Add {product_name} to your order!")
+  acceptButtonText       String   @default("Add to my order")
+  declineButtonText      String   @default("No thank you, complete my order")
+  acceptButtonBgColor    String   @default("#000000")
+  acceptButtonTextColor  String   @default("#ffffff")
+  declineButtonBgColor   String   @default("#ffffff")
+  declineButtonTextColor String   @default("#000000")
+
+  // One-Tick Upsell Fields (nullable for backward compatibility)
+  upsellTitle            String?  // Customer-facing title for one-tick
+  upsellPrice            Float?   // Price for one-tick upsell
+  checkboxText           String?  // Checkbox text with {title} and {price} placeholders
+  descriptionText        String?  // Description text
+  textColor              String?  // Text color
+  descriptionColor       String?  // Description color
+  preselectUpsell        Boolean  @default(false) // Preselect checkbox
+  imageUrl               String?  // Image URL for one-tick
+  backgroundColor        String?  // Background color
+  borderStyle            String?  // Border style: solid, dashed, dotted
+  borderWidth            Int?     // Border width in pixels
+  borderColor            String?  // Border color
+  borderRadius           Int?     // Border radius in pixels
+
+  // Tracking
+  impressions            Int      @default(0)
+  accepts                Int      @default(0)
+  declines               Int      @default(0)
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([shopId])
+  @@index([shopId, upsellType, enabled])
+  @@index([priority])
 }

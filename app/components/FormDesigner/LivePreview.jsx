@@ -1,4 +1,4 @@
-export default function LivePreview({ formConfig, sections, fields }) {
+export default function LivePreview({ formConfig, sections, fields, settings }) {
   const visibleSections = sections.filter((s) => s.visible).sort((a, b) => a.order - b.order);
   const visibleFields = fields.filter((f) => f.visible).sort((a, b) => a.order - b.order);
 
@@ -38,8 +38,8 @@ export default function LivePreview({ formConfig, sections, fields }) {
               {field.label} {field.required && <span style={{ color: "red" }}>*</span>}
             </label>
             <input
-              type="text"
-              placeholder={field.placeholder}
+              type={field.id === "email" ? "email" : "text"}
+              placeholder={field.id === "email" ? "email@example.com" : field.placeholder}
               style={inputStyle}
               disabled
             />
@@ -325,6 +325,36 @@ export default function LivePreview({ formConfig, sections, fields }) {
       >
         COMPLETE ORDER - Rs. 19.99
       </button>
+
+      {/* Pay with Card Button */}
+      {settings?.enableCartPermalink && (
+        <button
+          style={{
+            width: "100%",
+            padding: "12px",
+            marginTop: "12px",
+            backgroundColor: "#FFFFFF",
+            color: "#000000",
+            border: "2px solid #000000",
+            borderRadius: "4px",
+            fontSize: "16px",
+            fontWeight: "600",
+            cursor: "not-allowed",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+          }}
+          disabled
+        >
+          {/* Credit Card Icon */}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+            <line x1="1" y1="10" x2="23" y2="10"></line>
+          </svg>
+          <span>PAY WITH CARD</span>
+        </button>
+      )}
     </div>
   );
 }

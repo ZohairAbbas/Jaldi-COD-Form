@@ -1,0 +1,31 @@
+{% comment %}
+  Jaldi COD Form - Popup Mode (Snippet)
+  This snippet is for manual inclusion in theme files.
+  For automatic loading, use the app embed instead.
+{% endcomment %}
+
+{% if template.name == 'product' %}
+  <div id="preventify-popup"
+       data-shop="{{ shop.permanent_domain }}"
+       data-product-id="{{ product.id }}"
+       data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+       data-product-title="{{ product.title | escape }}"
+       data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
+       data-product-price="{{ product.selected_or_first_available_variant.price | money_without_currency }}"
+       data-product-image="{{ product.featured_image | image_url: width: 100 }}">
+  </div>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <link rel="stylesheet" href="{{ 'preventify.css' | asset_url }}?v={{ 'now' | date: '%s' }}">
+  <script src="{{ 'preventify.js' | asset_url }}?v={{ 'now' | date: '%s' }}" defer></script>
+{% elsif template.name == 'cart' %}
+  <div id="preventify-popup"
+       data-shop="{{ shop.permanent_domain }}">
+  </div>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <link rel="stylesheet" href="{{ 'preventify.css' | asset_url }}?v={{ 'now' | date: '%s' }}">
+  <script src="{{ 'preventify.js' | asset_url }}?v={{ 'now' | date: '%s' }}" defer></script>
+{% endif %}

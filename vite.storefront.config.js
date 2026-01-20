@@ -8,12 +8,12 @@ export default defineConfig({
     'process.env.NODE_ENV': JSON.stringify('production'),
   },
   build: {
-    outDir: 'extensions/jaldi-cod-form/assets',
+    outDir: 'extensions/preventify/assets',
     emptyOutDir: false,
     lib: {
       entry: path.resolve(__dirname, 'app/storefront/index.jsx'),
-      name: 'JaldiCODForm',
-      fileName: () => 'jaldi-cod-form.js',
+      name: 'Preventify',
+      fileName: () => 'preventify.js',
       formats: ['iife'],
     },
     rollupOptions: {

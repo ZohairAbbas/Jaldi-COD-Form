@@ -1,0 +1,37 @@
+{% schema %}
+{
+  "name": "Preventify - COD Button",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Manually place the COD popup button at this exact position on product pages. This overrides the default position."
+    }
+  ]
+}
+{% endschema %}
+
+{% comment %}
+  Manual Popup Button Block
+  Only available on product pages
+  Marks the page as having a manual popup block to prevent default rendering
+{% endcomment %}
+
+<div id="preventify-popup-manual"
+     data-preventify-manual-popup
+     data-shop="{{ shop.permanent_domain }}"
+     data-product-id="{{ product.id }}"
+     data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+     data-product-title="{{ product.title | escape }}"
+     data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
+     data-product-price="{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}"
+     data-product-image="{{ product.featured_image | image_url: width: 100 }}">
+</div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<link rel="stylesheet" href="{{ 'preventify.css' | asset_url }}?v={{ 'now' | date: '%s' }}">
+<script src="{{ 'preventify.js' | asset_url }}?v={{ 'now' | date: '%s' }}" defer></script>

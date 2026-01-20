@@ -80,7 +80,7 @@ export default function ButtonCustomizer({ settings, onUpdate }) {
   const buttonPreviewStyle = {
     backgroundColor: settings.buttonBgColor || '#000000',
     color: settings.buttonTextColor || '#FFFFFF',
-    padding: "12px 24px",
+    padding: "16px 32px",
     border: `${settings.buttonBorderWidth || 0}px solid ${settings.buttonBorderColor || '#000000'}`,
     borderRadius: `${settings.buttonBorderRadius || 4}px`,
     fontSize: `${settings.buttonFontSize || 16}px`,

@@ -1,6 +1,6 @@
 {
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shopify-dev-mcp"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

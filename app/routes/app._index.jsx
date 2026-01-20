@@ -29,7 +29,7 @@ export default function Index() {
 
   return (
     <s-page heading="COD Form Dashboard">
-      <s-section heading="Welcome to Jaldi COD Form">
+      <s-section heading="Welcome to Preventify: COD Form & Upsells">
         <s-paragraph>
           Streamline your Cash on Delivery orders with customizable forms and
           seamless Shopify integration.

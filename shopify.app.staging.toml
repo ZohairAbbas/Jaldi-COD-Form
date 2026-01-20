@@ -1,0 +1,37 @@
+# Staging environment configuration
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "0c7eb91b20e8a1a376ca8eb62431d3b1"
+name = "Preventify - Staging"
+application_url = "https://example.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-01"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/webhooks/orders/create"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_draft_orders,write_orders,read_products,read_price_rules,read_discounts,write_order_edits"
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[app_proxy]
+url = "https://example.com"
+subpath = "jaldi-cod"
+prefix = "apps"

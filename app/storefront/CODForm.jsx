@@ -1,10 +1,52 @@
 import React, { useState, useEffect } from 'react';
 
-export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup' }) {
+// Country data - must match server-side constants
+const COUNTRIES = {
+  PAK: {
+    code: 'PAK',
+    phoneCode: '+92',
+    name: 'Pakistan',
+    provinces: ['Punjab', 'Sindh', 'Khyber Pakhtunkhwa', 'Balochistan', 'Gilgit-Baltistan', 'Azad Jammu & Kashmir', 'Islamabad Capital Territory']
+  },
+  UAE: {
+    code: 'UAE',
+    phoneCode: '+971',
+    name: 'United Arab Emirates',
+    provinces: ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah']
+  },
+  QATAR: {
+    code: 'QATAR',
+    phoneCode: '+974',
+    name: 'Qatar',
+    provinces: ['Doha', 'Al Rayyan', 'Al Wakrah', 'Al Khor', 'Al Daayen', 'Umm Salal', 'Al Shamal', 'Al Shahaniya']
+  },
+  KUWAIT: {
+    code: 'KUWAIT',
+    phoneCode: '+965',
+    name: 'Kuwait',
+    provinces: ['Al Asimah', 'Hawalli', 'Farwaniya', 'Mubarak Al-Kabeer', 'Ahmadi', 'Jahra']
+  },
+  KSA: {
+    code: 'KSA',
+    phoneCode: '+966',
+    name: 'Saudi Arabia',
+    provinces: ['Riyadh', 'Makkah', 'Madinah', 'Eastern Province', 'Asir', 'Tabuk', 'Qassim', 'Ha\'il', 'Northern Borders', 'Jizan', 'Najran', 'Al Bahah', 'Al Jawf']
+  }
+};
+
+export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0 }) {
+  // Get country from config, default to PAK
+  const countryCode = config.shop?.country || 'PAK';
+  const country = COUNTRIES[countryCode] || COUNTRIES.PAK;
+
+  // Check if RTL is enabled
+  const isRTL = config.settings?.enableRTL || false;
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    phone: '+92',
+    email: '',
+    phone: '',
     address: '',
     address2: '',
     city: '',
@@ -15,6 +57,65 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
+
+  // One-Tick Upsells state
+  const [selectedUpsells, setSelectedUpsells] = useState(() => {
+    // Initialize with preselected upsells
+    const oneTickUpsells = config.upsells?.oneTick || [];
+    return oneTickUpsells
+      .filter(u => u.preselectUpsell)
+      .reduce((acc, u) => ({ ...acc, [u.id]: true }), {});
+  });
+
+  // Generate and store session ID
+  const [sessionId] = useState(() => {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  });
+
+  // Track session when user starts filling form
+  const trackSession = async (email, phone) => {
+    try {
+      await fetch('/apps/jaldi-cod/proxy/session-track', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shop: config.shopDomain,
+          sessionId,
+          email,
+          phone,
+          cartItems: cart.items,
+          totalAmount: cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+          formData,
+        }),
+      });
+    } catch (error) {
+      console.error('Session tracking failed:', error);
+    }
+  };
+
+  // Track when email or phone is entered
+  useEffect(() => {
+    const email = formData.email || null;
+    const phone = formData.phone && formData.phone !== country.phoneCode ? formData.phone : null;
+
+    if (email || phone) {
+      trackSession(email, phone);
+    }
+  }, [formData.email, formData.phone]);
+
+  // Update phone code when country changes
+  useEffect(() => {
+    setFormData(prev => {
+      // Only update if phone is empty or has old country code
+      if (!prev.phone || prev.phone === '' || Object.values(COUNTRIES).some(c => prev.phone.startsWith(c.phoneCode))) {
+        return { ...prev, phone: country.phoneCode };
+      }
+      return prev;
+    });
+  }, [country.phoneCode]);
 
   const formStyle = {
     backgroundColor: config.formConfig.backgroundColor,
@@ -31,6 +132,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     flexDirection: 'column',
     position: 'relative',
     overflow: 'hidden',
+    direction: isRTL ? 'rtl' : 'ltr',
   };
 
   const visibleSections = config.formConfig.sections
@@ -44,13 +146,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
   const handleChange = (fieldId, value) => {
     // Special handling for phone field
     if (fieldId === 'phone') {
-      // Ensure +92 prefix is always present
-      if (!value.startsWith('+92')) {
-        value = '+92';
+      // Ensure country phone code prefix is always present
+      if (!value.startsWith(country.phoneCode)) {
+        value = country.phoneCode;
       }
-      // Only allow numbers after +92
-      const digitsOnly = value.slice(3).replace(/\D/g, '');
-      value = '+92' + digitsOnly;
+      // Only allow numbers after country code
+      const codeLength = country.phoneCode.length;
+      const digitsOnly = value.slice(codeLength).replace(/\D/g, '');
+      value = country.phoneCode + digitsOnly;
     }
 
     setFormData(prev => ({ ...prev, [fieldId]: value }));
@@ -84,12 +187,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
       // Special validation for phone field
       if (field.id === 'phone') {
         const phoneValue = formData.phone;
-        if (!phoneValue.startsWith('+92')) {
-          newErrors['phone'] = 'Phone number must start with +92';
+        if (!phoneValue.startsWith(country.phoneCode)) {
+          newErrors['phone'] = `Phone number must start with ${country.phoneCode}`;
         } else {
-          const digitsAfterPrefix = phoneValue.slice(3);
-          if (digitsAfterPrefix.length !== 10) {
-            newErrors['phone'] = 'Phone number must be exactly 10 digits after +92';
+          const digitsAfterPrefix = phoneValue.slice(country.phoneCode.length);
+          if (digitsAfterPrefix.length < 7 || digitsAfterPrefix.length > 11) {
+            newErrors['phone'] = `Phone number must be 7-11 digits after ${country.phoneCode}`;
           }
         }
       }
@@ -108,18 +211,51 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
 
     setIsSubmitting(true);
 
+    // Add selected one-tick upsells to cart items
+    const selectedOneTickItems = oneTickUpsells
+      .filter(upsell => selectedUpsells[upsell.id])
+      .map(upsell => {
+        // If connected to a product, use product details but with upsell price
+        if (upsell.product) {
+          return {
+            id: upsell.product.id,
+            title: upsell.product.title,
+            price: upsell.upsellPrice, // Use the upsell price, not product price
+            productPrice: upsell.product.price, // Keep original product price for discount calculation
+            quantity: 1,
+            image: upsell.product.image,
+            variantId: upsell.product.variantId,
+            isOneTickUpsell: true,
+            upsellId: upsell.id,
+          };
+        }
+        // If not connected to a product, use upsell title and price
+        return {
+          id: `upsell-${upsell.id}`,
+          title: upsell.upsellTitle,
+          price: upsell.upsellPrice,
+          quantity: 1,
+          image: upsell.imageUrl || null,
+          variantId: null,
+          isOneTickUpsell: true,
+          upsellId: upsell.id,
+        };
+      });
+
     const orderData = {
       shop: config.shopDomain,
+      sessionId: sessionId, // Include session ID for abandoned cart tracking
       firstName: formData.firstName || formData.firstname,
       lastName: formData.lastName || formData.lastname,
+      email: formData.email,
       phone: formData.phone,
       address: formData.address,
       address2: formData.address2,
       city: formData.city,
       province: formData.province,
       postalCode: formData.postalCode || formData.postalcode,
-      country: 'Pakistan',
-      items: cart.items,
+      country: country.name,
+      items: [...cart.items, ...selectedOneTickItems],
       customFields: formData.customFields,
       shippingCost: 0,
     };
@@ -134,22 +270,96 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     }
   };
 
-  // Icon components
+  // Handle Pay with Card - redirects to Shopify checkout via cart permalink
+  const handlePayWithCard = () => {
+    if (!validate()) {
+      return;
+    }
+
+    setIsRedirectingToCheckout(true);
+
+    // Build cart items string: variant_id:quantity,variant_id:quantity
+    const cartItemsString = cart.items
+      .filter(item => item.variantId) // Only include items with variant IDs
+      .map(item => {
+        const variantId = item.variantId.includes('/')
+          ? item.variantId.split('/').pop()
+          : item.variantId;
+        return `${variantId}:${item.quantity}`;
+      })
+      .join(',');
+
+    if (!cartItemsString) {
+      alert('No valid items to checkout');
+      setIsRedirectingToCheckout(false);
+      return;
+    }
+
+    // Build checkout query parameters for pre-filling customer info
+    const checkoutParams = new URLSearchParams();
+
+    // Get form values - field IDs have hyphens removed (e.g., 'first-name' -> 'firstname')
+    const firstName = formData.firstname || formData.firstName || '';
+    const lastName = formData.lastname || formData.lastName || '';
+    const phone = formData.phone || '';
+    const address1 = formData.address || '';
+    const address2 = formData.address2 || '';
+    const city = formData.city || '';
+    const province = formData.province || '';
+    const postalCode = formData.postalcode || formData.postalCode || '';
+
+    // Customer email
+    if (formData.email) {
+      checkoutParams.set('checkout[email]', formData.email);
+    }
+
+    // Shipping address
+    checkoutParams.set('checkout[shipping_address][first_name]', firstName);
+    checkoutParams.set('checkout[shipping_address][last_name]', lastName);
+    checkoutParams.set('checkout[shipping_address][phone]', phone);
+    checkoutParams.set('checkout[shipping_address][address1]', address1);
+    checkoutParams.set('checkout[shipping_address][address2]', address2);
+    checkoutParams.set('checkout[shipping_address][city]', city);
+    checkoutParams.set('checkout[shipping_address][province]', province);
+    checkoutParams.set('checkout[shipping_address][country]', country.name || 'Pakistan');
+    checkoutParams.set('checkout[shipping_address][zip]', postalCode);
+
+    // Add cart attributes to identify this order came from our app
+    checkoutParams.set('attributes[_preventify_source]', 'card_checkout');
+    checkoutParams.set('attributes[_preventify_shop]', config.shopDomain || '');
+
+    // Build the cart permalink URL
+    const cartPermalinkUrl = `/cart/${cartItemsString}?${checkoutParams.toString()}`;
+
+    // Redirect to cart permalink (which will redirect to checkout)
+    window.location.href = cartPermalinkUrl;
+  };
+
+  // Icon components - position changes based on RTL
+  const iconPosition = isRTL ? { right: '12px' } : { left: '12px' };
+
   const PersonIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
     </svg>
   );
 
   const PhoneIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
     </svg>
   );
 
+  const EmailIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+      <polyline points="22,6 12,13 2,6" />
+    </svg>
+  );
+
   const LocationIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
       <circle cx="12" cy="10" r="3" />
     </svg>
@@ -160,17 +370,20 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     const value = formData[fieldId] || '';
     const error = errors[field.id];
 
-    const hasIcon = ['first-name', 'last-name', 'phone', 'address', 'city'].includes(field.id);
+    const hasIcon = ['first-name', 'last-name', 'email', 'phone', 'address', 'city'].includes(field.id);
 
     const inputStyle = {
       width: '100%',
-      padding: hasIcon ? '10px 12px 10px 42px' : '10px 12px',
+      padding: hasIcon
+        ? (isRTL ? '10px 42px 10px 12px' : '10px 12px 10px 42px')
+        : '10px 12px',
       borderRadius: '4px',
       border: error ? '1px solid #EF4444' : '1px solid #D1D5DB',
       fontSize: '14px',
       color: '#111827',
       backgroundColor: '#FFFFFF',
       outline: 'none',
+      textAlign: isRTL ? 'right' : 'left',
     };
 
     const labelStyle = {
@@ -179,16 +392,19 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
       fontSize: '14px',
       fontWeight: '500',
       color: '#111827',
+      textAlign: isRTL ? 'right' : 'left',
     };
 
     const errorStyle = {
       color: '#EF4444',
       fontSize: '12px',
       marginTop: '4px',
+      textAlign: isRTL ? 'right' : 'left',
     };
 
     const getFieldIcon = (fieldId) => {
       if (fieldId === 'first-name' || fieldId === 'last-name') return <PersonIcon />;
+      if (fieldId === 'email') return <EmailIcon />;
       if (fieldId === 'phone') return <PhoneIcon />;
       if (fieldId === 'address' || fieldId === 'city') return <LocationIcon />;
       return null;
@@ -204,11 +420,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
             <div style={{ position: 'relative' }}>
               {getFieldIcon(field.id)}
               <input
-                type={field.id === 'phone' ? 'tel' : 'text'}
+                type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
                 value={value}
                 onChange={(e) => handleChange(fieldId, e.target.value)}
-                placeholder={field.id === 'phone' ? '+923001234567' : field.placeholder}
-                maxLength={field.id === 'phone' ? 13 : undefined}
+                placeholder={field.id === 'phone' ? `${country.phoneCode}3001234567` : field.id === 'email' ? 'email@example.com' : field.placeholder}
+                maxLength={field.id === 'phone' ? 15 : undefined}
                 style={inputStyle}
               />
             </div>
@@ -217,6 +433,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
         );
 
       case 'dropdown':
+        // Use country-based provinces for province field
+        const options = field.id === 'province' ? country.provinces : field.options;
         return (
           <div key={field.id} style={{ marginBottom: '16px' }}>
             <label style={labelStyle}>
@@ -228,7 +446,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
               style={inputStyle}
             >
               <option value="">{field.placeholder || 'Select...'}</option>
-              {field.options?.map((opt, idx) => (
+              {options?.map((opt, idx) => (
                 <option key={idx} value={opt}>{opt}</option>
               ))}
             </select>
@@ -241,7 +459,31 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     }
   };
 
-  const total = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  // Calculate subtotal using original prices for upsell items, regular price for others
+  const subtotal = cart.items.reduce((sum, item) => {
+    const itemPrice = item.isUpsell && item.originalPrice ? item.originalPrice : item.price;
+    return sum + (itemPrice * item.quantity);
+  }, 0);
+
+  // Calculate total discount from upsell items
+  const upsellDiscount = cart.items.reduce((sum, item) => {
+    if (item.isUpsell && item.originalPrice && item.originalPrice !== item.price) {
+      return sum + ((item.originalPrice - item.price) * item.quantity);
+    }
+    return sum;
+  }, 0);
+
+  // Calculate total from selected one-tick upsells
+  const oneTickUpsells = config.upsells?.oneTick || [];
+  const oneTickTotal = oneTickUpsells.reduce((sum, upsell) => {
+    if (selectedUpsells[upsell.id]) {
+      return sum + (upsell.upsellPrice || 0);
+    }
+    return sum;
+  }, 0);
+
+  // Final total after discount + one-tick upsells
+  const total = subtotal - upsellDiscount + oneTickTotal;
 
   return (
     <div style={formStyle}>
@@ -258,7 +500,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
             style={{
               position: 'absolute',
               top: '16px',
-              right: '16px',
+              ...(isRTL ? { left: '16px' } : { right: '16px' }),
               background: 'none',
               border: 'none',
               fontSize: '28px',
@@ -281,19 +523,58 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
           fontWeight: '600',
           letterSpacing: '0.5px',
           color: '#000',
+          textAlign: isRTL ? 'right' : 'left',
         }}>
           {config.formConfig.formTitle}
         </h2>
       </div>
 
       {/* Scrollable Content */}
-      <div style={{
+      <div className="jaldi-form-scrollable-content" style={{
         flex: 1,
         overflowY: 'auto',
         overflowX: 'hidden',
-        padding: '20px 24px 24px 24px',
+        padding: '0',
       }}>
-        <form onSubmit={handleSubmit}>
+        {/* Product Selection Dropdown - Only show if cart items are allowed and there are cart items */}
+        {showProductSelection && (
+          <div style={{
+            padding: '16px 24px',
+            borderBottom: '1px solid #e5e7eb',
+            backgroundColor: '#f9fafb',
+          }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#374151',
+              textAlign: isRTL ? 'right' : 'left',
+            }}>
+              What would you like to order?
+            </label>
+            <select
+              value={productSelection}
+              onChange={(e) => onProductSelectionChange(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '6px',
+                border: '1px solid #d1d5db',
+                fontSize: '14px',
+                backgroundColor: 'white',
+                cursor: 'pointer',
+                textAlign: isRTL ? 'right' : 'left',
+                direction: isRTL ? 'rtl' : 'ltr',
+              }}
+            >
+              <option value="current+cart">Current product + Cart items ({1 + fullCartItemCount} items)</option>
+              <option value="current">Current product only</option>
+            </select>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ padding: '20px 24px 24px 24px' }}>
         {visibleSections.map((section) => {
           switch (section.type) {
             case 'orderSummary':
@@ -372,8 +653,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
                           color: '#111827',
                           marginBottom: '4px',
                           lineHeight: '1.4',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          flexWrap: 'wrap',
                         }}>
                           {item.title}
+                          {item.isUpsell && (
+                            <span style={{
+                              backgroundColor: '#10b981',
+                              color: '#ffffff',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              textTransform: 'uppercase',
+                            }}>
+                              Upsell
+                            </span>
+                          )}
                         </div>
                         {item.variant && (
                           <div style={{
@@ -384,9 +682,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
                             {item.variant}
                           </div>
                         )}
-                      </div>
+                                              </div>
 
-                      {/* Price */}
+                      {/* Price - show original price for upsell items since discount is in totals */}
                       <div style={{
                         fontSize: '14px',
                         fontWeight: '600',
@@ -394,39 +692,40 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
                         whiteSpace: 'nowrap',
                         alignSelf: 'center',
                       }}>
-                        Rs.{(item.price * item.quantity).toFixed(2)}
+                        Rs.{((item.isUpsell && item.originalPrice ? item.originalPrice : item.price) * item.quantity).toFixed(2)}
                       </div>
 
-                      {/* Remove Button (X) - Top Right */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          // Handle remove item - for now just a placeholder
-                          console.log('Remove item:', item.variantId);
-                        }}
-                        style={{
-                          position: 'absolute',
-                          top: '-4px',
-                          right: '-4px',
-                          background: '#6B7280',
-                          border: 'none',
-                          borderRadius: '50%',
-                          width: '20px',
-                          height: '20px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: '#fff',
-                          fontSize: '12px',
-                          lineHeight: '1',
-                          padding: '0',
-                          fontWeight: '600',
-                        }}
-                      >
-                        ×
-                      </button>
+                      {/* Remove Button (X) - Top Right - Only show in popup mode */}
+                      {mode === 'popup' && onRemoveItem && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            onRemoveItem(item.variantId);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '-4px',
+                            right: '-4px',
+                            background: '#6B7280',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: '#fff',
+                            fontSize: '12px',
+                            lineHeight: '1',
+                            padding: '0',
+                            fontWeight: '600',
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -449,8 +748,22 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
                     color: '#374151',
                   }}>
                     <span>Subtotal</span>
-                    <span style={{ color: '#111827', fontWeight: '600' }}>Rs.{total.toFixed(2)}</span>
+                    <span style={{ color: '#111827', fontWeight: '600' }}>Rs.{subtotal.toFixed(2)}</span>
                   </div>
+                  {/* Show discount line if there's an upsell discount */}
+                  {upsellDiscount > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '10px',
+                      fontSize: '15px',
+                      fontWeight: '500',
+                      color: '#374151',
+                    }}>
+                      <span>Upsell Discount</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-Rs.{upsellDiscount.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -536,6 +849,78 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
           }
         })}
 
+        {/* One-Tick Upsells */}
+        {oneTickUpsells.length > 0 && oneTickUpsells.map((upsell) => {
+          const isSelected = selectedUpsells[upsell.id] || false;
+          const getCurrency = () => {
+            return config.shop?.country === 'PAK' ? 'PKR' : 'AED';
+          };
+
+          // Replace placeholders in checkbox text
+          const checkboxText = upsell.checkboxText
+            .replace('{title}', upsell.upsellTitle || '')
+            .replace('{price}', `${getCurrency()} ${upsell.upsellPrice?.toFixed(2) || '0.00'}`);
+
+          return (
+            <div
+              key={upsell.id}
+              style={{
+                marginBottom: '16px',
+                padding: '16px',
+                backgroundColor: upsell.backgroundColor || '#d9ebf6',
+                border: `${upsell.borderWidth || 2}px ${upsell.borderStyle || 'solid'} ${upsell.borderColor || '#0074bf'}`,
+                borderRadius: `${upsell.borderRadius || 8}px`,
+              }}
+            >
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                cursor: 'pointer',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={(e) => {
+                    setSelectedUpsells(prev => ({
+                      ...prev,
+                      [upsell.id]: e.target.checked
+                    }));
+                  }}
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    marginTop: '2px',
+                    cursor: 'pointer',
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: upsell.textColor || '#000000',
+                      marginBottom: upsell.descriptionText ? '4px' : '0',
+                    }}
+                  >
+                    {checkboxText}
+                  </div>
+                  {upsell.descriptionText && (
+                    <div
+                      style={{
+                        fontSize: '13px',
+                        color: upsell.descriptionColor || '#595959',
+                      }}
+                    >
+                      {upsell.descriptionText}
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
+          );
+        })}
+
         <button
           type="submit"
           disabled={isSubmitting}
@@ -564,6 +949,51 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
             `COMPLETE ORDER - Rs.${total.toFixed(2)}`
           )}
         </button>
+
+        {/* Pay with Card Button - Only show if enabled */}
+        {config.settings?.enableCartPermalink && (
+          <button
+            type="button"
+            onClick={handlePayWithCard}
+            disabled={isRedirectingToCheckout || isSubmitting}
+            style={{
+              width: '100%',
+              padding: '14px 20px',
+              marginTop: '12px',
+              backgroundColor: '#FFFFFF',
+              color: '#000000',
+              border: '2px solid #000000',
+              borderRadius: '4px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: (isRedirectingToCheckout || isSubmitting) ? 'not-allowed' : 'pointer',
+              opacity: (isRedirectingToCheckout || isSubmitting) ? 0.7 : 1,
+              transition: 'all 0.2s',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            {isRedirectingToCheckout ? (
+              <>
+                <div className="jaldi-loading"></div>
+                <span>Redirecting...</span>
+              </>
+            ) : (
+              <>
+                {/* Credit Card Icon */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+                <span>PAY WITH CARD</span>
+              </>
+            )}
+          </button>
+        )}
       </form>
       </div>
     </div>
