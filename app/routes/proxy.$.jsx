@@ -1,30 +1,54 @@
 import db from "../db.server";
 import { createDraftOrderForAbandonedCart } from "../lib/abandoned-cart.server";
 
-const ABANDONED_THRESHOLD_MINUTES = 1;
+const ABANDONED_THRESHOLD_MINUTES = 1; // Change to 15 for production
+const CRON_SECRET = process.env.CRON_SECRET;
 
 /**
  * Catch-all proxy route handler
- * Handles: /apps/jaldi-cod/proxy/*
+ * Handles: /apps/preventify/proxy/*
  */
 export const action = async ({ request, params }) => {
-  const path = params["*"]; // Get the wildcard path
+  const path = params["*"];
 
-  // Route to appropriate handler based on path
   switch (path) {
     case "cron-abandoned-carts":
       return handleCronAbandonedCarts(request);
-
     case "abandoned-carts-create-draft":
       return handleCreateDraftOrders(request);
-
     case "session-track":
       return handleSessionTrack(request);
-
+    case "cron-health":
+      return handleCronHealth(request);
     default:
       return Response.json({ error: "Not found" }, { status: 404 });
   }
 };
+
+// Verify cron secret
+function verifyCronSecret(request) {
+  if (!CRON_SECRET) return true; // Skip if not configured (local dev)
+  const secret = request.headers.get("X-Cron-Secret");
+  return secret === CRON_SECRET;
+}
+
+// Log cron job execution
+async function logCronJob(jobName, status, details = {}) {
+  try {
+    await db.cronLog.create({
+      data: {
+        jobName,
+        status,
+        message: details.message || null,
+        processed: details.processed || 0,
+        errors: details.errors || 0,
+        duration: details.duration || null,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to log cron job:", error);
+  }
+}
 
 // Handler for cron abandoned carts
 async function handleCronAbandonedCarts(request) {
@@ -32,11 +56,19 @@ async function handleCronAbandonedCarts(request) {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
+  if (!verifyCronSecret(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startTime = Date.now();
+  await logCronJob("abandoned-carts-detection", "started");
+
   try {
     const abandonedThreshold = new Date(
       Date.now() - ABANDONED_THRESHOLD_MINUTES * 60 * 1000
     );
 
+    // Find all active sessions across ALL shops that are stale
     const abandonedSessions = await db.orderSession.findMany({
       where: {
         status: "active",
@@ -53,16 +85,22 @@ async function handleCronAbandonedCarts(request) {
       },
     });
 
-    console.log(`Found ${abandonedSessions.length} abandoned sessions`);
+    console.log(`Found ${abandonedSessions.length} abandoned sessions across all shops`);
 
     const results = {
       total: abandonedSessions.length,
       processed: 0,
       errors: 0,
+      byShop: {},
     };
 
     for (const session of abandonedSessions) {
       try {
+        const shopDomain = session.shop.shopifyDomain;
+        if (!results.byShop[shopDomain]) {
+          results.byShop[shopDomain] = { processed: 0, errors: 0 };
+        }
+
         await db.orderSession.update({
           where: { id: session.id },
           data: {
@@ -92,19 +130,39 @@ async function handleCronAbandonedCarts(request) {
         });
 
         results.processed++;
+        results.byShop[shopDomain].processed++;
       } catch (error) {
         console.error(`Failed to process abandoned session ${session.id}:`, error);
         results.errors++;
+        if (results.byShop[session.shop?.shopifyDomain]) {
+          results.byShop[session.shop.shopifyDomain].errors++;
+        }
       }
     }
+
+    const duration = Date.now() - startTime;
+    await logCronJob("abandoned-carts-detection", "completed", {
+      message: `Processed ${results.processed} abandoned carts`,
+      processed: results.processed,
+      errors: results.errors,
+      duration,
+    });
 
     return Response.json({
       success: true,
       message: `Processed ${results.processed} abandoned carts`,
       results,
+      duration: `${duration}ms`,
     });
   } catch (error) {
     console.error("Abandoned cart cron job error:", error);
+
+    const duration = Date.now() - startTime;
+    await logCronJob("abandoned-carts-detection", "failed", {
+      message: error.message,
+      duration,
+    });
+
     return Response.json(
       {
         success: false,
@@ -121,8 +179,15 @@ async function handleCreateDraftOrders(request) {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
+  if (!verifyCronSecret(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startTime = Date.now();
+  await logCronJob("draft-orders-creation", "started");
+
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { abandonedCartId } = body;
 
     let abandonedCarts = [];
@@ -151,11 +216,18 @@ async function handleCreateDraftOrders(request) {
     const results = {
       total: abandonedCarts.length,
       success: 0,
+      skipped: 0, // Carts skipped due to no valid contact info
       failed: 0,
       errors: [],
+      byShop: {},
     };
 
     for (const cart of abandonedCarts) {
+      const shopDomain = cart.shop.shopifyDomain;
+      if (!results.byShop[shopDomain]) {
+        results.byShop[shopDomain] = { success: 0, skipped: 0, failed: 0 };
+      }
+
       try {
         const admin = {
           graphql: async (query, options) => {
@@ -193,30 +265,62 @@ async function handleCreateDraftOrders(request) {
           });
 
           results.success++;
+          results.byShop[shopDomain].success++;
+        } else if (draftOrderResult.skipped) {
+          // Skipped due to no valid contact info - mark with special ID so we don't retry
+          await db.abandonedCart.update({
+            where: { id: cart.id },
+            data: {
+              shopifyDraftOrderId: "SKIPPED_NO_CONTACT",
+            },
+          });
+
+          results.skipped++;
+          results.byShop[shopDomain].skipped++;
         } else {
           results.failed++;
+          results.byShop[shopDomain].failed++;
           results.errors.push({
             cartId: cart.id,
+            shop: shopDomain,
             error: draftOrderResult.error,
           });
         }
       } catch (error) {
         console.error(`Failed to create draft order for cart ${cart.id}:`, error);
         results.failed++;
+        results.byShop[shopDomain].failed++;
         results.errors.push({
           cartId: cart.id,
+          shop: shopDomain,
           error: error.message,
         });
       }
     }
 
+    const duration = Date.now() - startTime;
+    await logCronJob("draft-orders-creation", "completed", {
+      message: `Created ${results.success} draft orders, skipped ${results.skipped}`,
+      processed: results.success,
+      errors: results.failed,
+      duration,
+    });
+
     return Response.json({
       success: true,
-      message: `Created ${results.success} draft orders`,
+      message: `Created ${results.success} draft orders, skipped ${results.skipped} (no valid contact)`,
       results,
+      duration: `${duration}ms`,
     });
   } catch (error) {
     console.error("Create draft orders error:", error);
+
+    const duration = Date.now() - startTime;
+    await logCronJob("draft-orders-creation", "failed", {
+      message: error.message,
+      duration,
+    });
+
     return Response.json(
       {
         success: false,
@@ -225,6 +329,20 @@ async function handleCreateDraftOrders(request) {
       { status: 500 }
     );
   }
+}
+
+// Validate email format
+function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+}
+
+// Validate phone - lenient validation (minimum 7 digits after stripping non-digits)
+function isValidPhone(phone) {
+  if (!phone || typeof phone !== 'string') return false;
+  const digitsOnly = phone.replace(/\D/g, '');
+  return digitsOnly.length >= 7;
 }
 
 // Handler for session tracking
@@ -260,6 +378,10 @@ async function handleSessionTrack(request) {
       return Response.json({ error: "Shop not found" }, { status: 404 });
     }
 
+    // Only store email/phone if valid format
+    const validEmail = isValidEmail(email) ? email.trim() : null;
+    const validPhone = isValidPhone(phone) ? phone.trim() : null;
+
     const existingSession = await db.orderSession.findUnique({
       where: { sessionId },
     });
@@ -268,8 +390,8 @@ async function handleSessionTrack(request) {
       await db.orderSession.update({
         where: { sessionId },
         data: {
-          userEmail: email || existingSession.userEmail,
-          userPhone: phone || existingSession.userPhone,
+          userEmail: validEmail || existingSession.userEmail,
+          userPhone: validPhone || existingSession.userPhone,
           cartItems: JSON.stringify(cartItems),
           totalAmount: totalAmount || 0,
           formData: formData ? JSON.stringify(formData) : existingSession.formData,
@@ -283,8 +405,8 @@ async function handleSessionTrack(request) {
         data: {
           shopId: shopData.id,
           sessionId,
-          userEmail: email,
-          userPhone: phone,
+          userEmail: validEmail,
+          userPhone: validPhone,
           cartItems: JSON.stringify(cartItems),
           totalAmount: totalAmount || 0,
           formData: formData ? JSON.stringify(formData) : null,
@@ -300,9 +422,64 @@ async function handleSessionTrack(request) {
   }
 }
 
+// Health check endpoint
+async function handleCronHealth(request) {
+  try {
+    const recentLogs = await db.cronLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+
+    const lastAbandonedJob = recentLogs.find(
+      (l) => l.jobName === "abandoned-carts-detection" && l.status === "completed"
+    );
+    const lastDraftJob = recentLogs.find(
+      (l) => l.jobName === "draft-orders-creation" && l.status === "completed"
+    );
+
+    // Check if jobs are running on schedule
+    const now = new Date();
+    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
+    const sixtyMinutesAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    const abandonedJobHealthy = lastAbandonedJob &&
+      new Date(lastAbandonedJob.createdAt) > tenMinutesAgo;
+    const draftJobHealthy = lastDraftJob &&
+      new Date(lastDraftJob.createdAt) > sixtyMinutesAgo;
+
+    return Response.json({
+      status: abandonedJobHealthy && draftJobHealthy ? "healthy" : "degraded",
+      jobs: {
+        abandonedCartsDetection: {
+          lastRun: lastAbandonedJob?.createdAt || null,
+          lastStatus: lastAbandonedJob?.status || "never_run",
+          lastProcessed: lastAbandonedJob?.processed || 0,
+          healthy: abandonedJobHealthy || false,
+        },
+        draftOrdersCreation: {
+          lastRun: lastDraftJob?.createdAt || null,
+          lastStatus: lastDraftJob?.status || "never_run",
+          lastProcessed: lastDraftJob?.processed || 0,
+          healthy: draftJobHealthy || false,
+        },
+      },
+      recentLogs: recentLogs.slice(0, 10),
+    });
+  } catch (error) {
+    return Response.json({
+      status: "error",
+      error: error.message,
+    }, { status: 500 });
+  }
+}
+
 // Allow GET for testing
 export const loader = async ({ params }) => {
   const path = params["*"];
+
+  if (path === "cron-health") {
+    return handleCronHealth({ method: "GET" });
+  }
 
   return Response.json({
     message: `Proxy route handler for: ${path}`,
@@ -310,6 +487,7 @@ export const loader = async ({ params }) => {
       "cron-abandoned-carts",
       "abandoned-carts-create-draft",
       "session-track",
+      "cron-health",
     ],
   });
 };

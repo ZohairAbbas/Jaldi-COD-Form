@@ -235,6 +235,19 @@ model AbandonedCart {
   @@index([recovered])
 }
 
+model CronLog {
+  id          String   @id @default(cuid())
+  jobName     String
+  status      String   // "started" | "completed" | "failed" | "skipped"
+  message     String?
+  processed   Int      @default(0)
+  errors      Int      @default(0)
+  duration    Int?     // milliseconds
+  createdAt   DateTime @default(now())
+
+  @@index([jobName, createdAt])
+}
+
 model Upsell {
   id                     String   @id @default(cuid())
   shopId                 String
