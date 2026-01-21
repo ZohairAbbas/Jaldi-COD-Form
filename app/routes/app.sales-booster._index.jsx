@@ -15,6 +15,8 @@ export default function SalesBoosterLanding() {
   const configureButtonRef = useRef(null);
   const watchDemoButtonRef = useRef(null);
   const configureTickButtonRef = useRef(null);
+  const configureDownsellButtonRef = useRef(null);
+  const watchDownsellDemoButtonRef = useRef(null);
 
   const handleConfigureUpsells = useCallback(() => {
     navigate("/app/sales-booster/one-click");
@@ -24,7 +26,16 @@ export default function SalesBoosterLanding() {
     navigate("/app/sales-booster/one-tick");
   }, [navigate]);
 
+  const handleConfigureDownsells = useCallback(() => {
+    navigate("/app/sales-booster/downsell");
+  }, [navigate]);
+
   const handleWatchDemo = useCallback(() => {
+    // TODO: Add demo video URL or modal
+    window.open("https://www.youtube.com/watch?v=demo", "_blank");
+  }, []);
+
+  const handleWatchDownsellDemo = useCallback(() => {
     // TODO: Add demo video URL or modal
     window.open("https://www.youtube.com/watch?v=demo", "_blank");
   }, []);
@@ -34,6 +45,8 @@ export default function SalesBoosterLanding() {
     const configureBtn = configureButtonRef.current;
     const demoBtn = watchDemoButtonRef.current;
     const configureTickBtn = configureTickButtonRef.current;
+    const configureDownsellBtn = configureDownsellButtonRef.current;
+    const downsellDemoBtn = watchDownsellDemoButtonRef.current;
 
     if (configureBtn) {
       configureBtn.addEventListener("click", handleConfigureUpsells);
@@ -43,6 +56,12 @@ export default function SalesBoosterLanding() {
     }
     if (configureTickBtn) {
       configureTickBtn.addEventListener("click", handleConfigureTickUpsells);
+    }
+    if (configureDownsellBtn) {
+      configureDownsellBtn.addEventListener("click", handleConfigureDownsells);
+    }
+    if (downsellDemoBtn) {
+      downsellDemoBtn.addEventListener("click", handleWatchDownsellDemo);
     }
 
     return () => {
@@ -55,8 +74,14 @@ export default function SalesBoosterLanding() {
       if (configureTickBtn) {
         configureTickBtn.removeEventListener("click", handleConfigureTickUpsells);
       }
+      if (configureDownsellBtn) {
+        configureDownsellBtn.removeEventListener("click", handleConfigureDownsells);
+      }
+      if (downsellDemoBtn) {
+        downsellDemoBtn.removeEventListener("click", handleWatchDownsellDemo);
+      }
     };
-  }, [handleConfigureUpsells, handleWatchDemo, handleConfigureTickUpsells]);
+  }, [handleConfigureUpsells, handleWatchDemo, handleConfigureTickUpsells, handleConfigureDownsells, handleWatchDownsellDemo]);
 
   return (
     <s-page heading="Upsells & Downsells">
@@ -229,6 +254,67 @@ export default function SalesBoosterLanding() {
                 border: "2px solid #e5e7eb"
               }}>
                 <span style={{ fontSize: "64px" }}>☑️</span>
+              </div>
+            </div>
+          </s-stack>
+        </s-box>
+      </s-section>
+
+      {/* Downsells Section */}
+      <s-section>
+        <s-box padding="loose" borderWidth="base" borderRadius="base">
+          <s-stack direction="block" gap="loose">
+            {/* Header with Icon */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+              <div style={{ flex: 1 }}>
+                <s-stack direction="block" gap="base">
+                  {/* Title with Icon */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "24px" }}>🛒</span>
+                    <s-text variant="heading-lg">Downsells</s-text>
+                  </div>
+
+                  {/* Description */}
+                  <s-text variant="body-md">
+                    Downsells are popups that offer a discount to your customers to complete their order when they close the form.
+                    You can use them to recover sales from customers who opened the form but then closed it.
+                  </s-text>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                    <s-button
+                      ref={configureDownsellButtonRef}
+                      variant="primary"
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        🛒 Configure Downsells
+                      </span>
+                    </s-button>
+
+                    <s-button
+                      ref={watchDownsellDemoButtonRef}
+                      variant="secondary"
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        ▶️ Watch demo
+                      </span>
+                    </s-button>
+                  </div>
+                </s-stack>
+              </div>
+
+              {/* Illustration/Icon on the right */}
+              <div style={{
+                width: "120px",
+                height: "120px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f9fafb",
+                borderRadius: "12px",
+                border: "2px solid #e5e7eb"
+              }}>
+                <span style={{ fontSize: "64px" }}>💸</span>
               </div>
             </div>
           </s-stack>

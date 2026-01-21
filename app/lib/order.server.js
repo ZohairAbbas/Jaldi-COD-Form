@@ -2,7 +2,7 @@
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount } = orderData;
 
   // Calculate total discount for one-tick upsells
   let oneTickDiscount = 0;
@@ -83,6 +83,21 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       phone: billingAddress.phone,
     };
 
+    // Calculate recovery discount amount (from downsell)
+    const recoveryDiscountAmount = recoveryDiscount?.amount || 0;
+
+    // Build order note with all discounts
+    let orderNote = "Payment Method: Cash on Delivery (COD)";
+    if (oneTickDiscount > 0) {
+      orderNote += `\nOne-Tick Upsell Discount: -Rs.${oneTickDiscount.toFixed(2)}`;
+    }
+    if (recoveryDiscountAmount > 0) {
+      orderNote += `\nRecovery Discount: -Rs.${recoveryDiscountAmount.toFixed(2)}`;
+    }
+    if (oneTickDiscount > 0 || recoveryDiscountAmount > 0) {
+      orderNote += `\nActual Total: Rs.${total.toFixed(2)}`;
+    }
+
     // Prepare REST API order payload
     const restOrder = {
       email: customerInfo.email || `noreply+${customerInfo.phone}@example.com`,
@@ -91,9 +106,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       shipping_address: restShippingAddress,
       billing_address: restBillingAddress,
       financial_status: "pending",
-      note: oneTickDiscount > 0
-        ? `Payment Method: Cash on Delivery (COD)\nOne-Tick Upsell Discount: -Rs.${oneTickDiscount.toFixed(2)}\nActual Total: Rs.${total.toFixed(2)}`
-        : "Payment Method: Cash on Delivery (COD)",
+      note: orderNote,
       tags: "preventify_cod_form",
       note_attributes: [
         {
@@ -107,6 +120,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
         ...(oneTickDiscount > 0 ? [{
           name: "_one_tick_discount",
           value: oneTickDiscount.toString()
+        }] : []),
+        ...(recoveryDiscountAmount > 0 ? [{
+          name: "_recovery_discount",
+          value: recoveryDiscountAmount.toString()
         }] : [])
       ],
       transactions: [
@@ -119,15 +136,28 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       ],
     };
 
-    // Add discount code if one-tick discount exists
-    if (oneTickDiscount > 0) {
-      restOrder.discount_codes = [
-        {
-          code: "CUSTOM DISCOUNT (1-TICK)",
-          amount: oneTickDiscount.toString(),
-          type: "fixed_amount"
-        }
-      ];
+    // Build discount code - Shopify REST API only supports ONE discount code per order
+    // So we need to combine all discounts into a single code
+    const totalDiscount = oneTickDiscount + recoveryDiscountAmount;
+    if (totalDiscount > 0) {
+      // Build a descriptive code name showing what discounts are included
+      let discountCodeName = "CUSTOM DISCOUNT";
+      const discountParts = [];
+      if (oneTickDiscount > 0) {
+        discountParts.push(`1-TICK: Rs.${oneTickDiscount.toFixed(2)}`);
+      }
+      if (recoveryDiscountAmount > 0) {
+        discountParts.push(`RECOVERY: Rs.${recoveryDiscountAmount.toFixed(2)}`);
+      }
+      if (discountParts.length > 0) {
+        discountCodeName += ` (${discountParts.join(' + ')})`;
+      }
+
+      restOrder.discount_codes = [{
+        code: discountCodeName,
+        amount: totalDiscount.toString(),
+        type: "fixed_amount"
+      }];
     }
 
     // Create order using REST API

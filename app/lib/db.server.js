@@ -276,6 +276,10 @@ export async function getShopByDomain(shopifyDomain) {
         where: { enabled: true, productId: { not: null } },
         orderBy: { priority: "asc" },
       },
+      downsells: {
+        where: { enabled: true },
+        orderBy: { priority: "asc" },
+      },
     },
   });
 }
@@ -586,4 +590,193 @@ export function getDefaultUpsell(upsellType = "pre-purchase") {
   }
 
   return baseDefaults;
+}
+
+// ============================================
+// DOWNSELL FUNCTIONS
+// ============================================
+
+/**
+ * Get all downsells for a shop
+ */
+export async function getDownsells(shopId) {
+  return await prisma.downsell.findMany({
+    where: { shopId },
+    orderBy: { priority: "asc" },
+  });
+}
+
+/**
+ * Get a single downsell by ID
+ */
+export async function getDownsellById(id) {
+  return await prisma.downsell.findUnique({
+    where: { id },
+  });
+}
+
+/**
+ * Get enabled downsells for a shop (for storefront)
+ */
+export async function getEnabledDownsells(shopId) {
+  return await prisma.downsell.findMany({
+    where: {
+      shopId,
+      enabled: true,
+    },
+    orderBy: { priority: "asc" },
+  });
+}
+
+/**
+ * Create a new downsell
+ */
+export async function createDownsell(shopId, downsellData) {
+  // Get the highest priority number for this shop to set new downsell at the end
+  const maxPriority = await prisma.downsell.aggregate({
+    where: { shopId },
+    _max: { priority: true },
+  });
+
+  const priority = (maxPriority._max.priority || 0) + 1;
+
+  return await prisma.downsell.create({
+    data: {
+      shopId,
+      priority,
+      ...downsellData,
+    },
+  });
+}
+
+/**
+ * Update a downsell
+ */
+export async function updateDownsell(id, downsellData) {
+  return await prisma.downsell.update({
+    where: { id },
+    data: downsellData,
+  });
+}
+
+/**
+ * Delete a downsell
+ */
+export async function deleteDownsell(id) {
+  return await prisma.downsell.delete({
+    where: { id },
+  });
+}
+
+/**
+ * Update downsell priority
+ */
+export async function updateDownsellPriority(id, newPriority) {
+  return await prisma.downsell.update({
+    where: { id },
+    data: { priority: newPriority },
+  });
+}
+
+/**
+ * Toggle downsell enabled status
+ */
+export async function toggleDownsellEnabled(id) {
+  const downsell = await prisma.downsell.findUnique({ where: { id } });
+  if (!downsell) throw new Error("Downsell not found");
+
+  return await prisma.downsell.update({
+    where: { id },
+    data: { enabled: !downsell.enabled },
+  });
+}
+
+/**
+ * Increment downsell stats (impressions, accepts, declines)
+ */
+export async function incrementDownsellStat(downsellId, stat) {
+  const validStats = ["impressions", "accepts", "declines"];
+  if (!validStats.includes(stat)) {
+    throw new Error(`Invalid stat: ${stat}. Must be one of: ${validStats.join(", ")}`);
+  }
+
+  return await prisma.downsell.update({
+    where: { id: downsellId },
+    data: {
+      [stat]: { increment: 1 },
+    },
+  });
+}
+
+/**
+ * Get downsell stats summary for a shop
+ */
+export async function getDownsellStats(shopId) {
+  const stats = await prisma.downsell.aggregate({
+    where: { shopId },
+    _sum: {
+      impressions: true,
+      accepts: true,
+      declines: true,
+    },
+  });
+
+  return {
+    views: stats._sum.impressions || 0,
+    accepts: stats._sum.accepts || 0,
+    declines: stats._sum.declines || 0,
+    conversionRate: stats._sum.impressions > 0
+      ? ((stats._sum.accepts || 0) / stats._sum.impressions * 100).toFixed(2)
+      : 0,
+  };
+}
+
+/**
+ * Get default downsell data
+ */
+export function getDefaultDownsell() {
+  return {
+    name: "New downsell",
+    enabled: false,
+    showCount: 1,
+    disableOtherDiscounts: false,
+    discountType: "percentage",
+    discountValue: 10,
+    // Title section
+    title: "Wait!",
+    titleColor: "rgba(0,0,0,1)",
+    titleFontSize: 13,
+    subtitle: "We have an offer for you!",
+    subtitleColor: "rgba(45,45,45,1)",
+    subtitleFontSize: 13,
+    // Discount plaque
+    plaqueText: "GET AN EXTRA DISCOUNT ON YOUR ORDER:",
+    plaqueTextColor: "rgba(0,0,0,1)",
+    plaqueBackgroundColor: "linear-gradient(90deg, #ff6b6b, #ee5a5a)",
+    plaqueDiscountColor: "rgba(255,255,255,1)",
+    plaqueSize: 50,
+    // CTA text
+    ctaText: "Do you want to complete your order?",
+    ctaTextColor: "rgba(0,0,0,1)",
+    // Accept button
+    acceptButtonText: "COMPLETE ORDER WITH {discount} OFF",
+    acceptButtonAnimation: "none",
+    acceptButtonIcon: "none",
+    acceptButtonBgColor: "linear-gradient(90deg, #ff6b6b, #ee5a5a)",
+    acceptButtonTextColor: "rgba(255,255,255,1)",
+    acceptButtonFontSize: 14,
+    acceptButtonRadius: 8,
+    acceptButtonBorderWidth: 0,
+    acceptButtonBorderColor: "rgba(0,0,0,1)",
+    acceptButtonShadow: 4,
+    // Decline button
+    declineButtonText: "No thank you",
+    declineButtonBgColor: "rgba(255,255,255,1)",
+    declineButtonTextColor: "rgba(0,0,0,1)",
+    declineButtonFontSize: 14,
+    declineButtonRadius: 25,
+    declineButtonBorderWidth: 1,
+    declineButtonBorderColor: "rgba(0,0,0,1)",
+    declineButtonShadow: 0,
+  };
 }

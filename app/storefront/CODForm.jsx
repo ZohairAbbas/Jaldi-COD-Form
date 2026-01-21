@@ -34,7 +34,7 @@ const COUNTRIES = {
   }
 };
 
-export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0 }) {
+export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null }) {
   // Get country from config, default to PAK
   const countryCode = config.shop?.country || 'PAK';
   const country = COUNTRIES[countryCode] || COUNTRIES.PAK;
@@ -258,6 +258,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       items: [...cart.items, ...selectedOneTickItems],
       customFields: formData.customFields,
       shippingCost: 0,
+      // Recovery discount from downsell (if any)
+      // Use the pre-calculated amount from App.jsx, not the local recalculation
+      recoveryDiscount: recoveryDiscount ? {
+        type: recoveryDiscount.type,
+        value: recoveryDiscount.value,
+        amount: recoveryDiscount.amount, // Use the amount calculated when downsell was accepted
+        downsellId: recoveryDiscount.downsellId,
+      } : null,
     };
 
     try {
@@ -482,8 +490,15 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     return sum;
   }, 0);
 
-  // Final total after discount + one-tick upsells
-  const total = subtotal - upsellDiscount + oneTickTotal;
+  // Calculate recovery discount amount (from downsell)
+  const recoveryDiscountAmount = recoveryDiscount
+    ? (recoveryDiscount.type === 'percentage'
+        ? subtotal * (recoveryDiscount.value / 100)
+        : Math.min(recoveryDiscount.value, subtotal))
+    : 0;
+
+  // Final total after discount + one-tick upsells - recovery discount
+  const total = subtotal - upsellDiscount + oneTickTotal - recoveryDiscountAmount;
 
   return (
     <div style={formStyle}>
@@ -762,6 +777,23 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     }}>
                       <span>Upsell Discount</span>
                       <span style={{ color: '#10B981', fontWeight: '600' }}>-Rs.{upsellDiscount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {/* Show recovery discount line if there's a recovery discount from downsell */}
+                  {recoveryDiscount && recoveryDiscountAmount > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '10px',
+                      fontSize: '15px',
+                      fontWeight: '500',
+                      color: '#374151',
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px' }}>⊘</span>
+                        RECOVERY DISCOUNT
+                      </span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-Rs.{recoveryDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
                   <div style={{

@@ -106,6 +106,7 @@ export const action = async ({ request }) => {
           subtotal: calculatedSubtotal,
           shipping: shippingCost,
           total: calculatedTotal,
+          recoveryDiscount: orderData.recoveryDiscount, // Pass recovery discount from downsell
         },
         shop.shopifyDomain // Pass shop domain for REST API call
       );

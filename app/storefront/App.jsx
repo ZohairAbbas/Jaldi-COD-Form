@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import CODForm from './CODForm';
 import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
+import DownsellModal from './DownsellModal';
 
 // Default config to show button immediately while real config loads
 const defaultConfig = {
@@ -56,6 +57,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [showPostPurchaseUpsell, setShowPostPurchaseUpsell] = useState(false);
   const [postPurchaseUpsellConfig, setPostPurchaseUpsellConfig] = useState(null);
   const [orderResult, setOrderResult] = useState(null); // Store order result for post-purchase flow
+
+  // Downsell state
+  const [showDownsellModal, setShowDownsellModal] = useState(false);
+  const [activeDownsell, setActiveDownsell] = useState(null);
+  const [downsellShownCount, setDownsellShownCount] = useState(0);
+  const [recoveryDiscount, setRecoveryDiscount] = useState(null);
 
   console.log('Preventify COD Form & Upsells: Rendered with mode', mode, 'shop', shopDomain, 'currentProduct', currentProduct);
 
@@ -511,6 +518,101 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }
   };
 
+  // Track downsell stats
+  const trackDownsellStat = async (downsellId, stat) => {
+    try {
+      await fetch(`/apps/jaldi-cod/proxy/downsell-stats?downsellId=${downsellId}&stat=${stat}`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Failed to track downsell stat:', error);
+    }
+  };
+
+  // Get the first eligible downsell
+  const getEligibleDownsell = () => {
+    const downsells = config?.downsells || [];
+
+    // Find the first downsell that:
+    // 1. Has not exceeded its showCount for this session
+    // 2. Doesn't have disableOtherDiscounts when cart already has a discount
+
+    // Check if cart already has a discount:
+    // - User accepted a pre-purchase upsell with a discount
+    const hasUpsellDiscount = upsellProduct && upsellProduct.originalPrice && upsellProduct.originalPrice !== upsellProduct.price;
+    const cartHasDiscount = hasUpsellDiscount;
+
+    return downsells.find(d => {
+      if (downsellShownCount >= d.showCount) return false;
+      if (d.disableOtherDiscounts && cartHasDiscount) return false;
+      return true;
+    }) || null;
+  };
+
+  // Calculate cart total for downsell discount calculation
+  const getCartTotal = () => {
+    const cartWithUpsell = getCartWithUpsell();
+    return cartWithUpsell.items.reduce((sum, item) => {
+      const price = item.isUpsell && item.originalPrice ? item.originalPrice : item.price;
+      return sum + (price * item.quantity);
+    }, 0);
+  };
+
+  // Handle form close - check for downsell first
+  const handleFormClose = () => {
+    const eligibleDownsell = getEligibleDownsell();
+
+    if (eligibleDownsell && !recoveryDiscount) {
+      // Show downsell modal instead of closing
+      setActiveDownsell(eligibleDownsell);
+      setShowDownsellModal(true);
+      setDownsellShownCount(prev => prev + 1);
+      // Track impression
+      trackDownsellStat(eligibleDownsell.id, 'impression');
+    } else {
+      // No downsell or already accepted one, close the form
+      setIsModalOpen(false);
+    }
+  };
+
+  // Handle downsell acceptance
+  const handleDownsellAccept = () => {
+    if (!activeDownsell) return;
+
+    // Calculate discount amount
+    const cartTotal = getCartTotal();
+    let discountAmount;
+    if (activeDownsell.discount.type === 'percentage') {
+      discountAmount = cartTotal * (activeDownsell.discount.value / 100);
+    } else {
+      discountAmount = Math.min(activeDownsell.discount.value, cartTotal);
+    }
+
+    // Set the recovery discount
+    setRecoveryDiscount({
+      type: activeDownsell.discount.type,
+      value: activeDownsell.discount.value,
+      amount: discountAmount,
+      downsellId: activeDownsell.id,
+    });
+
+    setShowDownsellModal(false);
+    // Form stays open with discount applied - don't close
+
+    // Track accept
+    trackDownsellStat(activeDownsell.id, 'accept');
+  };
+
+  // Handle downsell decline
+  const handleDownsellDecline = () => {
+    if (activeDownsell) {
+      trackDownsellStat(activeDownsell.id, 'decline');
+    }
+
+    setShowDownsellModal(false);
+    setIsModalOpen(false); // Close the form completely
+  };
+
   // Handle post-purchase upsell acceptance
   const handlePostPurchaseAccept = async () => {
     if (!postPurchaseUpsellConfig || !orderResult) return;
@@ -649,7 +751,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         padding: '20px',
         overflowY: 'auto',
       }}
-      onClick={() => setIsModalOpen(false)}
+      onClick={handleFormClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -689,7 +791,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             config={config}
             cart={getCartWithUpsell()}
             onSubmit={handleSubmit}
-            onClose={() => setIsModalOpen(false)}
+            onClose={handleFormClose}
             onRemoveItem={handleRemoveItem}
             mode="popup"
             upsellProduct={upsellProduct}
@@ -697,6 +799,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             productSelection={productSelection}
             onProductSelectionChange={setProductSelection}
             fullCartItemCount={fullCart.items.length}
+            recoveryDiscount={recoveryDiscount}
           />
         )}
       </div>
@@ -729,6 +832,18 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onDecline={handlePostPurchaseDecline}
           isRTL={config?.settings?.enableRTL}
           isPostPurchase={true}
+        />,
+        document.body
+      )}
+
+      {/* Downsell Modal */}
+      {showDownsellModal && activeDownsell && createPortal(
+        <DownsellModal
+          downsellConfig={activeDownsell}
+          cartTotal={getCartTotal()}
+          onAccept={handleDownsellAccept}
+          onDecline={handleDownsellDecline}
+          isRTL={config?.settings?.enableRTL}
         />,
         document.body
       )}
