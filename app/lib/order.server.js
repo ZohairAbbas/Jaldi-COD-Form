@@ -49,6 +49,7 @@ export async function createShopifyOrder(admin, orderData) {
           input: {
             lineItems,
             shippingAddress,
+            billingAddress: shippingAddress,
             email: customerInfo.email || `noreply+${customerInfo.phone}@example.com`,
             phone: customerInfo.phone,
             note: "COD Order - Cash on Delivery",
@@ -81,13 +82,15 @@ export async function createShopifyOrder(admin, orderData) {
     // Complete the draft order to create an actual order
     const completeResponse = await admin.graphql(
       `#graphql
-        mutation completeDraftOrder($id: ID!) {
-          draftOrderComplete(id: $id) {
+        mutation completeDraftOrder($id: ID!, $paymentPending: Boolean) {
+          draftOrderComplete(id: $id, paymentPending: $paymentPending) {
             draftOrder {
               id
               order {
                 id
                 name
+                displayFinancialStatus
+                displayFulfillmentStatus
                 totalPriceSet {
                   shopMoney {
                     amount
@@ -105,24 +108,36 @@ export async function createShopifyOrder(admin, orderData) {
       {
         variables: {
           id: draftOrder.id,
+          paymentPending: true,
         },
       },
     );
 
     const completeResult = await completeResponse.json();
 
+    // Enhanced logging
+    console.log("Draft order complete response:", JSON.stringify(completeResult, null, 2));
+
     if (completeResult.data?.draftOrderComplete?.userErrors?.length > 0) {
       const errors = completeResult.data.draftOrderComplete.userErrors;
-      throw new Error(
-        `Draft order completion failed: ${errors.map((e) => e.message).join(", ")}`,
-      );
+      const errorMessage = `Draft order completion failed: ${errors.map((e) => e.message).join(", ")}`;
+      console.error(errorMessage);
+      throw new Error(errorMessage);
     }
 
     const order = completeResult.data?.draftOrderComplete?.draftOrder?.order;
 
     if (!order?.id) {
-      throw new Error("Failed to complete draft order");
+      console.error("No order ID in complete result:", JSON.stringify(completeResult, null, 2));
+      throw new Error("Failed to complete draft order - no order ID returned");
     }
+
+    console.log("Order created successfully:", {
+      orderId: order.id,
+      orderName: order.name,
+      financialStatus: order.displayFinancialStatus,
+      fulfillmentStatus: order.displayFulfillmentStatus,
+    });
 
     return {
       success: true,

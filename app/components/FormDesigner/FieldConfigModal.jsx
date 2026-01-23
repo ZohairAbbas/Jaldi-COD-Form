@@ -191,9 +191,11 @@ export default function FieldConfigModal({ field, isOpen, onClose, onSave }) {
                 <s-button type="submit" variant="primary">
                   {field ? "Update Field" : "Add Field"}
                 </s-button>
-                <s-button type="button" onClick={onClose}>
-                  Cancel
-                </s-button>
+                <span onClick={onClose}>
+                  <s-button type="button">
+                    Cancel
+                  </s-button>
+                </span>
               </s-stack>
             </s-stack>
           </form>

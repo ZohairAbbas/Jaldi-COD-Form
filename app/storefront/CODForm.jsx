@@ -5,6 +5,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     firstName: '',
     lastName: '',
     phone: '+92',
+    email: '',
     address: '',
     address2: '',
     city: '',
@@ -113,6 +114,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
       firstName: formData.firstName || formData.firstname,
       lastName: formData.lastName || formData.lastname,
       phone: formData.phone,
+      email: formData.email,
       address: formData.address,
       address2: formData.address2,
       city: formData.city,
@@ -148,6 +150,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     </svg>
   );
 
+  const EmailIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+      <polyline points="22,6 12,13 2,6" />
+    </svg>
+  );
+
   const LocationIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -160,7 +169,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     const value = formData[fieldId] || '';
     const error = errors[field.id];
 
-    const hasIcon = ['first-name', 'last-name', 'phone', 'address', 'city'].includes(field.id);
+    const hasIcon = ['first-name', 'last-name', 'phone', 'email', 'address', 'city'].includes(field.id);
 
     const inputStyle = {
       width: '100%',
@@ -190,6 +199,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
     const getFieldIcon = (fieldId) => {
       if (fieldId === 'first-name' || fieldId === 'last-name') return <PersonIcon />;
       if (fieldId === 'phone') return <PhoneIcon />;
+      if (fieldId === 'email') return <EmailIcon />;
       if (fieldId === 'address' || fieldId === 'city') return <LocationIcon />;
       return null;
     };
@@ -204,7 +214,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
             <div style={{ position: 'relative' }}>
               {getFieldIcon(field.id)}
               <input
-                type={field.id === 'phone' ? 'tel' : 'text'}
+                type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
                 value={value}
                 onChange={(e) => handleChange(fieldId, e.target.value)}
                 placeholder={field.id === 'phone' ? '+923001234567' : field.placeholder}
@@ -561,7 +571,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, mode = 'popup
               <span>Processing...</span>
             </div>
           ) : (
-            `COMPLETE ORDER - Rs.${total.toFixed(2)}`
+            `PROCEED TO CHECKOUT - Rs.${total.toFixed(2)}`
           )}
         </button>
       </form>

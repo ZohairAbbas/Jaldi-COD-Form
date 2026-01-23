@@ -10,6 +10,7 @@ export default defineConfig({
   build: {
     outDir: 'extensions/jaldi-cod-form/assets',
     emptyOutDir: false,
+    cssCodeSplit: false,
     lib: {
       entry: path.resolve(__dirname, 'app/storefront/index.jsx'),
       name: 'JaldiCODForm',
@@ -17,11 +18,12 @@ export default defineConfig({
       formats: ['iife'],
     },
     rollupOptions: {
-      external: ['react', 'react-dom'],
       output: {
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name === 'style.css') {
+            return 'jaldi-cod-form.css';
+          }
+          return assetInfo.name;
         },
       },
     },

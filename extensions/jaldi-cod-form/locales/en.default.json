@@ -1,0 +1,10 @@
+{
+  "cod_form": {
+    "name": "COD Order Form",
+    "description": "Cash on Delivery order form"
+  },
+  "cod_button": {
+    "name": "COD Button",
+    "description": "Buy with COD button"
+  }
+}

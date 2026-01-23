@@ -1,7 +1,7 @@
 import { useLoaderData, Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { getOrCreateShop, getOrders } from "../lib/db.server";
+import { getOrCreateShop } from "../lib/db.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -9,23 +9,17 @@ export const loader = async ({ request }) => {
   // Get or create shop with default configuration
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
-  // Get recent orders count
-  const { total: totalOrders } = await getOrders(shop.id, { limit: 1 });
-
   return {
     shop: {
       domain: shop.shopifyDomain,
       hasFormConfig: !!shop.formConfig,
       hasSettings: !!shop.settings,
     },
-    stats: {
-      totalOrders,
-    },
   };
 };
 
 export default function Index() {
-  const { shop, stats } = useLoaderData();
+  const { shop } = useLoaderData();
 
   return (
     <s-page heading="COD Form Dashboard">
@@ -34,22 +28,6 @@ export default function Index() {
           Streamline your Cash on Delivery orders with customizable forms and
           seamless Shopify integration.
         </s-paragraph>
-      </s-section>
-
-      <s-section heading="Quick Stats">
-        <s-stack direction="block" gap="base">
-          <s-box
-            padding="large"
-            borderWidth="base"
-            borderRadius="base"
-            background="subdued"
-          >
-            <s-stack direction="block" gap="small">
-              <s-heading>Total COD Orders</s-heading>
-              <s-text variant="heading-2xl">{stats.totalOrders}</s-text>
-            </s-stack>
-          </s-box>
-        </s-stack>
       </s-section>
 
       <s-section heading="Get Started">
@@ -65,9 +43,6 @@ export default function Index() {
             </Link>
             <Link to="/app/settings">
               <s-button>Configure Settings</s-button>
-            </Link>
-            <Link to="/app/orders">
-              <s-button variant="tertiary">View Orders</s-button>
             </Link>
           </s-stack>
         </s-stack>
@@ -89,9 +64,7 @@ export default function Index() {
             Enable the app on your storefront theme
           </s-list-item>
           <s-list-item>
-            <s-link href="/app/orders">
-              Start receiving and managing COD orders
-            </s-link>
+            Start receiving COD orders through Shopify Checkout
           </s-list-item>
         </s-unordered-list>
       </s-section>
@@ -101,7 +74,7 @@ export default function Index() {
           <s-list-item>Fully customizable order forms</s-list-item>
           <s-list-item>Popup and embedded deployment modes</s-list-item>
           <s-list-item>Automatic Shopify order creation</s-list-item>
-          <s-list-item>Order management dashboard</s-list-item>
+          <s-list-item>Seamless checkout integration</s-list-item>
           <s-list-item>Custom fields support</s-list-item>
         </s-unordered-list>
       </s-section>

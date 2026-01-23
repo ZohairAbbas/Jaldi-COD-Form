@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export default function SectionManager({ sections, onUpdate }) {
   const sectionTypes = {
@@ -56,7 +56,7 @@ export default function SectionManager({ sections, onUpdate }) {
           >
             <s-stack direction="inline" gap="base" align="space-between">
               <s-stack direction="inline" gap="base" align="center">
-                <s-icon source="drag-handle" />
+                <span style={{ fontSize: '18px', color: '#8C9196', cursor: 'grab' }}>⋮⋮</span>
                 <s-text variant="heading-sm">
                   {sectionTypes[section.type] || section.type}
                 </s-text>
@@ -66,29 +66,32 @@ export default function SectionManager({ sections, onUpdate }) {
               </s-stack>
 
               <s-stack direction="inline" gap="small">
-                <s-button
-                  variant="tertiary"
-                  size="small"
-                  onClick={() => moveSection(index, "up")}
-                  disabled={index === 0}
-                >
-                  ↑
-                </s-button>
-                <s-button
-                  variant="tertiary"
-                  size="small"
-                  onClick={() => moveSection(index, "down")}
-                  disabled={index === sections.length - 1}
-                >
-                  ↓
-                </s-button>
-                <s-button
-                  variant={section.visible ? "tertiary" : "primary"}
-                  size="small"
-                  onClick={() => toggleVisibility(section.id)}
-                >
-                  {section.visible ? "Hide" : "Show"}
-                </s-button>
+                <span onClick={() => moveSection(index, "up")}>
+                  <s-button
+                    variant="tertiary"
+                    size="small"
+                    disabled={index === 0}
+                  >
+                    ↑
+                  </s-button>
+                </span>
+                <span onClick={() => moveSection(index, "down")}>
+                  <s-button
+                    variant="tertiary"
+                    size="small"
+                    disabled={index === sections.length - 1}
+                  >
+                    ↓
+                  </s-button>
+                </span>
+                <span onClick={() => toggleVisibility(section.id)}>
+                  <s-button
+                    variant={section.visible ? "tertiary" : "primary"}
+                    size="small"
+                  >
+                    {section.visible ? "Hide" : "Show"}
+                  </s-button>
+                </span>
               </s-stack>
             </s-stack>
           </s-box>

@@ -9,6 +9,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct }) {
   const [cart, setCart] = useState({ items: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   console.log('Jaldi COD Form App: Rendered with mode', mode, 'shop', shopDomain, 'currentProduct', currentProduct);
 
@@ -89,11 +90,27 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct }) {
       const result = await response.json();
 
       if (result.success) {
-        setShowSuccess(true);
-        setTimeout(() => {
-          setIsModalOpen(false);
-          setShowSuccess(false);
-        }, 3000);
+        if (result.mode === "checkout" && result.redirect) {
+          // === CHECKOUT MODE ===
+          // Show redirecting message and redirect to Shopify Checkout
+          setSuccessMessage('Redirecting to checkout...');
+          setShowSuccess(true);
+
+          // Redirect after brief delay for user feedback
+          setTimeout(() => {
+            window.location.href = result.redirect;
+          }, 1000);
+
+        } else if (result.mode === "draft") {
+          // === DRAFT MODE ===
+          // Show success message and close modal
+          setSuccessMessage('Order submitted successfully!');
+          setShowSuccess(true);
+          setTimeout(() => {
+            setIsModalOpen(false);
+            setShowSuccess(false);
+          }, 3000);
+        }
       } else {
         alert('Failed to submit order: ' + (result.error || 'Unknown error'));
       }
@@ -130,7 +147,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct }) {
             borderRadius: '4px',
             textAlign: 'center',
           }}>
-            ✓ Order submitted successfully! We'll contact you shortly.
+            ✓ {successMessage}
           </div>
         )}
       </div>
@@ -184,8 +201,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct }) {
               color: '#10b981',
               marginBottom: '20px',
             }}>✓</div>
-            <h2 style={{ marginBottom: '10px' }}>Order Submitted Successfully!</h2>
-            <p>We'll contact you shortly to confirm your order.</p>
+            <h2 style={{ marginBottom: '10px' }}>{successMessage}</h2>
+            <p>{successMessage.includes('Redirecting') ? 'Please wait...' : "We'll contact you shortly to confirm your order."}</p>
           </div>
         ) : (
           <CODForm

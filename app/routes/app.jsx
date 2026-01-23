@@ -19,7 +19,7 @@ export default function App() {
         <s-link href="/app">Dashboard</s-link>
         <s-link href="/app/form-designer">Form Designer</s-link>
         <s-link href="/app/settings">Settings</s-link>
-        <s-link href="/app/orders">Orders</s-link>
+        {/* <s-link href="/app/orders">Orders</s-link> */}
       </s-app-nav>
       <Outlet />
     </AppProvider>

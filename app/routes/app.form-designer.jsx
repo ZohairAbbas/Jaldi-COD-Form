@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -26,6 +26,7 @@ export const loader = async ({ request }) => {
 export default function FormDesigner() {
   const { formConfig: initialConfig } = useLoaderData();
   const shopify = useAppBridge();
+  const saveButtonRef = useRef(null);
 
   const [formConfig, setFormConfig] = useState(initialConfig);
   const [sections, setSections] = useState(initialConfig.sections);
@@ -91,12 +92,23 @@ export default function FormDesigner() {
     }
   };
 
+  // Attach event listener to save button (web components don't support React's onClick)
+  useEffect(() => {
+    const button = saveButtonRef.current;
+    if (button) {
+      button.addEventListener("click", handleSave);
+      return () => {
+        button.removeEventListener("click", handleSave);
+      };
+    }
+  }, [handleSave]);
+
   return (
     <>
       <s-page heading="Form Designer">
         <s-button
+          ref={saveButtonRef}
           slot="primary-action"
-          onClick={handleSave}
           {...(isSaving ? { loading: true } : {})}
           variant="primary"
         >

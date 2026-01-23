@@ -1,6 +1,7 @@
 import { getShopByDomain, createOrder, updateOrderWithShopifyDetails } from "../lib/db.server";
 import { createShopifyOrder, validateOrderData, calculateOrderTotals } from "../lib/order.server";
-import { shopifyApp } from "../shopify.server";
+import { generateCartPermalink } from "../lib/checkout.server";
+import prisma from "../db.server";
 
 export const action = async ({ request }) => {
   try {
@@ -24,75 +25,137 @@ export const action = async ({ request }) => {
       }, { status: 404 });
     }
 
+    // Get the latest access token from Session table (more reliable)
+    const session = await prisma.session.findFirst({
+      where: { shop: orderData.shop },
+      orderBy: { id: 'desc' },
+    });
+
+    const accessToken = session?.accessToken || shopData.accessToken;
+
     // Calculate totals
     const totals = calculateOrderTotals(orderData.items, orderData.shippingCost || 0);
 
-    // Create order in database
-    const dbOrder = await createOrder(shopData.id, {
-      firstName: orderData.firstName,
-      lastName: orderData.lastName,
-      email: orderData.email || null,
-      phone: orderData.phone,
-      address: orderData.address,
-      address2: orderData.address2 || null,
-      city: orderData.city,
-      province: orderData.province,
-      postalCode: orderData.postalCode || null,
-      country: orderData.country || "Pakistan",
-      subtotal: totals.subtotal,
-      shipping: totals.shipping,
-      total: totals.total,
-      customFields: JSON.stringify(orderData.customFields || {}),
-      items: JSON.stringify(orderData.items),
-      status: "pending",
-    });
+    // Check order creation mode
+    const orderMode = shopData.settings?.orderCreationMode || "checkout";
 
-    // Create Shopify order using Admin API
-    const adminApi = shopifyApp.admin(shopData.shopifyDomain, shopData.accessToken);
+    if (orderMode === "checkout") {
+      // === CHECKOUT MODE (Shopify Compliant) ===
+      // NO DATABASE SAVE - Just generate cart permalink and redirect
+      // Order will be created by webhook when customer completes checkout
+      const checkoutUrl = generateCartPermalink(shopData.shopifyDomain, {
+        items: orderData.items,
+        customerInfo: {
+          firstName: orderData.firstName,
+          lastName: orderData.lastName,
+          email: orderData.email,
+          phone: orderData.phone,
+        },
+        address: {
+          address: orderData.address,
+          address2: orderData.address2,
+          city: orderData.city,
+          province: orderData.province,
+          country: orderData.country || "Pakistan",
+          postalCode: orderData.postalCode,
+        },
+      });
 
-    const shopifyOrderResult = await createShopifyOrder(adminApi, {
-      customerInfo: {
+      return Response.json({
+        success: true,
+        mode: "checkout",
+        redirect: checkoutUrl,
+      });
+
+    } else if (orderMode === "draft") {
+      // === DRAFT MODE (Direct Order Creation) ===
+      // Create order in database FIRST
+      const dbOrder = await createOrder(shopData.id, {
         firstName: orderData.firstName,
         lastName: orderData.lastName,
-        email: orderData.email,
+        email: orderData.email || null,
         phone: orderData.phone,
-      },
-      address: {
         address: orderData.address,
-        address2: orderData.address2,
+        address2: orderData.address2 || null,
         city: orderData.city,
         province: orderData.province,
+        postalCode: orderData.postalCode || null,
         country: orderData.country || "Pakistan",
-        postalCode: orderData.postalCode,
-      },
-      items: orderData.items,
-      subtotal: totals.subtotal,
-      shipping: totals.shipping,
-      total: totals.total,
-    });
-
-    if (shopifyOrderResult.success) {
-      // Update database order with Shopify order details
-      await updateOrderWithShopifyDetails(
-        dbOrder.id,
-        shopifyOrderResult.orderId,
-        shopifyOrderResult.orderNumber
-      );
-
-      return Response.json({
-        success: true,
-        orderId: dbOrder.id,
-        shopifyOrderId: shopifyOrderResult.orderId,
-        shopifyOrderNumber: shopifyOrderResult.orderNumber,
+        subtotal: totals.subtotal,
+        shipping: totals.shipping,
+        total: totals.total,
+        customFields: JSON.stringify(orderData.customFields || {}),
+        items: JSON.stringify(orderData.items),
+        status: "pending",
       });
-    } else {
-      // Order created in DB but failed in Shopify
-      console.error("Shopify order creation failed:", shopifyOrderResult.error);
-      return Response.json({
-        success: true,
-        orderId: dbOrder.id,
-        warning: "Order saved but Shopify sync failed. Please create order manually.",
+
+      // Create admin API client for Shopify
+      const admin = {
+        graphql: async (query, options) => {
+          const response = await fetch(
+            `https://${shopData.shopifyDomain}/admin/api/2025-01/graphql.json`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Access-Token': accessToken,
+              },
+              body: JSON.stringify({
+                query: query,
+                variables: options?.variables,
+              }),
+            }
+          );
+          return response;
+        },
+      };
+      // === DRAFT MODE (Direct Order Creation) ===
+      const shopifyOrderResult = await createShopifyOrder(admin, {
+        customerInfo: {
+          firstName: orderData.firstName,
+          lastName: orderData.lastName,
+          email: orderData.email,
+          phone: orderData.phone,
+        },
+        address: {
+          address: orderData.address,
+          address2: orderData.address2,
+          city: orderData.city,
+          province: orderData.province,
+          country: orderData.country || "Pakistan",
+          postalCode: orderData.postalCode,
+        },
+        items: orderData.items,
+        subtotal: totals.subtotal,
+        shipping: totals.shipping,
+        total: totals.total,
       });
+
+      if (shopifyOrderResult.success) {
+        // Update database order with Shopify order details
+        await updateOrderWithShopifyDetails(
+          dbOrder.id,
+          shopifyOrderResult.orderId,
+          shopifyOrderResult.orderNumber
+        );
+
+        return Response.json({
+          success: true,
+          mode: "draft",
+          orderId: dbOrder.id,
+          shopifyOrderId: shopifyOrderResult.orderId,
+          shopifyOrderNumber: shopifyOrderResult.orderNumber,
+        });
+      } else {
+        // Order created in DB but failed in Shopify
+        console.error("Shopify order creation failed:", shopifyOrderResult.error);
+        return Response.json({
+          success: true,
+          mode: "draft",
+          orderId: dbOrder.id,
+          warning: "Order saved but Shopify sync failed. Please create order manually.",
+        });
+      }
     }
   } catch (error) {
     console.error("Order submission error:", error);

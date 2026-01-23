@@ -1,13 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -32,48 +26,42 @@ model Session {
 }
 
 model Shop {
-  id            String       @id @default(cuid())
-  shopifyDomain String       @unique
+  id            String      @id @default(cuid())
+  shopifyDomain String      @unique
   accessToken   String
-  settings      Settings?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
   formConfig    FormConfig?
   orders        Order[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  settings      Settings?
 }
 
 model Settings {
   id                 String   @id @default(cuid())
   shopId             String   @unique
-  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  // Deployment settings
-  formMode           String   @default("popup") // "popup" | "embedded" | "both"
+  formMode           String   @default("popup")
   enablePopup        Boolean  @default(true)
   enableEmbedded     Boolean  @default(false)
-
-  // Buy Button settings
   buttonText         String   @default("Buy with Cash on Delivery")
+  buttonPosition     String   @default("bottom")
   buttonBgColor      String   @default("rgba(0,0,0,1)")
   buttonTextColor    String   @default("rgba(255,255,255,1)")
-  buttonFontSize     Int      @default(16)
-  buttonBorderRadius Int      @default(4)
-  buttonBorderWidth  Int      @default(0)
-  buttonBorderColor  String   @default("#000000")
-  buttonShadow       Int      @default(4)
-  buttonAnimation    String   @default("none") // "none" | "pulse" | "shake" | "bounce"
-  buttonIcon         String   @default("cart") // "cart" | "truck" | "package" | "cash" | "none"
-
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  buttonAnimation    String   @default("none")
+  buttonBorderColor  String   @default("#000000")
+  buttonBorderRadius Int      @default(4)
+  buttonBorderWidth  Int      @default(0)
+  buttonFontSize     Int      @default(16)
+  buttonIcon         String   @default("cart")
+  buttonShadow       Int      @default(4)
+  orderCreationMode  String   @default("checkout")
+  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model FormConfig {
   id                     String   @id @default(cuid())
   shopId                 String   @unique
-  shop                   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  // Form style settings
   formTitle              String   @default("CASH ON DELIVERY")
   textColor              String   @default("rgba(0,0,0,1)")
   backgroundColor        String   @default("rgba(255,255,255,1)")
@@ -82,60 +70,40 @@ model FormConfig {
   borderWidth            Int      @default(1)
   borderColor            String   @default("rgba(0,0,0,0.1)")
   shadowIntensity        Int      @default(5)
-
-  // Form sections (JSON array of section configs)
   sections               Json     @default("[]")
-  // Structure: [{ id, type, visible, order, config }]
-
-  // Form fields (JSON array of field configs)
   fields                 Json     @default("[]")
-  // Structure: [{ id, type, label, placeholder, required, visible, order, section }]
-
-  // Validation settings
   requiredFieldErrorText String   @default("This field is required.")
   invalidFieldErrorText  String   @default("Enter a valid value.")
-
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
+  shop                   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model Order {
   id                 String   @id @default(cuid())
   shopId             String
-  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
   shopifyOrderId     String?  @unique
   shopifyOrderNumber String?
-
-  // Customer details
   firstName          String
   lastName           String
   email              String?
   phone              String
-
-  // Address details
   address            String
   address2           String?
   city               String
   province           String
   postalCode         String?
   country            String   @default("Pakistan")
-
-  // Order details
   subtotal           Float
   shipping           Float    @default(0)
   total              Float
-
-  // Custom field responses (JSON)
   customFields       Json     @default("{}")
-
-  // Cart items (JSON array)
   items              Json
-
-  status             String   @default("pending") // "pending" | "confirmed" | "cancelled"
-
+  status             String   @default("pending")
+  checkoutUrl        String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([status])

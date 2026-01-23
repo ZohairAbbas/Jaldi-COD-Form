@@ -75,9 +75,9 @@ export function getDefaultSettings() {
     enablePopup: true,
     enableEmbedded: false,
     buttonText: "Buy with Cash on Delivery",
-    buttonPosition: "bottom",
     buttonBgColor: "rgba(0,0,0,1)",
     buttonTextColor: "rgba(255,255,255,1)",
+    orderCreationMode: "checkout",
   };
 }
 
@@ -134,13 +134,23 @@ export function getDefaultFormConfig() {
       section: "shipping-address",
     },
     {
+      id: "email",
+      type: "text",
+      label: "Email",
+      placeholder: "Email",
+      required: true,
+      visible: true,
+      order: 3,
+      section: "shipping-address",
+    },
+    {
       id: "address",
       type: "text",
       label: "Address",
       placeholder: "Address",
       required: true,
       visible: true,
-      order: 3,
+      order: 4,
       section: "shipping-address",
     },
     {
@@ -150,7 +160,7 @@ export function getDefaultFormConfig() {
       placeholder: "Apartment, suite, etc. (optional)",
       required: false,
       visible: true,
-      order: 4,
+      order: 5,
       section: "shipping-address",
     },
     {
@@ -160,7 +170,7 @@ export function getDefaultFormConfig() {
       placeholder: "Province",
       required: true,
       visible: true,
-      order: 5,
+      order: 6,
       section: "shipping-address",
       options: ["Punjab", "Sindh", "KPK", "Balochistan", "Islamabad"],
     },
@@ -171,7 +181,7 @@ export function getDefaultFormConfig() {
       placeholder: "City",
       required: true,
       visible: true,
-      order: 6,
+      order: 7,
       section: "shipping-address",
     },
     {
@@ -181,7 +191,7 @@ export function getDefaultFormConfig() {
       placeholder: "Postal code (optional)",
       required: false,
       visible: true,
-      order: 7,
+      order: 8,
       section: "shipping-address",
     },
   ];

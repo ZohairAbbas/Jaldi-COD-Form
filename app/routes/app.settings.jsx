@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -19,6 +19,7 @@ export const loader = async ({ request }) => {
 export default function Settings() {
   const { settings: initialSettings } = useLoaderData();
   const shopify = useAppBridge();
+  const saveButtonRef = useRef(null);
 
   const [settings, setSettings] = useState(initialSettings);
   const [isSaving, setIsSaving] = useState(false);
@@ -54,11 +55,22 @@ export default function Settings() {
     }
   };
 
+  // Attach event listener to save button (web components don't support React's onClick)
+  useEffect(() => {
+    const button = saveButtonRef.current;
+    if (button) {
+      button.addEventListener("click", handleSave);
+      return () => {
+        button.removeEventListener("click", handleSave);
+      };
+    }
+  }, [handleSave]);
+
   return (
     <s-page heading="Settings">
       <s-button
+        ref={saveButtonRef}
         slot="primary-action"
-        onClick={handleSave}
         {...(isSaving ? { loading: true } : {})}
         variant="primary"
       >

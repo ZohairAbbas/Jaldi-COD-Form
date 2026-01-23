@@ -1,0 +1,16 @@
+root: "."
+
+AppBlockMissingSchema:
+  enabled: false
+
+LiquidTag:
+  enabled: false
+
+SyntaxError:
+  enabled: false
+
+ValidSchema:
+  enabled: false
+
+UnknownFilter:
+  enabled: false

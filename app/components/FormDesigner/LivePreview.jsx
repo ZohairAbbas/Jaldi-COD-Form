@@ -323,7 +323,7 @@ export default function LivePreview({ formConfig, sections, fields }) {
         }}
         disabled
       >
-        COMPLETE ORDER - Rs. 19.99
+        PROCEED TO CHECKOUT - Rs. 19.99
       </button>
     </div>
   );
