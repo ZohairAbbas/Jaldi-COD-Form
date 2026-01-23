@@ -10,12 +10,24 @@ export async function action({ request }) {
 
   try {
     const data = await request.json();
-    const { country } = data;
+    const { country, enableMultiCountry, supportedCountries } = data;
 
-    // Update shop country
+    // Build update data object
+    const updateData = {};
+    if (country !== undefined) {
+      updateData.country = country;
+    }
+    if (enableMultiCountry !== undefined) {
+      updateData.enableMultiCountry = enableMultiCountry;
+    }
+    if (supportedCountries !== undefined) {
+      updateData.supportedCountries = supportedCountries;
+    }
+
+    // Update shop with provided fields
     await prisma.shop.update({
       where: { shopifyDomain: session.shop },
-      data: { country },
+      data: updateData,
     });
 
     return Response.json({ success: true });

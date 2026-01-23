@@ -2,7 +2,7 @@
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping' } = orderData;
 
   // Calculate total discount for one-tick upsells
   let oneTickDiscount = 0;
@@ -86,8 +86,11 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     // Calculate recovery discount amount (from downsell)
     const recoveryDiscountAmount = recoveryDiscount?.amount || 0;
 
-    // Build order note with all discounts
+    // Build order note with all discounts and shipping
     let orderNote = "Payment Method: Cash on Delivery (COD)";
+    if (shippingCost > 0) {
+      orderNote += `\nShipping: ${shippingRateName} - Rs.${shippingCost.toFixed(2)}`;
+    }
     if (oneTickDiscount > 0) {
       orderNote += `\nOne-Tick Upsell Discount: -Rs.${oneTickDiscount.toFixed(2)}`;
     }
@@ -108,6 +111,14 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       financial_status: "pending",
       note: orderNote,
       tags: "preventify_cod_form",
+      // Add shipping lines if shipping cost exists
+      ...(shippingCost > 0 ? {
+        shipping_lines: [{
+          title: shippingRateName,
+          price: shippingCost.toString(),
+          code: 'COD_SHIPPING',
+        }]
+      } : {}),
       note_attributes: [
         {
           name: "payment_method",

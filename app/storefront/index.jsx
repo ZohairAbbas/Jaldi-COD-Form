@@ -13,13 +13,30 @@ function getProductData(container) {
   const variantTitle = container.dataset.variantTitle;
   const productPrice = container.dataset.productPrice;
   const productImage = container.dataset.productImage;
+  const productAvailable = container.dataset.productAvailable;
+
+  // Check if product is available (not sold out)
+  if (productAvailable === 'false') {
+    console.log('Preventify: Product is sold out, not showing form');
+    return null;
+  }
 
   if (productId && variantId) {
+    // Try to get quantity from product form
+    let quantity = 1;
+    const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+    if (quantityInput) {
+      const inputQuantity = parseInt(quantityInput.value);
+      if (!isNaN(inputQuantity) && inputQuantity > 0) {
+        quantity = inputQuantity;
+      }
+    }
+
     return {
       variantId: `gid://shopify/ProductVariant/${variantId}`,
       title: productTitle,
       variant: variantTitle !== 'Default Title' ? variantTitle : null,
-      quantity: 1,
+      quantity: quantity,
       price: parseFloat(productPrice),
       image: productImage,
     };
@@ -281,7 +298,7 @@ async function initializePreventify() {
 
   // Fetch config from proxy API
   try {
-    const response = await fetch(`/apps/jaldi-cod/proxy/config?shop=${shopDomain}`);
+    const response = await fetch(`/apps/preventify/proxy/config?shop=${shopDomain}`);
     const config = await response.json();
 
     console.log('Preventify: Config loaded', config);

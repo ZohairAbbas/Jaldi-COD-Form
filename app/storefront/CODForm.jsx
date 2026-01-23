@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData } from './pixels';
 
 // Country data - must match server-side constants
 const COUNTRIES = {
@@ -34,10 +35,18 @@ const COUNTRIES = {
   }
 };
 
-export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null }) {
-  // Get country from config, default to PAK
-  const countryCode = config.shop?.country || 'PAK';
+export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null }) {
+  // Manual country selection state (for user override)
+  const [selectedCountry, setSelectedCountry] = useState(null);
+
+  // Priority: user-selected > detected > shop default
+  const countryCode = selectedCountry || detectedCountry || config.shop?.country || 'PAK';
   const country = COUNTRIES[countryCode] || COUNTRIES.PAK;
+
+  // Get supported countries for dropdown (only in multi-country mode)
+  const supportedCountries = config.shop?.enableMultiCountry
+    ? (config.shop.supportedCountries || []).map(code => COUNTRIES[code]).filter(Boolean)
+    : [country];
 
   // Check if RTL is enabled
   const isRTL = config.settings?.enableRTL || false;
@@ -68,6 +77,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       .reduce((acc, u) => ({ ...acc, [u.id]: true }), {});
   });
 
+  // Shipping rate state
+  const [selectedShippingRate, setSelectedShippingRate] = useState(null);
+
   // Generate and store session ID
   const [sessionId] = useState(() => {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -76,7 +88,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   // Track session when user starts filling form
   const trackSession = async (email, phone) => {
     try {
-      await fetch('/apps/jaldi-cod/proxy/session-track', {
+      await fetch('/apps/preventify/proxy/session-track', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,13 +108,23 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
-  // Track when email or phone is entered
+  // Track InitiateCheckout event when form first opens
+  useEffect(() => {
+    const currency = config.shop?.country === 'PAK' ? 'PKR' : config.shop?.country === 'UAE' ? 'AED' : 'PKR';
+    trackInitiateCheckout(cart, currency);
+  }, []); // Only run once on mount
+
+  // Track when email or phone is entered (session tracking + AddPaymentInfo pixel event)
   useEffect(() => {
     const email = formData.email || null;
     const phone = formData.phone && formData.phone !== country.phoneCode ? formData.phone : null;
 
     if (email || phone) {
       trackSession(email, phone);
+
+      // Track AddPaymentInfo pixel event
+      const currency = config.shop?.country === 'PAK' ? 'PKR' : config.shop?.country === 'UAE' ? 'AED' : 'PKR';
+      trackAddPaymentInfo(cart, currency);
     }
   }, [formData.email, formData.phone]);
 
@@ -242,6 +264,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         };
       });
 
+    // Get pixel attribution data and event ID for server-side tracking
+    const attributionData = getAttributionData();
+    const pixelEventId = getEventId();
+
     const orderData = {
       shop: config.shopDomain,
       sessionId: sessionId, // Include session ID for abandoned cart tracking
@@ -255,9 +281,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       province: formData.province,
       postalCode: formData.postalCode || formData.postalcode,
       country: country.name,
+      countryCode: country.code,
       items: [...cart.items, ...selectedOneTickItems],
       customFields: formData.customFields,
-      shippingCost: 0,
+      shippingCost: shippingCost,
+      shippingRateId: selectedShippingRate?.id,
+      shippingRateName: selectedShippingRate?.name,
       // Recovery discount from downsell (if any)
       // Use the pre-calculated amount from App.jsx, not the local recalculation
       recoveryDiscount: recoveryDiscount ? {
@@ -266,6 +295,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         amount: recoveryDiscount.amount, // Use the amount calculated when downsell was accepted
         downsellId: recoveryDiscount.downsellId,
       } : null,
+      // Pixel tracking data for server-side CAPI
+      pixelEventId,
+      pixelAttribution: attributionData,
     };
 
     try {
@@ -497,8 +529,81 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         : Math.min(recoveryDiscount.value, subtotal))
     : 0;
 
-  // Final total after discount + one-tick upsells - recovery discount
-  const total = subtotal - upsellDiscount + oneTickTotal - recoveryDiscountAmount;
+  // Calculate cart weight and quantity for shipping conditions
+  const cartWeight = cart.items.reduce((sum, item) => sum + ((item.weight || 0) * item.quantity), 0);
+  const totalQuantity = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Get eligible shipping rates based on conditions
+  const getEligibleShippingRates = () => {
+    const rates = config.shippingRates || [];
+
+    return rates.filter(rate => {
+      const conditions = rate.conditions || [];
+
+      // If no conditions, rate is always eligible
+      if (conditions.length === 0) {
+        return true;
+      }
+
+      // All conditions must be met (AND logic)
+      return conditions.every(condition => {
+        switch (condition.type) {
+          case 'order_total_gte':
+            return subtotal >= condition.value;
+          case 'order_total_lt':
+            return subtotal < condition.value;
+          case 'order_weight_gte':
+            return cartWeight >= condition.value;
+          case 'order_weight_lt':
+            return cartWeight < condition.value;
+          case 'quantity_gte':
+            return totalQuantity >= condition.value;
+          case 'quantity_lt':
+            return totalQuantity < condition.value;
+          case 'contains_product':
+            // Support both single product (legacy) and multiple products
+            const productIdsToCheck = condition.productIds || [condition.productId];
+            return productIdsToCheck.some(productId =>
+              cart.items.some(item =>
+                item.id === productId ||
+                item.variantId?.includes(productId) ||
+                item.productId === productId
+              )
+            );
+          case 'not_contains_product':
+            // Support both single product (legacy) and multiple products
+            const productIdsToExclude = condition.productIds || [condition.productId];
+            return !productIdsToExclude.some(productId =>
+              cart.items.some(item =>
+                item.id === productId ||
+                item.variantId?.includes(productId) ||
+                item.productId === productId
+              )
+            );
+          default:
+            return true;
+        }
+      });
+    });
+  };
+
+  const eligibleShippingRates = getEligibleShippingRates();
+
+  // Auto-select first eligible rate or free shipping as default
+  useEffect(() => {
+    if (eligibleShippingRates.length > 0 && !selectedShippingRate) {
+      setSelectedShippingRate(eligibleShippingRates[0]);
+    } else if (eligibleShippingRates.length === 0 && !selectedShippingRate) {
+      // Default to free shipping if no rates match
+      setSelectedShippingRate({ id: 'free', name: 'Free Shipping', price: 0 });
+    }
+  }, [eligibleShippingRates.length, subtotal, cartWeight, totalQuantity]);
+
+  // Calculate shipping cost
+  const shippingCost = selectedShippingRate?.price || 0;
+
+  // Final total after discount + one-tick upsells - recovery discount + shipping
+  const total = subtotal - upsellDiscount + oneTickTotal - recoveryDiscountAmount + shippingCost;
 
   return (
     <div style={formStyle}>
@@ -805,7 +910,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     color: '#374151',
                   }}>
                     <span>Shipping</span>
-                    <span style={{ color: '#10B981', fontWeight: '600' }}>Free</span>
+                    <span style={{
+                      color: shippingCost === 0 ? '#10B981' : '#111827',
+                      fontWeight: '600'
+                    }}>
+                      {shippingCost === 0 ? 'Free' : `Rs.${shippingCost.toFixed(2)}`}
+                    </span>
                   </div>
                   <div style={{
                     display: 'flex',
@@ -833,31 +943,81 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   }}>
                     Shipping Method
                   </h3>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '12px',
-                    border: '1px solid #D1D5DB',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    backgroundColor: '#FFFFFF',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input
-                        type="radio"
-                        checked
-                        readOnly
-                        style={{
-                          width: '16px',
-                          height: '16px',
-                          accentColor: '#000',
-                        }}
-                      />
-                      <span style={{ fontSize: '14px', color: '#111827' }}>Free shipping</span>
+
+                  {eligibleShippingRates.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {eligibleShippingRates.map(rate => (
+                        <label
+                          key={rate.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px',
+                            border: selectedShippingRate?.id === rate.id
+                              ? '2px solid #000'
+                              : '1px solid #D1D5DB',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            backgroundColor: '#FFFFFF',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="radio"
+                              name="shippingRate"
+                              checked={selectedShippingRate?.id === rate.id}
+                              onChange={() => setSelectedShippingRate(rate)}
+                              style={{
+                                width: '16px',
+                                height: '16px',
+                                accentColor: '#000',
+                              }}
+                            />
+                            <div>
+                              <span style={{ fontSize: '14px', color: '#111827' }}>
+                                {rate.name}
+                              </span>
+                              {rate.description && (
+                                <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                                  {rate.description}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <span style={{
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            color: rate.price === 0 ? '#10B981' : '#111827'
+                          }}>
+                            {rate.price === 0 ? 'Free' : `Rs.${rate.price.toFixed(2)}`}
+                          </span>
+                        </label>
+                      ))}
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: '#10B981' }}>Free</span>
-                  </label>
+                  ) : (
+                    // Fallback to free shipping
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      backgroundColor: '#FFFFFF',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="radio"
+                          checked
+                          readOnly
+                          style={{ width: '16px', height: '16px', accentColor: '#000' }}
+                        />
+                        <span style={{ fontSize: '14px', color: '#111827' }}>Free shipping</span>
+                      </div>
+                      <span style={{ fontSize: '14px', fontWeight: '500', color: '#10B981' }}>Free</span>
+                    </label>
+                  )}
                 </div>
               );
 
@@ -872,6 +1032,64 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   }}>
                     Enter your shipping address
                   </h3>
+
+                  {/* Country Selector - Only show in multi-country mode with more than 1 country */}
+                  {config.shop?.enableMultiCountry && supportedCountries.length > 1 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{
+                        display: 'block',
+                        marginBottom: '8px',
+                        fontWeight: 500,
+                        fontSize: `${config.formConfig?.fontSize || 14}px`,
+                        color: config.formConfig?.textColor || '#333',
+                        textAlign: isRTL ? 'right' : 'left',
+                      }}>
+                        Country <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <select
+                        value={countryCode}
+                        onChange={(e) => {
+                          setSelectedCountry(e.target.value);
+                          // Reset province and update phone when country changes
+                          const newCountry = COUNTRIES[e.target.value];
+                          setFormData(prev => ({
+                            ...prev,
+                            province: '',
+                            phone: newCountry?.phoneCode || '',
+                          }));
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid #d1d5db',
+                          fontSize: `${config.formConfig?.fontSize || 14}px`,
+                          backgroundColor: '#fff',
+                          cursor: 'pointer',
+                          textAlign: isRTL ? 'right' : 'left',
+                          direction: isRTL ? 'rtl' : 'ltr',
+                        }}
+                      >
+                        {supportedCountries.map(c => (
+                          <option key={c.code} value={c.code}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      {detectedCountry && !selectedCountry && (
+                        <small style={{
+                          display: 'block',
+                          marginTop: '4px',
+                          color: '#666',
+                          fontSize: '12px',
+                          textAlign: isRTL ? 'right' : 'left',
+                        }}>
+                          Auto-detected based on your location
+                        </small>
+                      )}
+                    </div>
+                  )}
+
                   {visibleFields.map(renderField)}
                 </div>
               );
@@ -918,6 +1136,17 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       ...prev,
                       [upsell.id]: e.target.checked
                     }));
+
+                    // Track AddToCart event when upsell is selected
+                    if (e.target.checked) {
+                      const currency = config.shop?.country === 'PAK' ? 'PKR' : config.shop?.country === 'UAE' ? 'AED' : 'PKR';
+                      const upsellItem = {
+                        id: upsell.product?.id || `upsell-${upsell.id}`,
+                        variantId: upsell.product?.variantId,
+                        price: upsell.upsellPrice,
+                      };
+                      trackAddToCart(upsellItem, currency);
+                    }
                   }}
                   style={{
                     width: '18px',

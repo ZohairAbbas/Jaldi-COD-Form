@@ -780,3 +780,293 @@ export function getDefaultDownsell() {
     declineButtonShadow: 0,
   };
 }
+
+// ============================================
+// PIXEL TRACKING FUNCTIONS
+// ============================================
+
+/**
+ * Get all pixels for a shop
+ */
+export async function getPixelsByShop(shopId) {
+  return await prisma.pixel.findMany({
+    where: { shopId },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/**
+ * Get enabled pixels for storefront config
+ */
+export async function getEnabledPixels(shopId) {
+  return await prisma.pixel.findMany({
+    where: {
+      shopId,
+      enabled: true,
+    },
+    select: {
+      id: true,
+      type: true,
+      pixelId: true,
+      purchaseEvent: true,
+      enableAddToCart: true,
+      enableAddPaymentInfo: true,
+      enableInitiateCheckout: true,
+      testMode: true,
+      testEventCode: true,
+    },
+  });
+}
+
+/**
+ * Get pixel by ID
+ */
+export async function getPixelById(id) {
+  return await prisma.pixel.findUnique({
+    where: { id },
+  });
+}
+
+/**
+ * Create a new pixel
+ */
+export async function createPixel(shopId, pixelData) {
+  return await prisma.pixel.create({
+    data: {
+      shopId,
+      ...pixelData,
+    },
+  });
+}
+
+/**
+ * Update a pixel
+ */
+export async function updatePixel(id, pixelData) {
+  return await prisma.pixel.update({
+    where: { id },
+    data: pixelData,
+  });
+}
+
+/**
+ * Delete a pixel
+ */
+export async function deletePixel(id) {
+  return await prisma.pixel.delete({
+    where: { id },
+  });
+}
+
+/**
+ * Log a pixel event
+ */
+export async function logPixelEvent(eventData) {
+  return await prisma.pixelEvent.create({
+    data: eventData,
+  });
+}
+
+/**
+ * Get pixel events for debugging/analytics
+ */
+export async function getPixelEvents(shopId, filters = {}) {
+  const { limit = 50, pixelId, eventName, status } = filters;
+
+  return await prisma.pixelEvent.findMany({
+    where: {
+      shopId,
+      ...(pixelId && { pixelId }),
+      ...(eventName && { eventName }),
+      ...(status && { status }),
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: {
+      pixel: {
+        select: {
+          type: true,
+          label: true,
+        },
+      },
+    },
+  });
+}
+
+// ============================================
+// SHIPPING RATE FUNCTIONS
+// ============================================
+
+/**
+ * Get all shipping rates for a shop
+ */
+export async function getShippingRates(shopId) {
+  return await prisma.shippingRate.findMany({
+    where: { shopId },
+    orderBy: { priority: "asc" },
+  });
+}
+
+/**
+ * Get enabled shipping rates for storefront config
+ */
+export async function getEnabledShippingRates(shopId) {
+  return await prisma.shippingRate.findMany({
+    where: {
+      shopId,
+      enabled: true,
+    },
+    orderBy: { priority: "asc" },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      price: true,
+      conditions: true,
+      isShopifyImported: true,
+    },
+  });
+}
+
+/**
+ * Get shipping rate by ID
+ */
+export async function getShippingRateById(id) {
+  return await prisma.shippingRate.findUnique({
+    where: { id },
+  });
+}
+
+/**
+ * Create a new shipping rate
+ */
+export async function createShippingRate(shopId, rateData) {
+  // Get highest priority for ordering
+  const maxPriority = await prisma.shippingRate.aggregate({
+    where: { shopId },
+    _max: { priority: true },
+  });
+
+  const priority = (maxPriority._max.priority || 0) + 1;
+
+  return await prisma.shippingRate.create({
+    data: {
+      shopId,
+      priority,
+      ...rateData,
+    },
+  });
+}
+
+/**
+ * Update a shipping rate
+ */
+export async function updateShippingRate(id, rateData) {
+  return await prisma.shippingRate.update({
+    where: { id },
+    data: rateData,
+  });
+}
+
+/**
+ * Delete a shipping rate
+ */
+export async function deleteShippingRate(id) {
+  return await prisma.shippingRate.delete({
+    where: { id },
+  });
+}
+
+/**
+ * Toggle shipping rate enabled status
+ */
+export async function toggleShippingRateEnabled(id) {
+  const rate = await prisma.shippingRate.findUnique({ where: { id } });
+  if (!rate) throw new Error("Shipping rate not found");
+
+  return await prisma.shippingRate.update({
+    where: { id },
+    data: { enabled: !rate.enabled },
+  });
+}
+
+/**
+ * Upsert shipping rates from Shopify import
+ * Matches on shopifyShippingRateId for updates
+ */
+export async function upsertShopifyShippingRates(shopId, rates) {
+  const results = [];
+
+  for (const rate of rates) {
+    // Find existing rate by shopifyShippingRateId
+    const existing = await prisma.shippingRate.findFirst({
+      where: {
+        shopId,
+        shopifyShippingRateId: rate.shopifyShippingRateId,
+      },
+    });
+
+    if (existing) {
+      // Update existing
+      const result = await prisma.shippingRate.update({
+        where: { id: existing.id },
+        data: {
+          name: rate.name,
+          price: rate.price,
+          conditions: rate.conditions,
+          isShopifyImported: true,
+        },
+      });
+      results.push(result);
+    } else {
+      // Create new
+      const result = await createShippingRate(shopId, {
+        ...rate,
+        isShopifyImported: true,
+      });
+      results.push(result);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Get default shipping rate data
+ */
+export function getDefaultShippingRate() {
+  return {
+    name: "Standard Shipping",
+    description: "",
+    price: 0,
+    enabled: true,
+    conditions: [],
+    isShopifyImported: false,
+  };
+}
+
+/**
+ * Ensure default "Free Shipping" rate exists for shop
+ */
+export async function ensureFreeShippingRate(shopId) {
+  const existingFree = await prisma.shippingRate.findFirst({
+    where: {
+      shopId,
+      name: "Free Shipping",
+      price: 0,
+    },
+  });
+
+  if (!existingFree) {
+    return await createShippingRate(shopId, {
+      name: "Free Shipping",
+      description: "Free standard shipping",
+      price: 0,
+      enabled: true,
+      conditions: [],
+      priority: 9999, // Always last priority (fallback)
+    });
+  }
+
+  return existingFree;
+}

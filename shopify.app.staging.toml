@@ -33,5 +33,5 @@ redirect_urls = [ "https://example.com/api/auth" ]
 
 [app_proxy]
 url = "https://example.com"
-subpath = "jaldi-cod"
+subpath = "preventify-staging"
 prefix = "apps"

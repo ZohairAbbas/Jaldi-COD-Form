@@ -1,5 +1,6 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
-import { getShopByDomain, getUpsells } from "../lib/db.server";
+import { getShopByDomain, getUpsells, getEnabledPixels } from "../lib/db.server";
+import { firePurchaseEvent, getCurrencyFromCountry } from "../lib/pixels.server";
 import prisma from "../db.server";
 
 export const action = async ({ request }) => {
@@ -34,7 +35,7 @@ export const action = async ({ request }) => {
     const calculatedSubtotal = items.reduce((sum, item) => {
       return sum + (parseFloat(item.price) * parseInt(item.quantity));
     }, 0);
-    const shippingCost = parseFloat(orderData.shipping || 0);
+    const shippingCost = parseFloat(orderData.shippingCost || orderData.shipping || 0);
     const calculatedTotal = calculatedSubtotal + shippingCost;
 
     // Save order to database first
@@ -58,6 +59,13 @@ export const action = async ({ request }) => {
         shipping: shippingCost,
         total: calculatedTotal,
         status: "pending",
+        customFields: JSON.stringify({
+          ...(typeof orderData.customFields === 'string'
+              ? JSON.parse(orderData.customFields || '{}')
+              : (orderData.customFields || {})),
+          shippingRateId: orderData.shippingRateId,
+          shippingRateName: orderData.shippingRateName,
+        }),
       },
     });
 
@@ -107,6 +115,8 @@ export const action = async ({ request }) => {
           shipping: shippingCost,
           total: calculatedTotal,
           recoveryDiscount: orderData.recoveryDiscount, // Pass recovery discount from downsell
+          shippingCost: shippingCost,
+          shippingRateName: orderData.shippingRateName || 'Standard Shipping',
         },
         shop.shopifyDomain // Pass shop domain for REST API call
       );
@@ -134,6 +144,51 @@ export const action = async ({ request }) => {
           } catch (sessionError) {
             console.error("Failed to mark session as completed:", sessionError);
           }
+        }
+
+        // Fire Facebook CAPI Purchase event (async, don't block response)
+        try {
+          const pixels = await getEnabledPixels(shop.id);
+          if (pixels && pixels.length > 0) {
+            const currency = getCurrencyFromCountry(shop.country);
+
+            // Get client IP and user agent from request headers
+            const clientIpAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+              || request.headers.get('x-real-ip')
+              || '';
+            const clientUserAgent = request.headers.get('user-agent') || '';
+
+            // Fire purchase event to all enabled CAPI pixels
+            firePurchaseEvent(pixels, {
+              orderId: dbOrder.id,
+              orderNumber: shopifyResult.orderNumber,
+              total: calculatedTotal,
+              items: items,
+              currency,
+              customerInfo: {
+                firstName: orderData.firstName,
+                lastName: orderData.lastName,
+                email: orderData.email,
+                phone: orderData.phone,
+              },
+              address: {
+                city: orderData.city,
+                province: orderData.province,
+                country: orderData.country || "Pakistan",
+              },
+              eventId: orderData.pixelEventId, // From client
+              eventSourceUrl: request.headers.get('referer') || '',
+              clientIpAddress,
+              clientUserAgent,
+              ...orderData.pixelAttribution, // fbp, fbc, fbclid from client
+            }).catch(err => {
+              console.error('Pixel tracking error:', err);
+              // Don't fail the order if pixel tracking fails
+            });
+          }
+        } catch (pixelError) {
+          console.error('Pixel initialization error:', pixelError);
+          // Don't fail the order if pixel tracking fails
         }
 
         // Check for active post-purchase upsells

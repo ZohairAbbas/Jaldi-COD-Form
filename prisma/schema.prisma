@@ -32,17 +32,21 @@ model Session {
 }
 
 model Shop {
-  id              String          @id @default(cuid())
-  shopifyDomain   String          @unique
-  accessToken     String
-  country         String          @default("PAK") // PAK, UAE, QATAR, KUWAIT, KSA
-  settings        Settings?
+  id                 String          @id @default(cuid())
+  shopifyDomain      String          @unique
+  accessToken        String
+  country            String          @default("PAK") // PAK, UAE, QATAR, KUWAIT, KSA
+  enableMultiCountry Boolean         @default(false)
+  supportedCountries Json            @default("[]") // Array of country codes: ["PAK", "UAE"]
+  settings           Settings?
   formConfig      FormConfig?
   upsells         Upsell[]
   downsells       Downsell[]
   orders          Order[]
   orderSessions   OrderSession[]
   abandonedCarts  AbandonedCart[]
+  pixels          Pixel[]
+  shippingRates   ShippingRate[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 }
@@ -380,6 +384,108 @@ model Downsell {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
+  @@index([shopId])
+  @@index([shopId, enabled])
+  @@index([priority])
+}
+
+model Pixel {
+  id              String   @id @default(cuid())
+  shopId          String
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Pixel identification
+  type            String   // "facebook_pixel" | "facebook_capi" | "tiktok" | "google_ga4" | "snapchat"
+  label           String?  // Optional friendly name (e.g., "Main Pixel")
+  pixelId         String   // The pixel/measurement ID
+  accessToken     String?  // Required for CAPI, encrypted
+
+  // Event configuration
+  purchaseEvent   String   @default("Purchase") // Event name for purchase
+  enableAddToCart Boolean  @default(false)      // Fire AddToCart event
+  enableAddPaymentInfo Boolean @default(false)  // Fire AddPaymentInfo event
+  enableInitiateCheckout Boolean @default(true) // Fire InitiateCheckout event
+
+  // Status
+  enabled         Boolean  @default(true)
+  testMode        Boolean  @default(false)      // Use test event code
+  testEventCode   String?                       // Facebook test event code
+
+  // Event logs relation
+  events          PixelEvent[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shopId])
+  @@index([shopId, type, enabled])
+}
+
+model PixelEvent {
+  id              String   @id @default(cuid())
+  pixelId         String
+  pixel           Pixel    @relation(fields: [pixelId], references: [id], onDelete: Cascade)
+  shopId          String
+
+  // Event details
+  eventName       String   // "Purchase", "InitiateCheckout", "AddToCart", "AddPaymentInfo"
+  eventId         String   // Unique event ID for deduplication
+  source          String   // "client" | "server"
+
+  // Event data (JSON)
+  eventData       Json     // Full event payload sent
+
+  // Response tracking
+  status          String   @default("pending") // "pending" | "sent" | "failed"
+  responseCode    Int?     // HTTP response code (for CAPI)
+  errorMessage    String?  // Error message if failed
+
+  // Attribution data
+  fbclid          String?  // Facebook click ID
+  fbp             String?  // Facebook browser ID
+  fbc             String?  // Facebook click cookie
+
+  // Order reference
+  orderId         String?  // Reference to order if Purchase event
+  orderNumber     String?  // Shopify order number
+
+  createdAt       DateTime @default(now())
+
+  @@index([pixelId])
+  @@index([shopId])
+  @@index([eventName])
+  @@index([createdAt])
+  @@index([orderId])
+}
+
+model ShippingRate {
+  id                      String   @id @default(cuid())
+  shopId                  String
+  shop                    Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Basic Info
+  name                    String   @default("Standard Shipping")
+  description             String?
+  price                   Float    @default(0)
+
+  // Enable/disable
+  enabled                 Boolean  @default(true)
+
+  // Priority for ordering
+  priority                Int      @default(1)
+
+  // Conditions stored as JSON array
+  // Structure: [{ type: string, value: any, productId?: string }]
+  conditions              Json     @default("[]")
+
+  // Shopify Import tracking
+  shopifyShippingRateId   String?
+  isShopifyImported       Boolean  @default(false)
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@unique([shopId, shopifyShippingRateId])
   @@index([shopId])
   @@index([shopId, enabled])
   @@index([priority])

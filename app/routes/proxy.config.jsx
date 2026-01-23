@@ -1,4 +1,4 @@
-import { getShopByDomain } from "../lib/db.server";
+import { getShopByDomain, getEnabledPixels, getEnabledShippingRates, ensureFreeShippingRate } from "../lib/db.server";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
@@ -14,6 +14,13 @@ export const loader = async ({ request }) => {
     if (!shopData) {
       return Response.json({ error: "Shop not found" }, { status: 404 });
     }
+
+    // Get enabled pixels for storefront (without sensitive data like access tokens)
+    const pixels = await getEnabledPixels(shopData.id);
+
+    // Ensure free shipping exists and get all enabled rates
+    await ensureFreeShippingRate(shopData.id);
+    const shippingRates = await getEnabledShippingRates(shopData.id);
 
     // Return public configuration (no sensitive data)
     return Response.json({
@@ -56,6 +63,8 @@ export const loader = async ({ request }) => {
       },
       shop: {
         country: shopData.country || 'PAK',
+        enableMultiCountry: shopData.enableMultiCountry || false,
+        supportedCountries: shopData.supportedCountries || [],
       },
       shopDomain: shopData.shopifyDomain,
       // Upsell configurations (multiple upsells, sorted by priority)
@@ -182,6 +191,31 @@ export const loader = async ({ request }) => {
             declineButtonShadow: downsell.declineButtonShadow,
           },
         })),
+      // Pixel tracking configurations (client-side only, no access tokens)
+      pixels: {
+        facebook: pixels
+          .filter(p => p.type === 'facebook_pixel')
+          .map(p => ({
+            pixelId: p.pixelId,
+            purchaseEvent: p.purchaseEvent,
+            enableAddToCart: p.enableAddToCart,
+            enableAddPaymentInfo: p.enableAddPaymentInfo,
+            enableInitiateCheckout: p.enableInitiateCheckout,
+            testMode: p.testMode,
+            testEventCode: p.testEventCode,
+          })),
+      },
+      // Shipping rates for storefront
+      shippingRates: shippingRates.map(rate => ({
+        id: rate.id,
+        name: rate.name,
+        description: rate.description,
+        price: rate.price,
+        conditions: typeof rate.conditions === 'string'
+          ? JSON.parse(rate.conditions)
+          : rate.conditions,
+        isShopifyImported: rate.isShopifyImported,
+      })),
     });
   } catch (error) {
     console.error("Error fetching storefront config:", error);
