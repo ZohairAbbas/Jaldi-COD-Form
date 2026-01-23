@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop } from "../lib/db.server";
-import { prisma } from "../lib/db.server";
+import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);

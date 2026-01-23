@@ -1,6 +1,5 @@
 import { getShopByDomain, createOrder, updateOrderWithShopifyDetails } from "../lib/db.server";
 import { createShopifyOrder, validateOrderData, calculateOrderTotals } from "../lib/order.server";
-import { shopifyApp } from "../shopify.server";
 
 export const action = async ({ request }) => {
   try {
@@ -47,10 +46,29 @@ export const action = async ({ request }) => {
       status: "pending",
     });
 
-    // Create Shopify order using Admin API
-    const adminApi = shopifyApp.admin(shopData.shopifyDomain, shopData.accessToken);
+    // Create admin API client manually with graphql method and access token
+    const admin = {
+      accessToken: shopData.accessToken,
+      graphql: async (query, options) => {
+        const response = await fetch(
+          `https://${shopData.shopifyDomain}/admin/api/2025-01/graphql.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': shopData.accessToken,
+            },
+            body: JSON.stringify({
+              query: query,
+              variables: options?.variables,
+            }),
+          }
+        );
+        return response;
+      },
+    };
 
-    const shopifyOrderResult = await createShopifyOrder(adminApi, {
+    const shopifyOrderResult = await createShopifyOrder(admin, {
       customerInfo: {
         firstName: orderData.firstName,
         lastName: orderData.lastName,
@@ -69,7 +87,7 @@ export const action = async ({ request }) => {
       subtotal: totals.subtotal,
       shipping: totals.shipping,
       total: totals.total,
-    });
+    }, shopData.shopifyDomain);
 
     if (shopifyOrderResult.success) {
       // Update database order with Shopify order details

@@ -40,6 +40,9 @@ export const loader = async ({ request }) => {
         buttonBgColor: shopData.settings.buttonBgColor,
         buttonTextColor: shopData.settings.buttonTextColor,
       },
+      shop: {
+        country: shopData.country || 'PAK',
+      },
       shopDomain: shopData.shopifyDomain,
     });
   } catch (error) {

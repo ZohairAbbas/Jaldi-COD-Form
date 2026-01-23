@@ -2,6 +2,7 @@ import React from 'react';
 
 export default function BuyButton({ config, onClick }) {
   const settings = config.settings;
+  const isRTL = settings.enableRTL || false;
 
   // Get animation class
   const getAnimationClass = (animation) => {
@@ -21,7 +22,7 @@ export default function BuyButton({ config, onClick }) {
     width: '100%',
     backgroundColor: settings.buttonBgColor || '#000000',
     color: settings.buttonTextColor || '#FFFFFF',
-    padding: '12px 24px',
+    padding: '16px 32px',
     border: `${settings.buttonBorderWidth || 0}px solid ${settings.buttonBorderColor || '#000000'}`,
     borderRadius: `${settings.buttonBorderRadius || 4}px`,
     fontSize: `${settings.buttonFontSize || 16}px`,
@@ -30,6 +31,7 @@ export default function BuyButton({ config, onClick }) {
     textAlign: 'center',
     boxShadow: `0 ${settings.buttonShadow || 4}px ${(settings.buttonShadow || 4) * 2}px rgba(0, 0, 0, 0.1)`,
     transition: 'all 0.3s ease',
+    direction: isRTL ? 'rtl' : 'ltr',
   };
 
   const containerStyle = {
@@ -37,6 +39,7 @@ export default function BuyButton({ config, onClick }) {
     alignItems: 'center',
     justifyContent: 'center',
     gap: '8px',
+    flexDirection: isRTL ? 'row-reverse' : 'row',
   };
 
   // Icon renderer
@@ -93,7 +96,12 @@ export default function BuyButton({ config, onClick }) {
 
   return (
     <button
-      onClick={onClick}
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+      }}
       className={getAnimationClass(settings.buttonAnimation)}
       style={buttonStyle}
       onMouseEnter={(e) => {
