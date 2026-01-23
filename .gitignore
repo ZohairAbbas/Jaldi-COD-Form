@@ -72,3 +72,5 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
+image/
+*.md
