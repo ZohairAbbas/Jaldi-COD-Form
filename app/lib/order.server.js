@@ -6,6 +6,9 @@ import { validatePhone } from './constants.js';
 export async function createShopifyOrder(admin, orderData, shopDomain) {
   const { customerInfo, address, items, total, recoveryDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping' } = orderData;
 
+  // Clean phone number (remove all non-digit characters except +)
+  const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
+
   // Calculate total discount for one-tick upsells
   let oneTickDiscount = 0;
   items.forEach((item) => {
@@ -29,7 +32,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     province: address.province,
     country: address.country || "Pakistan",
     zip: address.postalCode || "",
-    phone: customerInfo.phone,
+    phone: cleanedPhone,
   };
 
   // Prepare billing address (same as shipping for COD)
@@ -105,8 +108,8 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
 
     // Prepare REST API order payload
     const restOrder = {
-      email: customerInfo.email || `noreply+${customerInfo.phone}@example.com`,
-      phone: customerInfo.phone,
+      email: customerInfo.email || `noreply+${cleanedPhone}@example.com`,
+      phone: cleanedPhone,
       line_items: restLineItems,
       shipping_address: restShippingAddress,
       billing_address: restBillingAddress,
