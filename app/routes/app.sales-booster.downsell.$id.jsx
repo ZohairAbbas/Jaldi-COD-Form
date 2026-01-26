@@ -215,7 +215,7 @@ export default function DownsellEditor() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
         {/* Left Column - Configuration */}
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* Section 1: Configure the downsell */}
           <s-section>
             <s-stack direction="block" gap="base">
@@ -223,67 +223,31 @@ export default function DownsellEditor() {
 
               {/* Downsell Name */}
               <s-box padding="base" borderWidth="base" borderRadius="base">
-                <s-stack direction="block" gap="tight">
-                  <s-text variant="heading-sm">Downsell name</s-text>
-                  <input
-                    type="text"
-                    value={downsell.name}
-                    onChange={(e) => handleUpdate({ name: e.target.value })}
-                    placeholder="New downsell"
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      borderRadius: "6px",
-                      border: "1px solid #d1d5db",
-                      fontSize: "14px",
-                    }}
-                  />
-                </s-stack>
-              </s-box>
+                <s-stack direction="block" gap="base">
+                  {/* Downsell Name */}
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">Downsell name</s-text>
+                    <input
+                      type="text"
+                      value={downsell.name}
+                      onChange={(e) => handleUpdate({ name: e.target.value })}
+                      placeholder="New downsell"
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid #d1d5db",
+                        fontSize: "14px",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </s-stack>
 
-              {/* Show downsell for - All products for now */}
-              <s-box padding="base" borderWidth="base" borderRadius="base">
-                <s-stack direction="block" gap="tight">
-                  <s-text variant="heading-sm">Show the downsell for:</s-text>
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "0",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                  }}>
-                    <button
-                      type="button"
-                      style={{
-                        padding: "12px 16px",
-                        border: "none",
-                        borderRight: "1px solid #e5e7eb",
-                        backgroundColor: "#f3f4f6",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        color: "#111827",
-                      }}
-                    >
-                      All products
-                    </button>
-                    <button
-                      type="button"
-                      disabled
-                      style={{
-                        padding: "12px 16px",
-                        border: "none",
-                        backgroundColor: "#ffffff",
-                        cursor: "not-allowed",
-                        fontSize: "14px",
-                        fontWeight: "400",
-                        color: "#9ca3af",
-                      }}
-                    >
-                      Specific products
-                    </button>
-                  </div>
+                  {/* Show the downsell for */}
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">Show the downsell for:</s-text>
+                    <s-text variant="body-md">All products</s-text>
+                  </s-stack>
                 </s-stack>
               </s-box>
 
@@ -350,6 +314,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -395,6 +360,7 @@ export default function DownsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -412,6 +378,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -430,6 +397,7 @@ export default function DownsellEditor() {
                             borderRadius: "6px",
                             border: "1px solid #d1d5db",
                             fontSize: "14px",
+                            boxSizing: "border-box",
                           }}
                         />
                         <span>px</span>
@@ -454,6 +422,7 @@ export default function DownsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -471,6 +440,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -489,6 +459,7 @@ export default function DownsellEditor() {
                             borderRadius: "6px",
                             border: "1px solid #d1d5db",
                             fontSize: "14px",
+                            boxSizing: "border-box",
                           }}
                         />
                         <span>px</span>
@@ -515,6 +486,7 @@ export default function DownsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -532,6 +504,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -547,6 +520,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -565,6 +539,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -598,6 +573,7 @@ export default function DownsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -614,6 +590,7 @@ export default function DownsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -637,6 +614,7 @@ export default function DownsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                     <s-text variant="body-sm" tone="subdued">
@@ -698,6 +676,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -713,6 +692,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -767,6 +747,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -803,6 +784,7 @@ export default function DownsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -820,6 +802,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -835,6 +818,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -889,6 +873,7 @@ export default function DownsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>

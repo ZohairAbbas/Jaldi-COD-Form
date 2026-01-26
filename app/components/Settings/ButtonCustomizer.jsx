@@ -296,35 +296,6 @@ export default function ButtonCustomizer({ settings, onUpdate }) {
         </s-text>
       </s-stack>
 
-      {/* Button Preview */}
-      <s-stack direction="block" gap="tight">
-        <s-text variant="heading-sm">Button Preview</s-text>
-        <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-          <style>{`
-            @keyframes pulse {
-              0%, 100% { transform: scale(1); }
-              50% { transform: scale(1.05); }
-            }
-            @keyframes shake {
-              0%, 100% { transform: translateX(0); }
-              10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-              20%, 40%, 60%, 80% { transform: translateX(5px); }
-            }
-            @keyframes bounce {
-              0%, 100% { transform: translateY(0); }
-              50% { transform: translateY(-10px); }
-            }
-          `}</style>
-          <button style={buttonPreviewStyle}>
-            {renderIcon(settings.buttonIcon || 'cart')}
-            {settings.buttonText}
-          </button>
-        </s-box>
-        <s-text variant="body-sm" tone="subdued">
-          Live preview with your customizations including animations
-        </s-text>
-      </s-stack>
-
     </s-stack>
   );
 }

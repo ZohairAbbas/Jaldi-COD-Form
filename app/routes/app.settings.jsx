@@ -6,7 +6,6 @@ import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getPixelsByShop } from "../lib/db.server";
 import { COUNTRY_OPTIONS } from "../lib/constants";
 import FormModeSelector from "../components/Settings/FormModeSelector";
-import ButtonCustomizer from "../components/Settings/ButtonCustomizer";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -30,6 +29,7 @@ export default function Settings() {
   const shopify = useAppBridge();
   const saveButtonRef = useRef(null);
 
+  const [activeTab, setActiveTab] = useState("general");
   const [settings, setSettings] = useState(initialSettings);
   const [shop, setShop] = useState(initialShop);
   const [pixels, setPixels] = useState(initialPixels || []);
@@ -223,8 +223,96 @@ export default function Settings() {
         Save Settings
       </s-button>
 
-      {/* Country Selection */}
-      <s-section>
+      {/* Navigation Tabs */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: "0",
+        marginBottom: "24px",
+        borderBottom: "1px solid #e5e7eb",
+      }}>
+        <button
+          onClick={() => setActiveTab("general")}
+          style={{
+            padding: "12px 24px",
+            border: "none",
+            backgroundColor: "transparent",
+            borderBottom: activeTab === "general" ? "2px solid #000" : "2px solid transparent",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: activeTab === "general" ? "600" : "400",
+            color: activeTab === "general" ? "#000" : "#6b7280",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l4.2 4.2M23 12h-6m-6 0H1m18.2 5.2l-4.2-4.2m0-6l4.2-4.2" />
+          </svg>
+          General
+        </button>
+        <button
+          onClick={() => setActiveTab("visibility")}
+          style={{
+            padding: "12px 24px",
+            border: "none",
+            backgroundColor: "transparent",
+            borderBottom: activeTab === "visibility" ? "2px solid #000" : "2px solid transparent",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: activeTab === "visibility" ? "600" : "400",
+            color: activeTab === "visibility" ? "#000" : "#6b7280",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          Visibility
+        </button>
+        <button
+          onClick={() => setActiveTab("pixels")}
+          style={{
+            padding: "12px 24px",
+            border: "none",
+            backgroundColor: "transparent",
+            borderBottom: activeTab === "pixels" ? "2px solid #000" : "2px solid transparent",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: activeTab === "pixels" ? "600" : "400",
+            color: activeTab === "pixels" ? "#000" : "#6b7280",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="12" x2="18" y2="12" />
+            <line x1="6" y1="12" x2="2" y2="12" />
+            <line x1="12" y1="6" x2="12" y2="2" />
+            <line x1="12" y1="22" x2="12" y2="18" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          Pixels
+        </button>
+      </div>
+
+      {/* General Tab */}
+      {activeTab === "general" && (
+        <>
+          {/* Country Selection */}
+          <s-section>
         <s-stack direction="block" gap="base">
           <s-heading>Operating Country</s-heading>
 
@@ -457,20 +545,20 @@ export default function Settings() {
             Control whether customers can include cart items when ordering through the popup form.
           </s-paragraph>
 
-          <s-stack direction="inline" gap="base" align="space-between">
-            <s-stack direction="block" gap="tight">
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.allowCartItems}
+              onChange={(e) => handleUpdate({ allowCartItems: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
               <s-text variant="heading-sm">Allow Cart Items in Popup</s-text>
               <s-text variant="body-sm" tone="subdued">
                 When enabled, customers can choose to buy the current product only or include their cart items. When disabled, only the current product can be purchased.
               </s-text>
             </s-stack>
-            <input
-              type="checkbox"
-              checked={settings.allowCartItems}
-              onChange={(e) => handleUpdate({ allowCartItems: e.target.checked })}
-              style={{ width: "20px", height: "20px" }}
-            />
-          </s-stack>
+          </label>
 
           {settings.allowCartItems && (
             <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
@@ -490,20 +578,20 @@ export default function Settings() {
             Enable right-to-left (RTL) layout for Arabic and other RTL languages. This will mirror the form layout and align text to the right.
           </s-paragraph>
 
-          <s-stack direction="inline" gap="base" align="space-between">
-            <s-stack direction="block" gap="tight">
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.enableRTL}
+              onChange={(e) => handleUpdate({ enableRTL: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
               <s-text variant="heading-sm">Enable RTL Layout</s-text>
               <s-text variant="body-sm" tone="subdued">
                 When enabled, the checkout form will display in right-to-left layout, suitable for Arabic, Hebrew, and other RTL languages.
               </s-text>
             </s-stack>
-            <input
-              type="checkbox"
-              checked={settings.enableRTL}
-              onChange={(e) => handleUpdate({ enableRTL: e.target.checked })}
-              style={{ width: "20px", height: "20px" }}
-            />
-          </s-stack>
+          </label>
 
           {settings.enableRTL && (
             <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
@@ -523,20 +611,20 @@ export default function Settings() {
             Enable a "Pay with Card" option that redirects customers to Shopify's native checkout with pre-filled information.
           </s-paragraph>
 
-          <s-stack direction="inline" gap="base" align="space-between">
-            <s-stack direction="block" gap="tight">
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.enableCartPermalink || false}
+              onChange={(e) => handleUpdate({ enableCartPermalink: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
               <s-text variant="heading-sm">Enable Pay with Card</s-text>
               <s-text variant="body-sm" tone="subdued">
                 When enabled, a "Pay with Card" button will appear below the COD button. Clicking it will redirect customers to Shopify checkout with their information pre-filled.
               </s-text>
             </s-stack>
-            <input
-              type="checkbox"
-              checked={settings.enableCartPermalink || false}
-              onChange={(e) => handleUpdate({ enableCartPermalink: e.target.checked })}
-              style={{ width: "20px", height: "20px" }}
-            />
-          </s-stack>
+          </label>
 
           {settings.enableCartPermalink && (
             <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
@@ -548,182 +636,128 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
-      {/* Button Page Visibility Setting */}
-      <s-section>
-        <s-stack direction="block" gap="base">
-          <s-heading>Button Visibility</s-heading>
-          <s-paragraph>
-            Control where the COD button appears on your storefront (Popup mode only)
-          </s-paragraph>
-
-          {/* Segmented Control */}
-          <div style={{
-            display: "flex",
-            border: "1px solid #e5e7eb",
-            borderRadius: "8px",
-            overflow: "hidden",
-            backgroundColor: "#f9fafb",
-          }}>
-            {[
-              { value: "disabled", label: "Disabled" },
-              { value: "cart", label: "Only cart page" },
-              { value: "product", label: "Only product pages" },
-              { value: "both", label: "Both cart and product pages" },
-            ].map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleUpdate({ buttonPageVisibility: option.value })}
-                style={{
-                  flex: 1,
-                  padding: "12px 16px",
-                  border: "none",
-                  backgroundColor: settings.buttonPageVisibility === option.value ? "#000" : "transparent",
-                  color: settings.buttonPageVisibility === option.value ? "#fff" : "#374151",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: settings.buttonPageVisibility === option.value ? "600" : "400",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Cart Page Settings - Show when cart or both is selected */}
-          {(settings.buttonPageVisibility === "cart" || settings.buttonPageVisibility === "both") && (
-            <s-box padding="base" borderWidth="base" borderRadius="base">
-              <s-stack direction="block" gap="base">
-                <s-text variant="heading-sm">Cart page settings</s-text>
-                <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={settings.hideCheckoutButton || false}
-                    onChange={(e) => handleUpdate({ hideCheckoutButton: e.target.checked })}
-                    style={{ width: "18px", height: "18px" }}
-                  />
-                  <span style={{ fontSize: "14px" }}>
-                    Hide the <strong>Checkout</strong> button on your cart
-                  </span>
-                </label>
-              </s-stack>
-            </s-box>
-          )}
-
-          {/* Product Pages Settings - Show when product or both is selected */}
-          {(settings.buttonPageVisibility === "product" || settings.buttonPageVisibility === "both") && (
-            <s-box padding="base" borderWidth="base" borderRadius="base">
-              <s-stack direction="block" gap="base">
-                <s-text variant="heading-sm">Product pages settings</s-text>
-                <s-stack direction="block" gap="tight">
-                  <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={settings.hideAddToCartButton || false}
-                      onChange={(e) => handleUpdate({ hideAddToCartButton: e.target.checked })}
-                      style={{ width: "18px", height: "18px" }}
-                    />
-                    <span style={{ fontSize: "14px" }}>
-                      Hide the <strong>Add to Cart</strong> button on product pages
-                    </span>
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={settings.hideBuyNowButton || false}
-                      onChange={(e) => handleUpdate({ hideBuyNowButton: e.target.checked })}
-                      style={{ width: "18px", height: "18px" }}
-                    />
-                    <span style={{ fontSize: "14px" }}>
-                      Hide the <strong>Buy Now</strong> button on product pages
-                    </span>
-                  </label>
-                </s-stack>
-              </s-stack>
-            </s-box>
-          )}
-
-          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-text variant="body-sm">
-              ℹ️ This setting only applies to popup mode. In embedded mode, you control placement manually through the theme editor.
-            </s-text>
-          </s-box>
-        </s-stack>
-      </s-section>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-        {/* Left Column - Form Mode */}
-        <div>
           <s-section>
             <FormModeSelector settings={settings} onUpdate={handleUpdate} />
           </s-section>
-        </div>
+        </>
+      )}
 
-        {/* Right Column - Button Customization */}
-        <div>
+      {/* Visibility Tab */}
+      {activeTab === "visibility" && (
+        <>
+          {/* Button Page Visibility Setting */}
           <s-section>
-            <ButtonCustomizer settings={settings} onUpdate={handleUpdate} />
-          </s-section>
-        </div>
-      </div>
-
-      <s-section heading="Setup Instructions">
-        <s-stack direction="block" gap="base">
-          <s-paragraph>
-            After configuring your settings, follow these steps to enable the COD
-            form on your storefront:
-          </s-paragraph>
-
-          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-stack direction="block" gap="tight">
-              <s-text variant="heading-sm">Step 1: Enable App Embed (Required)</s-text>
-              <s-unordered-list>
-                <s-list-item>
-                  Go to your Shopify theme editor
-                </s-list-item>
-                <s-list-item>
-                  Click "App embeds" in the left sidebar
-                </s-list-item>
-                <s-list-item>
-                  Enable "Preventify COD Form"
-                </s-list-item>
-                <s-list-item>
-                  Save your theme
-                </s-list-item>
-              </s-unordered-list>
-              <s-text variant="body-sm" tone="subdued">
-                This will automatically display the form/button at the end of your product and cart sections based on your selected mode above.
-              </s-text>
-            </s-stack>
-          </s-box>
-
-          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-stack direction="block" gap="tight">
-              <s-text variant="heading-sm">Step 2: Manual Placement (Optional)</s-text>
+            <s-stack direction="block" gap="base">
+              <s-heading>Button Visibility</s-heading>
               <s-paragraph>
-                If you want to place the button or form at a specific location instead of the default position:
+                Control where the COD button appears on your storefront (Popup mode only)
               </s-paragraph>
-              <s-unordered-list>
-                <s-list-item>
-                  <strong>For Popup Mode:</strong> Add the "Preventify - COD Button" block to your product page template at your desired location
-                </s-list-item>
-                <s-list-item>
-                  <strong>For Embedded Mode:</strong> Add the "Preventify - COD Form" block to your product or cart page template at your desired location
-                </s-list-item>
-              </s-unordered-list>
-              <s-text variant="body-sm" tone="subdued">
-                Manual blocks override the default position. The form/button will appear only where you place the block.
-              </s-text>
-            </s-stack>
-          </s-box>
-        </s-stack>
-      </s-section>
 
-      {/* Pixel Tracking Section */}
-      <s-section>
-        <s-stack direction="block" gap="base">
-          <s-heading>Pixel Tracking</s-heading>
+              {/* Segmented Control */}
+              <div style={{
+                display: "flex",
+                border: "1px solid #e5e7eb",
+                borderRadius: "8px",
+                overflow: "hidden",
+                backgroundColor: "#f9fafb",
+              }}>
+                {[
+                  { value: "disabled", label: "Disabled" },
+                  { value: "cart", label: "Only cart page" },
+                  { value: "product", label: "Only product pages" },
+                  { value: "both", label: "Both cart and product pages" },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleUpdate({ buttonPageVisibility: option.value })}
+                    style={{
+                      flex: 1,
+                      padding: "12px 16px",
+                      border: "none",
+                      backgroundColor: settings.buttonPageVisibility === option.value ? "#000" : "transparent",
+                      color: settings.buttonPageVisibility === option.value ? "#fff" : "#374151",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      fontWeight: settings.buttonPageVisibility === option.value ? "600" : "400",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Cart Page Settings - Show when cart or both is selected */}
+              {(settings.buttonPageVisibility === "cart" || settings.buttonPageVisibility === "both") && (
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    <s-text variant="heading-sm">Cart page settings</s-text>
+                    <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.hideCheckoutButton || false}
+                        onChange={(e) => handleUpdate({ hideCheckoutButton: e.target.checked })}
+                        style={{ width: "18px", height: "18px" }}
+                      />
+                      <span style={{ fontSize: "14px" }}>
+                        Hide the <strong>Checkout</strong> button on your cart
+                      </span>
+                    </label>
+                  </s-stack>
+                </s-box>
+              )}
+
+              {/* Product Pages Settings - Show when product or both is selected */}
+              {(settings.buttonPageVisibility === "product" || settings.buttonPageVisibility === "both") && (
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    <s-text variant="heading-sm">Product pages settings</s-text>
+                    <s-stack direction="block" gap="tight">
+                      <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={settings.hideAddToCartButton || false}
+                          onChange={(e) => handleUpdate({ hideAddToCartButton: e.target.checked })}
+                          style={{ width: "18px", height: "18px" }}
+                        />
+                        <span style={{ fontSize: "14px" }}>
+                          Hide the <strong>Add to Cart</strong> button on product pages
+                        </span>
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={settings.hideBuyNowButton || false}
+                          onChange={(e) => handleUpdate({ hideBuyNowButton: e.target.checked })}
+                          style={{ width: "18px", height: "18px" }}
+                        />
+                        <span style={{ fontSize: "14px" }}>
+                          Hide the <strong>Buy Now</strong> button on product pages
+                        </span>
+                      </label>
+                    </s-stack>
+                  </s-stack>
+                </s-box>
+              )}
+
+              <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                <s-text variant="body-sm">
+                  ℹ️ This setting only applies to popup mode. In embedded mode, you control placement manually through the theme editor.
+                </s-text>
+              </s-box>
+            </s-stack>
+          </s-section>
+        </>
+      )}
+
+      {/* Pixels Tab */}
+      {activeTab === "pixels" && (
+        <>
+          {/* Pixel Tracking Section */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <s-heading>Pixel Tracking</s-heading>
           <s-paragraph>
             Configure analytics pixels to track your COD form purchases and events. Track conversions with Facebook Pixel and Conversions API.
           </s-paragraph>
@@ -844,6 +878,8 @@ export default function Settings() {
           </s-box>
         </s-stack>
       </s-section>
+        </>
+      )}
 
       {/* Pixel Modal */}
       {showPixelModal && (

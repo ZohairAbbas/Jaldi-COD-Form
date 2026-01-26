@@ -73,6 +73,58 @@ export default function Index() {
         </s-stack>
       </s-section>
 
+      <s-section heading="Setup Instructions">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            After configuring your settings, follow these steps to enable the COD
+            form on your storefront:
+          </s-paragraph>
+
+          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+            <s-stack direction="block" gap="tight">
+              <s-text variant="heading-sm">Step 1: Enable App Embed (Required)</s-text>
+              <s-unordered-list>
+                <s-list-item>
+                  Go to your Shopify theme editor
+                </s-list-item>
+                <s-list-item>
+                  Click "App embeds" in the left sidebar
+                </s-list-item>
+                <s-list-item>
+                  Enable "Preventify COD Form"
+                </s-list-item>
+                <s-list-item>
+                  Save your theme
+                </s-list-item>
+              </s-unordered-list>
+              <s-text variant="body-sm" tone="subdued">
+                This will automatically display the form/button at the end of your product and cart sections based on your selected mode above.
+              </s-text>
+            </s-stack>
+          </s-box>
+
+          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+            <s-stack direction="block" gap="tight">
+              <s-text variant="heading-sm">Step 2: Manual Placement (Optional)</s-text>
+              <s-paragraph>
+                If you want to place the button or form at a specific location instead of the default position:
+              </s-paragraph>
+              <s-unordered-list>
+                <s-list-item>
+                  <strong>For Popup Mode:</strong> Add the "Preventify - COD Button" block to your product page template at your desired location
+                </s-list-item>
+                <s-list-item>
+                  <strong>For Embedded Mode:</strong> Add the "Preventify - COD Form" block to your product or cart page template at your desired location
+                </s-list-item>
+              </s-unordered-list>
+              <s-text variant="body-sm" tone="subdued">
+                Manual blocks override the default position. The form/button will appear only where you place the block.
+              </s-text>
+            </s-stack>
+          </s-box>
+        </s-stack>
+      </s-section>
+
       <s-section slot="aside" heading="Setup Guide">
         <s-unordered-list>
           <s-list-item>

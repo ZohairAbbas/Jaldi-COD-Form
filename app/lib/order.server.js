@@ -1,3 +1,5 @@
+import { validatePhone } from './constants.js';
+
 /**
  * Create a Shopify order directly (not draft order)
  */
@@ -242,31 +244,45 @@ export function calculateOrderTotals(items, shippingCost = 0) {
  */
 export function validateOrderData(orderData) {
   const errors = [];
+  const fieldErrors = {};
 
   // Validate customer info
   if (!orderData.firstName || orderData.firstName.trim() === "") {
     errors.push("First name is required");
+    fieldErrors.firstName = "First name is required";
   }
 
   if (!orderData.lastName || orderData.lastName.trim() === "") {
     errors.push("Last name is required");
+    fieldErrors.lastName = "Last name is required";
   }
 
   if (!orderData.phone || orderData.phone.trim() === "") {
     errors.push("Phone number is required");
+    fieldErrors.phone = "Phone number is required";
+  } else {
+    // Validate phone format
+    const phoneValidation = validatePhone(orderData.phone, orderData.country || "PAK");
+    if (!phoneValidation.isValid) {
+      errors.push(phoneValidation.message);
+      fieldErrors.phone = phoneValidation.message;
+    }
   }
 
   // Validate address
   if (!orderData.address || orderData.address.trim() === "") {
     errors.push("Address is required");
+    fieldErrors.address = "Address is required";
   }
 
   if (!orderData.city || orderData.city.trim() === "") {
     errors.push("City is required");
+    fieldErrors.city = "City is required";
   }
 
   if (!orderData.province || orderData.province.trim() === "") {
     errors.push("Province is required");
+    fieldErrors.province = "Province is required";
   }
 
   // Validate items
@@ -277,5 +293,6 @@ export function validateOrderData(orderData) {
   return {
     isValid: errors.length === 0,
     errors,
+    fieldErrors,
   };
 }

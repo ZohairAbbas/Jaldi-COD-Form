@@ -252,11 +252,27 @@ export default function UpsellEditor() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
         {/* Left Column - Configuration */}
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* Basic Settings */}
           <s-section>
             <s-stack direction="block" gap="base">
               <s-heading>Basic Settings</s-heading>
+
+              {/* Enable Toggle */}
+              <s-stack direction="inline" gap="base" align="space-between">
+                <input
+                  type="checkbox"
+                  checked={upsell.enabled}
+                  onChange={(e) => handleUpdate({ enabled: e.target.checked })}
+                  style={{ width: "20px", height: "20px" }}
+                />
+                <s-stack direction="block" gap="tight">
+                  <s-text variant="heading-sm">Enable Upsell</s-text>
+                  <s-text variant="body-sm" tone="subdued">
+                    When enabled, this upsell will be shown to customers
+                  </s-text>
+                </s-stack>
+              </s-stack>
 
               {/* Upsell Name */}
               <s-stack direction="block" gap="tight">
@@ -298,21 +314,6 @@ export default function UpsellEditor() {
                 </select>
               </s-stack>
 
-              {/* Enable Toggle */}
-              <s-stack direction="inline" gap="base" align="space-between">
-                <s-stack direction="block" gap="tight">
-                  <s-text variant="heading-sm">Enable Upsell</s-text>
-                  <s-text variant="body-sm" tone="subdued">
-                    When enabled, this upsell will be shown to customers
-                  </s-text>
-                </s-stack>
-                <input
-                  type="checkbox"
-                  checked={upsell.enabled}
-                  onChange={(e) => handleUpdate({ enabled: e.target.checked })}
-                  style={{ width: "20px", height: "20px" }}
-                />
-              </s-stack>
             </s-stack>
           </s-section>
 

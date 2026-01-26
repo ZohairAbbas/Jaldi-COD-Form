@@ -49,6 +49,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [showSuccess, setShowSuccess] = useState(false);
   const [currentPageType, setCurrentPageType] = useState('unknown');
   const [isProductAvailable, setIsProductAvailable] = useState(true); // Track if current product is available
+  const [appPath, setAppPath] = useState('/apps/preventify/'); // Dynamic app path
 
   // Upsell state
   const [showUpsellModal, setShowUpsellModal] = useState(false);
@@ -396,12 +397,18 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const loadConfig = async () => {
     try {
       console.log('Preventify COD Form & Upsells: Fetching config for shop', shopDomain);
-      // Temporarily use production proxy since staging proxy isn't configured yet
+      // Use default app path for initial config fetch
       const response = await fetch(`/apps/preventify/proxy/config?shop=${shopDomain}`);
       const data = await response.json();
       console.log('Preventify COD Form & Upsells: Config loaded', data);
       setConfig(data);
       setConfigLoaded(true);
+
+      // Set dynamic app path from config
+      if (data.appPath) {
+        setAppPath(data.appPath);
+        console.log('Preventify COD Form & Upsells: Using app path', data.appPath);
+      }
 
       // Initialize pixel tracking
       if (data.pixels) {
@@ -462,7 +469,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
     try {
       const response = await fetch(
-        `/apps/preventify/proxy/detect-country?shop=${shopDomain}`,
+        `${appPath}proxy/detect-country?shop=${shopDomain}`,
         { signal: controller.signal }
       );
       clearTimeout(timeoutId);
@@ -596,7 +603,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   const handleSubmit = async (orderData) => {
     try {
-      const response = await fetch('/apps/preventify/proxy/order', {
+      const response = await fetch(`${appPath}proxy/order`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -633,7 +640,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           }, 1000);
         }
       } else {
-        alert('Failed to submit order: ' + (result.error || 'Unknown error'));
+        // Throw validation error with field-specific errors
+        const error = new Error(result.error || 'Unknown error');
+        error.fieldErrors = result.fieldErrors || {};
+        throw error;
       }
     } catch (error) {
       console.error('Order submission error:', error);
@@ -713,7 +723,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Track upsell stats
   const trackUpsellStat = async (upsellId, stat) => {
     try {
-      await fetch(`/apps/preventify/proxy/upsell-stats?upsellId=${upsellId}&stat=${stat}`, {
+      await fetch(`${appPath}proxy/upsell-stats?upsellId=${upsellId}&stat=${stat}`, {
         method: 'POST',
       });
     } catch (error) {
@@ -724,7 +734,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Track downsell stats
   const trackDownsellStat = async (downsellId, stat) => {
     try {
-      await fetch(`/apps/preventify/proxy/downsell-stats?downsellId=${downsellId}&stat=${stat}`, {
+      await fetch(`${appPath}proxy/downsell-stats?downsellId=${downsellId}&stat=${stat}`, {
         method: 'POST',
       });
     } catch (error) {
@@ -833,7 +843,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
     try {
       // Call API to add upsell item to the existing order
-      const response = await fetch('/apps/preventify/proxy/order-upsell', {
+      const response = await fetch(`${appPath}proxy/order-upsell`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -916,6 +926,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onRemoveItem={handleRemoveItem}
           mode="embedded"
           detectedCountry={detectedCountry}
+          appPath={appPath}
         />
         {showSuccess && (
           <div style={{
@@ -1008,6 +1019,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             showProductSelection={config.settings.allowCartItems && fullCart.items.length > 0 && currentProduct}
             productSelection={productSelection}
             onProductSelectionChange={setProductSelection}
+            appPath={appPath}
             fullCartItemCount={fullCart.items.length}
             recoveryDiscount={recoveryDiscount}
             detectedCountry={detectedCountry}

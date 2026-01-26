@@ -242,7 +242,7 @@ export default function OneTickUpsellEditor() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
         {/* Left Column - Configuration */}
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* 1. Configure the upsell */}
           <s-section>
             <s-stack direction="block" gap="base">
@@ -264,6 +264,7 @@ export default function OneTickUpsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -271,45 +272,7 @@ export default function OneTickUpsellEditor() {
                   {/* Show the upsell for */}
                   <s-stack direction="block" gap="tight">
                     <s-text variant="heading-sm">Show the upsell for:</s-text>
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "0",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                      overflow: "hidden",
-                    }}>
-                      <button
-                        type="button"
-                        style={{
-                          padding: "12px 20px",
-                          border: "none",
-                          borderRight: "1px solid #e5e7eb",
-                          backgroundColor: "#f3f4f6",
-                          cursor: "not-allowed",
-                          fontSize: "14px",
-                          fontWeight: "600",
-                          color: "#111827",
-                        }}
-                      >
-                        All products
-                      </button>
-                      <button
-                        type="button"
-                        disabled
-                        style={{
-                          padding: "12px 20px",
-                          border: "none",
-                          backgroundColor: "#ffffff",
-                          cursor: "not-allowed",
-                          fontSize: "14px",
-                          fontWeight: "400",
-                          color: "#9ca3af",
-                        }}
-                      >
-                        Specific products
-                      </button>
-                    </div>
+                    <s-text variant="body-md">All products</s-text>
                   </s-stack>
                 </s-stack>
               </s-box>
@@ -338,6 +301,7 @@ export default function OneTickUpsellEditor() {
                           borderRadius: "6px",
                           border: "1px solid #d1d5db",
                           fontSize: "14px",
+                          boxSizing: "border-box",
                         }}
                       />
                     </s-stack>
@@ -378,6 +342,7 @@ export default function OneTickUpsellEditor() {
                         borderRadius: "6px",
                         border: "1px solid #d1d5db",
                         fontSize: "14px",
+                        boxSizing: "border-box",
                       }}
                     />
                     <s-text variant="body-sm" tone="subdued">
@@ -401,6 +366,7 @@ export default function OneTickUpsellEditor() {
                         fontSize: "14px",
                         fontFamily: "inherit",
                         resize: "vertical",
+                        boxSizing: "border-box",
                       }}
                     />
                   </s-stack>
@@ -505,25 +471,6 @@ export default function OneTickUpsellEditor() {
                       />
                       <s-text variant="body-sm">Preselect the upsell</s-text>
                     </label>
-                  </s-stack>
-
-                  {/* Image URL */}
-                  <s-stack direction="block" gap="tight">
-                    <s-text variant="body-sm">Image URL</s-text>
-                    <input
-                      type="text"
-                      value={upsell.imageUrl || ""}
-                      onChange={(e) => handleUpdate({ imageUrl: e.target.value })}
-                      placeholder=""
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        borderRadius: "6px",
-                        border: "1px solid #d1d5db",
-                        fontSize: "14px",
-                      }}
-                    />
-                    <a href="#" style={{ fontSize: "13px", color: "#2563eb" }}>How to add an image to your upsell</a>
                   </s-stack>
 
                   {/* Background Color */}
