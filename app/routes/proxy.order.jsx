@@ -20,7 +20,8 @@ export const action = async ({ request }) => {
     if (!validation.isValid) {
       return Response.json({
         success: false,
-        error: validation.errors.join(", ")
+        error: validation.errors.join(", "),
+        fieldErrors: validation.fieldErrors || {}
       }, { status: 400 });
     }
 

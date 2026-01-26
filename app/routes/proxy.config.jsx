@@ -22,8 +22,12 @@ export const loader = async ({ request }) => {
     await ensureFreeShippingRate(shopData.id);
     const shippingRates = await getEnabledShippingRates(shopData.id);
 
+    // Detect app path from request URL (e.g., /apps/preventify/ or /apps/preventify-staging/)
+    const appPath = url.pathname.match(/\/apps\/[^\/]+\//)?.[0] || '/apps/preventify/';
+
     // Return public configuration (no sensitive data)
     return Response.json({
+      appPath,
       formConfig: {
         formTitle: shopData.formConfig.formTitle,
         textColor: shopData.formConfig.textColor,

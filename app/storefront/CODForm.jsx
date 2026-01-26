@@ -35,7 +35,7 @@ const COUNTRIES = {
   }
 };
 
-export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null }) {
+export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/' }) {
   // Manual country selection state (for user override)
   const [selectedCountry, setSelectedCountry] = useState(null);
 
@@ -88,7 +88,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   // Track session when user starts filling form
   const trackSession = async (email, phone) => {
     try {
-      await fetch('/apps/preventify/proxy/session-track', {
+      await fetch(`${appPath}proxy/session-track`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -304,7 +304,21 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       await onSubmit(orderData);
     } catch (error) {
       console.error('Order submission error:', error);
-      alert('Failed to submit order. Please try again.');
+
+      // If server returned field-specific errors, display them
+      if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
+        setErrors(error.fieldErrors);
+        // Scroll to first error field
+        const firstErrorField = Object.keys(error.fieldErrors)[0];
+        const errorElement = document.querySelector(`[name="${firstErrorField}"]`);
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          errorElement.focus();
+        }
+      } else {
+        // Generic error message if no field-specific errors
+        alert('Failed to submit order: ' + error.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
