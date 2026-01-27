@@ -3,6 +3,46 @@ import JaldiCODFormApp from './App';
 
 console.log('Preventify COD Form & Upsells: Script loaded');
 
+// Helper to get Pumper Bundles data if available
+function getPumperBundleData() {
+  // Find the selected radio button in Pumper Bundles
+  const selectedRadio = document.querySelector('.prvw_pair:checked');
+  if (!selectedRadio) return null;
+
+  const bundleIndex = parseInt(selectedRadio.value) - 1; // value is 1-based, index is 0-based
+  const quantity = parseInt(selectedRadio.value);
+
+  // Get the discounted price from Pumper's price element
+  const priceElement = document.querySelector(`#prvw_totalAmount_${bundleIndex}`);
+  if (!priceElement) return null;
+
+  // Parse the price (format: "Rs.1,469.90")
+  const priceText = priceElement.textContent.trim();
+  const priceMatch = priceText.match(/[\d,]+\.?\d*/);
+  if (!priceMatch) return null;
+
+  const discountedPrice = parseFloat(priceMatch[0].replace(/,/g, ''));
+
+  // Get original price if available
+  const originalPriceElement = document.querySelector(`#prvw_originalAmount_${bundleIndex}`);
+  let originalPrice = null;
+  if (originalPriceElement && originalPriceElement.textContent.trim()) {
+    const originalMatch = originalPriceElement.textContent.trim().match(/[\d,]+\.?\d*/);
+    if (originalMatch) {
+      originalPrice = parseFloat(originalMatch[0].replace(/,/g, ''));
+    }
+  }
+
+  console.log('Preventify: Initial Pumper Bundle detected', { quantity, discountedPrice, originalPrice });
+
+  return {
+    quantity,
+    discountedPrice,
+    originalPrice,
+    hasBundleDiscount: originalPrice !== null && originalPrice > discountedPrice,
+  };
+}
+
 // Helper to extract product data from container
 function getProductData(container) {
   if (!container) return null;
@@ -22,24 +62,40 @@ function getProductData(container) {
   }
 
   if (productId && variantId) {
-    // Try to get quantity from product form
-    let quantity = 1;
-    const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
-    if (quantityInput) {
-      const inputQuantity = parseInt(quantityInput.value);
-      if (!isNaN(inputQuantity) && inputQuantity > 0) {
-        quantity = inputQuantity;
+    // Check for Pumper Bundles discount first
+    const pumperData = getPumperBundleData();
+
+    // Use Pumper's quantity and price if available
+    let quantity = pumperData?.quantity || 1;
+    let price = pumperData?.discountedPrice || parseFloat(productPrice);
+
+    // If no Pumper data, try to get quantity from product form
+    if (!pumperData) {
+      const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+      if (quantityInput) {
+        const inputQuantity = parseInt(quantityInput.value);
+        if (!isNaN(inputQuantity) && inputQuantity > 0) {
+          quantity = inputQuantity;
+        }
       }
     }
 
-    return {
+    const productData = {
       variantId: `gid://shopify/ProductVariant/${variantId}`,
       title: productTitle,
       variant: variantTitle !== 'Default Title' ? variantTitle : null,
       quantity: quantity,
-      price: parseFloat(productPrice),
+      price: price,
       image: productImage,
     };
+
+    // Add bundle discount info if applicable
+    if (pumperData?.hasBundleDiscount) {
+      productData.originalPrice = pumperData.originalPrice;
+      productData.hasBundleDiscount = true;
+    }
+
+    return productData;
   }
 
   return null;
@@ -297,8 +353,13 @@ async function initializePreventify() {
   const productData = appEmbedContainer ? getProductData(appEmbedContainer) : null;
 
   // Fetch config from proxy API
+  // Use app path from global variable (set by liquid) or data attribute, fallback to default
+  const initialAppPath = window.PREVENTIFY_APP_PATH
+    || appEmbedContainer?.dataset.appPath
+    || '/apps/preventify/';
+
   try {
-    const response = await fetch(`/apps/preventify/proxy/config?shop=${shopDomain}`);
+    const response = await fetch(`${initialAppPath}proxy/config?shop=${shopDomain}`);
     const config = await response.json();
 
     console.log('Preventify: Config loaded', config);

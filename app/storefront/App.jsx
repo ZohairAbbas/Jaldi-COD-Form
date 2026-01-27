@@ -150,6 +150,47 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     let lastKnownQuantity = currentProduct?.quantity || 1;
     let isUpdating = false;
 
+    // ===== PUMPER BUNDLES INTEGRATION =====
+    // Helper to get Pumper Bundles selected bundle data
+    const getPumperBundleData = () => {
+      // Find the selected radio button in Pumper Bundles
+      const selectedRadio = document.querySelector('.prvw_pair:checked');
+      if (!selectedRadio) return null;
+
+      const bundleIndex = parseInt(selectedRadio.value) - 1; // value is 1-based, index is 0-based
+      const quantity = parseInt(selectedRadio.value);
+
+      // Get the discounted price from Pumper's price element
+      const priceElement = document.querySelector(`#prvw_totalAmount_${bundleIndex}`);
+      if (!priceElement) return null;
+
+      // Parse the price (format: "Rs.1,469.90")
+      const priceText = priceElement.textContent.trim();
+      const priceMatch = priceText.match(/[\d,]+\.?\d*/);
+      if (!priceMatch) return null;
+
+      const discountedPrice = parseFloat(priceMatch[0].replace(/,/g, ''));
+
+      // Get original price if available
+      const originalPriceElement = document.querySelector(`#prvw_originalAmount_${bundleIndex}`);
+      let originalPrice = null;
+      if (originalPriceElement && originalPriceElement.textContent.trim()) {
+        const originalMatch = originalPriceElement.textContent.trim().match(/[\d,]+\.?\d*/);
+        if (originalMatch) {
+          originalPrice = parseFloat(originalMatch[0].replace(/,/g, ''));
+        }
+      }
+
+      console.log('Preventify: Pumper Bundle detected', { quantity, discountedPrice, originalPrice });
+
+      return {
+        quantity,
+        discountedPrice,
+        originalPrice,
+        hasBundleDiscount: originalPrice !== null && originalPrice > discountedPrice,
+      };
+    };
+
     // Helper to fetch variant data from Shopify's product JSON
     const fetchVariantData = async (variantId) => {
       try {
@@ -175,24 +216,40 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         // Variant is available
         setIsProductAvailable(true);
 
-        // Try to get quantity from product form
-        let quantity = 1;
-        const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
-        if (quantityInput) {
-          const inputQuantity = parseInt(quantityInput.value);
-          if (!isNaN(inputQuantity) && inputQuantity > 0) {
-            quantity = inputQuantity;
+        // Check for Pumper Bundles discount
+        const pumperData = getPumperBundleData();
+
+        // Use Pumper's quantity and price if available
+        let quantity = pumperData?.quantity || 1;
+        let price = pumperData?.discountedPrice || (variant.price / 100);
+
+        // If no Pumper data, try to get quantity from product form
+        if (!pumperData) {
+          const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+          if (quantityInput) {
+            const inputQuantity = parseInt(quantityInput.value);
+            if (!isNaN(inputQuantity) && inputQuantity > 0) {
+              quantity = inputQuantity;
+            }
           }
         }
 
-        return {
+        const productDataResult = {
           variantId: `gid://shopify/ProductVariant/${variant.id}`,
           title: productData.title,
           variant: variant.title !== 'Default Title' ? variant.title : null,
           quantity: quantity,
-          price: variant.price / 100,
+          price: price,
           image: variant.featured_image?.src || productData.featured_image || container.dataset.productImage,
         };
+
+        // Add bundle discount info if applicable
+        if (pumperData?.hasBundleDiscount) {
+          productDataResult.originalPrice = pumperData.originalPrice;
+          productDataResult.hasBundleDiscount = true;
+        }
+
+        return productDataResult;
       } catch (error) {
         console.error('Preventify: Failed to fetch variant data', error);
         return null;
@@ -251,9 +308,76 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       isUpdating = false;
     };
 
+    // Track last known Pumper Bundle selection
+    let lastKnownPumperBundle = null;
+
+    // Helper to update product with Pumper Bundle data
+    const updateWithPumperBundle = async () => {
+      const pumperData = getPumperBundleData();
+      if (!pumperData) return false;
+
+      // Create a key to detect changes
+      const pumperKey = `${pumperData.quantity}-${pumperData.discountedPrice}`;
+      if (pumperKey === lastKnownPumperBundle) return false;
+
+      console.log('Preventify: Pumper Bundle selection changed', pumperData);
+      lastKnownPumperBundle = pumperKey;
+      lastKnownQuantity = pumperData.quantity;
+
+      // Get current variant data and merge with Pumper pricing
+      const variantId = getSelectedVariantId();
+      if (!variantId) return false;
+
+      try {
+        const pathParts = window.location.pathname.split('/');
+        const productIndex = pathParts.indexOf('products');
+        if (productIndex === -1 || !pathParts[productIndex + 1]) return false;
+
+        const productHandle = pathParts[productIndex + 1].split('?')[0];
+        const response = await fetch(`/products/${productHandle}.js`);
+        const productData = await response.json();
+
+        const variant = productData.variants.find(v => v.id === parseInt(variantId));
+        if (!variant || !variant.available) return false;
+
+        const newProductData = {
+          variantId: `gid://shopify/ProductVariant/${variant.id}`,
+          title: productData.title,
+          variant: variant.title !== 'Default Title' ? variant.title : null,
+          quantity: pumperData.quantity,
+          price: pumperData.discountedPrice,
+          image: variant.featured_image?.src || productData.featured_image || container.dataset.productImage,
+        };
+
+        if (pumperData.hasBundleDiscount) {
+          newProductData.originalPrice = pumperData.originalPrice;
+          newProductData.hasBundleDiscount = true;
+        }
+
+        console.log('Preventify: Updating with Pumper Bundle price', newProductData);
+        setCurrentProduct(newProductData);
+        setCart(prevCart => {
+          const cartItems = prevCart.items.filter(item => {
+            const isCurrentProduct = item.variantId === currentProduct?.variantId;
+            return !isCurrentProduct && !item.isUpsell;
+          });
+          return { items: [newProductData, ...cartItems] };
+        });
+
+        return true;
+      } catch (error) {
+        console.error('Preventify: Failed to update with Pumper data', error);
+        return false;
+      }
+    };
+
     // Poll for variant changes and quantity changes every 300ms
     // This is the most reliable method since Shopify themes update the input value programmatically
-    const pollInterval = setInterval(() => {
+    const pollInterval = setInterval(async () => {
+      // First check for Pumper Bundle changes (takes priority)
+      const pumperUpdated = await updateWithPumperBundle();
+      if (pumperUpdated) return; // Skip other checks if Pumper updated
+
       // Check for variant changes
       const currentVariantId = getSelectedVariantId();
       if (currentVariantId && currentVariantId !== lastKnownVariantId) {
@@ -261,24 +385,27 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         updateProductVariant(currentVariantId);
       }
 
-      // Check for quantity changes
-      const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
-      if (quantityInput) {
-        const currentQuantity = parseInt(quantityInput.value);
-        if (!isNaN(currentQuantity) && currentQuantity > 0 && currentQuantity !== lastKnownQuantity) {
-          console.log('Preventify: Poll detected quantity change from', lastKnownQuantity, 'to', currentQuantity);
-          lastKnownQuantity = currentQuantity;
-          setCurrentProduct(prev => prev ? { ...prev, quantity: currentQuantity } : prev);
-          setCart(prevCart => {
-            const items = prevCart.items.map(item => {
-              // Update the first item that matches the current product variant
-              if (item.variantId && lastKnownVariantId && item.variantId.includes(lastKnownVariantId)) {
-                return { ...item, quantity: currentQuantity };
-              }
-              return item;
+      // Check for quantity changes (only if no Pumper Bundles)
+      const hasPumperBundles = document.querySelector('.prvw_pair');
+      if (!hasPumperBundles) {
+        const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+        if (quantityInput) {
+          const currentQuantity = parseInt(quantityInput.value);
+          if (!isNaN(currentQuantity) && currentQuantity > 0 && currentQuantity !== lastKnownQuantity) {
+            console.log('Preventify: Poll detected quantity change from', lastKnownQuantity, 'to', currentQuantity);
+            lastKnownQuantity = currentQuantity;
+            setCurrentProduct(prev => prev ? { ...prev, quantity: currentQuantity } : prev);
+            setCart(prevCart => {
+              const items = prevCart.items.map(item => {
+                // Update the first item that matches the current product variant
+                if (item.variantId && lastKnownVariantId && item.variantId.includes(lastKnownVariantId)) {
+                  return { ...item, quantity: currentQuantity };
+                }
+                return item;
+              });
+              return { items };
             });
-            return { items };
-          });
+          }
         }
       }
     }, 300);
@@ -327,6 +454,18 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             updateProductVariant(currentVariantId);
           }
         }, 100);
+      }
+
+      // Check for Pumper Bundles clicks
+      const isPumperBundleClick = target.closest('.prvw_pair') ||
+                                   target.closest('.template_4_label') ||
+                                   target.closest('.block__cb') ||
+                                   target.closest('[class*="prvw"]');
+      if (isPumperBundleClick) {
+        // Delay to allow Pumper to update the DOM
+        setTimeout(() => {
+          updateWithPumperBundle();
+        }, 150);
       }
 
       // Also check for quantity changes when plus/minus buttons are clicked
