@@ -268,6 +268,22 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const attributionData = getAttributionData();
     const pixelEventId = getEventId();
 
+    // Transform cart items for submission
+    // For bundle items (Pumper Bundles), the price is already the total bundle price,
+    // so we set quantity to 1 to avoid multiplying the total price by original quantity
+    // Also append bundle info to title so customer knows they ordered a bundle
+    const transformedCartItems = cart.items.map(item => {
+      if (item.hasBundleDiscount) {
+        return {
+          ...item,
+          title: `${item.title} (Bundle of ${item.quantity})`, // Show bundle quantity in title
+          quantity: 1, // Bundle price is already total, don't multiply
+          bundleQuantity: item.quantity, // Keep original quantity for reference
+        };
+      }
+      return item;
+    });
+
     const orderData = {
       shop: config.shopDomain,
       sessionId: sessionId, // Include session ID for abandoned cart tracking
@@ -282,7 +298,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       postalCode: formData.postalCode || formData.postalcode,
       country: country.name,
       countryCode: country.code,
-      items: [...cart.items, ...selectedOneTickItems],
+      items: [...transformedCartItems, ...selectedOneTickItems],
       customFields: formData.customFields,
       shippingCost: shippingCost,
       shippingRateId: selectedShippingRate?.id,
@@ -513,8 +529,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
-  // Calculate subtotal using original prices for upsell items, regular price for others
+  // Calculate subtotal using original prices for upsell items and bundle items, regular price for others
+  // Note: For bundle items (Pumper Bundles), the price is already the total bundle price, not per-unit
   const subtotal = cart.items.reduce((sum, item) => {
+    if (item.hasBundleDiscount && item.originalPrice) {
+      // Bundle price is already the total for all units, don't multiply by quantity
+      return sum + item.originalPrice;
+    }
+    // Use original price if available (for upsells)
     const itemPrice = item.isUpsell && item.originalPrice ? item.originalPrice : item.price;
     return sum + (itemPrice * item.quantity);
   }, 0);
@@ -523,6 +545,15 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const upsellDiscount = cart.items.reduce((sum, item) => {
     if (item.isUpsell && item.originalPrice && item.originalPrice !== item.price) {
       return sum + ((item.originalPrice - item.price) * item.quantity);
+    }
+    return sum;
+  }, 0);
+
+  // Calculate bundle discount (from Pumper Bundles or similar apps)
+  // Note: Bundle prices are already totals, not per-unit prices
+  const bundleDiscount = cart.items.reduce((sum, item) => {
+    if (item.hasBundleDiscount && item.originalPrice && item.originalPrice !== item.price) {
+      return sum + (item.originalPrice - item.price);
     }
     return sum;
   }, 0);
@@ -617,7 +648,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const shippingCost = selectedShippingRate?.price || 0;
 
   // Final total after discount + one-tick upsells - recovery discount + shipping
-  const total = subtotal - upsellDiscount + oneTickTotal - recoveryDiscountAmount + shippingCost;
+  const total = subtotal - bundleDiscount - upsellDiscount + oneTickTotal - recoveryDiscountAmount + shippingCost;
 
   return (
     <div style={formStyle}>
@@ -819,14 +850,32 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                               </div>
 
                       {/* Price - show original price for upsell items since discount is in totals */}
+                      {/* For bundle discounts (Pumper Bundles), show both prices */}
                       <div style={{
                         fontSize: '14px',
                         fontWeight: '600',
                         color: '#111827',
                         whiteSpace: 'nowrap',
                         alignSelf: 'center',
+                        textAlign: 'right',
                       }}>
-                        Rs.{((item.isUpsell && item.originalPrice ? item.originalPrice : item.price) * item.quantity).toFixed(2)}
+                        {item.hasBundleDiscount && item.originalPrice ? (
+                          <>
+                            <div style={{
+                              fontSize: '12px',
+                              fontWeight: '400',
+                              color: '#9CA3AF',
+                              textDecoration: 'line-through',
+                            }}>
+                              Rs.{(item.originalPrice).toFixed(2)}
+                            </div>
+                            <div style={{ color: '#10b981' }}>
+                              Rs.{(item.price).toFixed(2)}
+                            </div>
+                          </>
+                        ) : (
+                          <>Rs.{((item.isUpsell && item.originalPrice ? item.originalPrice : item.price) * item.quantity).toFixed(2)}</>
+                        )}
                       </div>
 
                       {/* Remove Button (X) - Top Right - Only show in popup mode */}
@@ -884,6 +933,20 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     <span>Subtotal</span>
                     <span style={{ color: '#111827', fontWeight: '600' }}>Rs.{subtotal.toFixed(2)}</span>
                   </div>
+                  {/* Show bundle discount line if there's a bundle discount from Pumper Bundles */}
+                  {bundleDiscount > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '10px',
+                      fontSize: '15px',
+                      fontWeight: '500',
+                      color: '#374151',
+                    }}>
+                      <span>Bundle Discount</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-Rs.{bundleDiscount.toFixed(2)}</span>
+                    </div>
+                  )}
                   {/* Show discount line if there's an upsell discount */}
                   {upsellDiscount > 0 && (
                     <div style={{

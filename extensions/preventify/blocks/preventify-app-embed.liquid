@@ -6,6 +6,13 @@
     {
       "type": "paragraph",
       "content": "Enable this to show COD form on your store. Control mode (popup/embedded) and page visibility from Preventify app settings."
+    },
+    {
+      "type": "text",
+      "id": "app_path",
+      "label": "App Path",
+      "default": "/apps/preventify/",
+      "info": "Leave as default unless using staging version (/apps/preventify-staging/)"
     }
   ]
 }
@@ -20,6 +27,9 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <link rel="stylesheet" href="{{ 'preventify.css' | asset_url }}?v={{ 'now' | date: '%s' }}">
+<script>
+  window.PREVENTIFY_APP_PATH = '{{ block.settings.app_path | default: "/apps/preventify/" }}';
+</script>
 <script src="{{ 'preventify.js' | asset_url }}?v={{ 'now' | date: '%s' }}" defer></script>
 
 {% comment %} Only render app embed container on product/cart pages {% endcomment %}
@@ -27,6 +37,7 @@
   <div id="preventify-app-embed"
        data-preventify-app-embed
        data-shop="{{ shop.permanent_domain }}"
+       data-app-path="{{ block.settings.app_path | default: '/apps/preventify/' }}"
        data-page-type="{{ template.name }}"
        {% if template.name == 'product' %}
          data-product-id="{{ product.id }}"
