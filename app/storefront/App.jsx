@@ -95,6 +95,16 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       // Check product availability on product pages
       checkProductAvailability();
     }
+    // Check for collection page
+    else if (pathname.includes('/collections/')) {
+      console.log('Detected page type: collection');
+      setCurrentPageType('collection');
+    }
+    // Check for homepage
+    else if (pathname === '/' || pathname === '') {
+      console.log('Detected page type: homepage');
+      setCurrentPageType('homepage');
+    }
     // Unknown page type
     else {
       console.log('Detected page type: unknown');
@@ -713,6 +723,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const shouldShowButton = () => {
     // Cart drawer button always shows (visibility check done at index.jsx level)
     if (isCartDrawer) {
+      return true;
+    }
+
+    // Collection and homepage always show buttons (controlled by app embed being enabled)
+    if (currentPageType === 'collection' || currentPageType === 'homepage') {
+      console.log('shouldShowButton: Collection/homepage, always showing button');
       return true;
     }
 

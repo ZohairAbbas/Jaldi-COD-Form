@@ -269,16 +269,28 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const pixelEventId = getEventId();
 
     // Transform cart items for submission
-    // For bundle items (Pumper Bundles), the price is already the total bundle price,
-    // so we set quantity to 1 to avoid multiplying the total price by original quantity
-    // Also append bundle info to title so customer knows they ordered a bundle
+    // For bundle items (Pumper Bundles), we need to:
+    // 1. Keep the original quantity (e.g., 3)
+    // 2. Use the original per-unit price (originalPrice / quantity) so Shopify shows correct line total
+    // 3. Pass the bundle discount separately so it shows as a discount line in Shopify
+    // Example: originalPrice=3075, quantity=3, discountedPrice=2152.50
+    //   -> perUnitPrice = 3075/3 = 1025/ea
+    //   -> Shopify shows: 3 × Rs.1,025/ea = Rs.3,075
+    //   -> bundleDiscount = 3075 - 2152.50 = 922.50 (shown separately)
     const transformedCartItems = cart.items.map(item => {
-      if (item.hasBundleDiscount) {
+      if (item.hasBundleDiscount && item.originalPrice) {
+        // Calculate per-unit price from ORIGINAL total (not discounted)
+        // originalPrice is the total before discount (e.g., 3075 for 3 items)
+        const perUnitOriginalPrice = item.originalPrice / item.quantity;
+        // Calculate the bundle discount amount
+        const bundleDiscountAmount = item.originalPrice - item.price;
+
         return {
           ...item,
-          title: `${item.title} (Bundle of ${item.quantity})`, // Show bundle quantity in title
-          quantity: 1, // Bundle price is already total, don't multiply
-          bundleQuantity: item.quantity, // Keep original quantity for reference
+          price: perUnitOriginalPrice, // Per-unit ORIGINAL price so Shopify shows full price
+          // quantity stays the same (e.g., 3)
+          bundleDiscount: bundleDiscountAmount, // Pass discount to show separately
+          originalBundlePrice: item.price, // Keep discounted bundle total for reference
         };
       }
       return item;
