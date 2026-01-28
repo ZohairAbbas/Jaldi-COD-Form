@@ -264,8 +264,8 @@ export function validateOrderData(orderData) {
     errors.push("Phone number is required");
     fieldErrors.phone = "Phone number is required";
   } else {
-    // Validate phone format
-    const phoneValidation = validatePhone(orderData.phone, orderData.country || "PAK");
+    // Validate phone format (use countryCode, not country name)
+    const phoneValidation = validatePhone(orderData.phone, orderData.countryCode || "PAK");
     if (!phoneValidation.isValid) {
       errors.push(phoneValidation.message);
       fieldErrors.phone = phoneValidation.message;
