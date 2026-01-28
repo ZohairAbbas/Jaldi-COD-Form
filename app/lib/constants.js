@@ -9,6 +9,7 @@ export const COUNTRIES = {
     name: 'Pakistan',
     phoneCode: '+92',
     currencyCode: 'PKR',
+    currencySymbol: 'Rs.',
     provinces: [
       'Punjab',
       'Sindh',
@@ -24,6 +25,7 @@ export const COUNTRIES = {
     name: 'United Arab Emirates',
     phoneCode: '+971',
     currencyCode: 'AED',
+    currencySymbol: 'Dhs.',
     provinces: [
       'Abu Dhabi',
       'Dubai',
@@ -39,6 +41,7 @@ export const COUNTRIES = {
     name: 'Qatar',
     phoneCode: '+974',
     currencyCode: 'QAR',
+    currencySymbol: 'QR',
     provinces: [
       'Doha',
       'Al Rayyan',
@@ -55,6 +58,7 @@ export const COUNTRIES = {
     name: 'Kuwait',
     phoneCode: '+965',
     currencyCode: 'KWD',
+    currencySymbol: 'KD',
     provinces: [
       'Al Asimah',
       'Hawalli',
@@ -69,6 +73,7 @@ export const COUNTRIES = {
     name: 'Saudi Arabia',
     phoneCode: '+966',
     currencyCode: 'SAR',
+    currencySymbol: 'SAR',
     provinces: [
       'Riyadh',
       'Makkah',
@@ -125,6 +130,14 @@ export function getPhoneCode(countryCode) {
 export function getCurrencyCode(countryCode) {
   const country = getCountryData(countryCode);
   return country.currencyCode;
+}
+
+/**
+ * Get currency symbol for a country
+ */
+export function getCurrencySymbol(countryCode) {
+  const country = getCountryData(countryCode);
+  return country.currencySymbol;
 }
 
 /**

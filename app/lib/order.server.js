@@ -1,4 +1,13 @@
-import { validatePhone } from './constants.js';
+import { validatePhone, getCurrencySymbol } from './constants.js';
+
+// Map country names to country codes for currency lookup
+const COUNTRY_NAME_TO_CODE = {
+  'Pakistan': 'PAK',
+  'United Arab Emirates': 'UAE',
+  'Qatar': 'QATAR',
+  'Kuwait': 'KUWAIT',
+  'Saudi Arabia': 'KSA',
+};
 
 /**
  * Create a Shopify order directly (not draft order)
@@ -99,19 +108,23 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     // Calculate recovery discount amount (from downsell)
     const recoveryDiscountAmount = recoveryDiscount?.amount || 0;
 
+    // Get currency symbol based on country
+    const countryCode = COUNTRY_NAME_TO_CODE[shippingAddress.country] || 'PAK';
+    const currencySymbol = getCurrencySymbol(countryCode);
+
     // Build order note with all discounts and shipping
     let orderNote = "Payment Method: Cash on Delivery (COD)";
     if (shippingCost > 0) {
-      orderNote += `\nShipping: ${shippingRateName} - Rs.${shippingCost.toFixed(2)}`;
+      orderNote += `\nShipping: ${shippingRateName} - ${currencySymbol}${shippingCost.toFixed(2)}`;
     }
     if (oneTickDiscount > 0) {
-      orderNote += `\nOne-Tick Upsell Discount: -Rs.${oneTickDiscount.toFixed(2)}`;
+      orderNote += `\nOne-Tick Upsell Discount: -${currencySymbol}${oneTickDiscount.toFixed(2)}`;
     }
     if (recoveryDiscountAmount > 0) {
-      orderNote += `\nRecovery Discount: -Rs.${recoveryDiscountAmount.toFixed(2)}`;
+      orderNote += `\nRecovery Discount: -${currencySymbol}${recoveryDiscountAmount.toFixed(2)}`;
     }
     if (oneTickDiscount > 0 || recoveryDiscountAmount > 0) {
-      orderNote += `\nActual Total: Rs.${total.toFixed(2)}`;
+      orderNote += `\nActual Total: ${currencySymbol}${total.toFixed(2)}`;
     }
 
     // Prepare REST API order payload

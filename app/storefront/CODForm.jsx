@@ -7,30 +7,35 @@ const COUNTRIES = {
     code: 'PAK',
     phoneCode: '+92',
     name: 'Pakistan',
+    currencySymbol: 'Rs.',
     provinces: ['Punjab', 'Sindh', 'Khyber Pakhtunkhwa', 'Balochistan', 'Gilgit-Baltistan', 'Azad Jammu & Kashmir', 'Islamabad Capital Territory']
   },
   UAE: {
     code: 'UAE',
     phoneCode: '+971',
     name: 'United Arab Emirates',
+    currencySymbol: 'Dhs.',
     provinces: ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah']
   },
   QATAR: {
     code: 'QATAR',
     phoneCode: '+974',
     name: 'Qatar',
+    currencySymbol: 'QR',
     provinces: ['Doha', 'Al Rayyan', 'Al Wakrah', 'Al Khor', 'Al Daayen', 'Umm Salal', 'Al Shamal', 'Al Shahaniya']
   },
   KUWAIT: {
     code: 'KUWAIT',
     phoneCode: '+965',
     name: 'Kuwait',
+    currencySymbol: 'KD',
     provinces: ['Al Asimah', 'Hawalli', 'Farwaniya', 'Mubarak Al-Kabeer', 'Ahmadi', 'Jahra']
   },
   KSA: {
     code: 'KSA',
     phoneCode: '+966',
     name: 'Saudi Arabia',
+    currencySymbol: 'SAR',
     provinces: ['Riyadh', 'Makkah', 'Madinah', 'Eastern Province', 'Asir', 'Tabuk', 'Qassim', 'Ha\'il', 'Northern Borders', 'Jizan', 'Najran', 'Al Bahah', 'Al Jawf']
   }
 };
@@ -879,14 +884,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               color: '#9CA3AF',
                               textDecoration: 'line-through',
                             }}>
-                              Rs.{(item.originalPrice).toFixed(2)}
+                              {country.currencySymbol}{(item.originalPrice).toFixed(2)}
                             </div>
                             <div style={{ color: '#10b981' }}>
-                              Rs.{(item.price).toFixed(2)}
+                              {country.currencySymbol}{(item.price).toFixed(2)}
                             </div>
                           </>
                         ) : (
-                          <>Rs.{((item.isUpsell && item.originalPrice ? item.originalPrice : item.price) * item.quantity).toFixed(2)}</>
+                          <>{country.currencySymbol}{((item.isUpsell && item.originalPrice ? item.originalPrice : item.price) * item.quantity).toFixed(2)}</>
                         )}
                       </div>
 
@@ -943,7 +948,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     color: '#374151',
                   }}>
                     <span>Subtotal</span>
-                    <span style={{ color: '#111827', fontWeight: '600' }}>Rs.{subtotal.toFixed(2)}</span>
+                    <span style={{ color: '#111827', fontWeight: '600' }}>{country.currencySymbol}{subtotal.toFixed(2)}</span>
                   </div>
                   {/* Show bundle discount line if there's a bundle discount from Pumper Bundles */}
                   {bundleDiscount > 0 && (
@@ -956,7 +961,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       color: '#374151',
                     }}>
                       <span>Bundle Discount</span>
-                      <span style={{ color: '#10B981', fontWeight: '600' }}>-Rs.{bundleDiscount.toFixed(2)}</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{country.currencySymbol}{bundleDiscount.toFixed(2)}</span>
                     </div>
                   )}
                   {/* Show discount line if there's an upsell discount */}
@@ -970,7 +975,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       color: '#374151',
                     }}>
                       <span>Upsell Discount</span>
-                      <span style={{ color: '#10B981', fontWeight: '600' }}>-Rs.{upsellDiscount.toFixed(2)}</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{country.currencySymbol}{upsellDiscount.toFixed(2)}</span>
                     </div>
                   )}
                   {/* Show recovery discount line if there's a recovery discount from downsell */}
@@ -987,7 +992,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         <span style={{ fontSize: '12px' }}>⊘</span>
                         RECOVERY DISCOUNT
                       </span>
-                      <span style={{ color: '#10B981', fontWeight: '600' }}>-Rs.{recoveryDiscountAmount.toFixed(2)}</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{country.currencySymbol}{recoveryDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
                   <div style={{
@@ -1003,7 +1008,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       color: shippingCost === 0 ? '#10B981' : '#111827',
                       fontWeight: '600'
                     }}>
-                      {shippingCost === 0 ? 'Free' : `Rs.${shippingCost.toFixed(2)}`}
+                      {shippingCost === 0 ? 'Free' : `${country.currencySymbol}${shippingCost.toFixed(2)}`}
                     </span>
                   </div>
                   <div style={{
@@ -1016,7 +1021,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     color: '#111827',
                   }}>
                     <span>Total</span>
-                    <span>Rs.{total.toFixed(2)}</span>
+                    <span>{country.currencySymbol}{total.toFixed(2)}</span>
                   </div>
                 </div>
               );
@@ -1079,7 +1084,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             fontWeight: '500',
                             color: rate.price === 0 ? '#10B981' : '#111827'
                           }}>
-                            {rate.price === 0 ? 'Free' : `Rs.${rate.price.toFixed(2)}`}
+                            {rate.price === 0 ? 'Free' : `${country.currencySymbol}${rate.price.toFixed(2)}`}
                           </span>
                         </label>
                       ))}
@@ -1296,7 +1301,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               <span>Processing...</span>
             </div>
           ) : (
-            `COMPLETE ORDER - Rs.${total.toFixed(2)}`
+            `COMPLETE ORDER - ${country.currencySymbol}${total.toFixed(2)}`
           )}
         </button>
 
