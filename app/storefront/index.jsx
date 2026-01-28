@@ -101,6 +101,71 @@ function getProductData(container) {
   return null;
 }
 
+// Helper to extract product data from product card on collection/homepage
+function getProductCardData(productCard) {
+  if (!productCard) return null;
+
+  try {
+    const productId = productCard.dataset.productId;
+    if (!productId) return null;
+
+    // Get variant ID from the hidden input in the quick-add form
+    const variantInput = productCard.querySelector('input[name="id"]');
+    const variantId = variantInput?.value;
+
+    if (!variantId) return null;
+
+    // Get product title from the text-block or h3
+    const titleElement = productCard.querySelector('.text-block p, h3');
+    const productTitle = titleElement?.textContent?.trim();
+
+    // Get price from product-price component
+    const priceElement = productCard.querySelector('product-price .price');
+    const priceText = priceElement?.textContent?.trim();
+    let price = 0;
+
+    if (priceText) {
+      // Extract numeric value from price text (e.g., "Rs.0.00" -> 0)
+      const priceMatch = priceText.match(/[\d,]+\.?\d*/);
+      if (priceMatch) {
+        price = parseFloat(priceMatch[0].replace(/,/g, ''));
+      }
+    }
+
+    // Get product image from the first slideshow-slide img
+    const imageElement = productCard.querySelector('slideshow-slide img, .product-media__image');
+    const productImage = imageElement?.src;
+
+    // Check if product is sold out by looking for sold out badge
+    const soldOutBadge = productCard.querySelector('.product-badges__badge');
+    const isSoldOut = soldOutBadge?.textContent?.trim().toLowerCase().includes('sold out');
+
+    if (isSoldOut) {
+      console.log('Preventify: Product card is sold out, skipping');
+      return null;
+    }
+
+    // Check if Add to Cart button is disabled
+    const addButton = productCard.querySelector('button[name="add"]');
+    if (addButton?.disabled) {
+      console.log('Preventify: Product card add button is disabled, skipping');
+      return null;
+    }
+
+    return {
+      variantId: `gid://shopify/ProductVariant/${variantId}`,
+      title: productTitle || 'Product',
+      variant: null,
+      quantity: 1,
+      price: price,
+      image: productImage,
+    };
+  } catch (error) {
+    console.error('Preventify: Error extracting product card data', error);
+    return null;
+  }
+}
+
 // Detect current page type
 function detectPageType() {
   const path = window.location.pathname;
@@ -109,6 +174,10 @@ function detectPageType() {
     return 'product';
   } else if (path.includes('/cart')) {
     return 'cart';
+  } else if (path.includes('/collections/')) {
+    return 'collection';
+  } else if (path === '/' || path === '') {
+    return 'homepage';
   }
 
   return null;
@@ -208,6 +277,79 @@ function createEmbeddedForm(container, shopDomain, productData) {
   root.render(<JaldiCODFormApp mode="embedded" shopDomain={shopDomain} currentProduct={productData} />);
 
   return formContainer;
+}
+
+// Render popup buttons on product cards (for collection and homepage)
+function renderPopupOnProductCards(shopDomain) {
+  const pageType = detectPageType();
+
+  if (pageType !== 'collection' && pageType !== 'homepage') {
+    return;
+  }
+
+  console.log(`Preventify: Rendering popup buttons on ${pageType} product cards`);
+
+  // Find all product cards
+  const productCards = document.querySelectorAll('product-card[data-product-id]');
+
+  if (productCards.length === 0) {
+    console.log('Preventify: No product cards found on page');
+    return;
+  }
+
+  console.log(`Preventify: Found ${productCards.length} product cards`);
+
+  productCards.forEach((productCard, index) => {
+    try {
+      // Skip if button already exists for this card
+      if (productCard.querySelector('.preventify-product-card-button')) {
+        return;
+      }
+
+      // Extract product data from card
+      const productData = getProductCardData(productCard);
+      if (!productData) {
+        console.log(`Preventify: Skipping product card ${index} - no product data`);
+        return;
+      }
+
+      // Find the card-gallery (image area) to overlay button on
+      const cardGallery = productCard.querySelector('.card-gallery');
+
+      if (!cardGallery) {
+        console.log(`Preventify: Could not find card-gallery for product card ${index}`);
+        return;
+      }
+
+      // Make sure card-gallery has relative positioning for absolute child
+      const galleryStyle = window.getComputedStyle(cardGallery);
+      if (galleryStyle.position === 'static') {
+        cardGallery.style.position = 'relative';
+      }
+
+      // Create button container - positioned at bottom of image
+      const buttonContainer = document.createElement('div');
+      buttonContainer.className = 'preventify-product-card-button';
+      buttonContainer.style.cssText = `
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        z-index: 10;
+      `;
+      buttonContainer.dataset.shop = shopDomain;
+
+      // Render React component
+      const root = createRoot(buttonContainer);
+      root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} />);
+
+      // Append button inside the card-gallery (not after)
+      cardGallery.appendChild(buttonContainer);
+      console.log(`Preventify: Rendered button on product card ${index} for product ${productData.title}`);
+    } catch (error) {
+      console.error(`Preventify: Error rendering button on product card ${index}`, error);
+    }
+  });
 }
 
 // Render popup button at default position
@@ -372,6 +514,19 @@ async function initializePreventify() {
       watchCartDrawer(shopDomain);
     }
 
+    // Detect current page type
+    const pageType = detectPageType();
+    console.log('Preventify: Current page type:', pageType);
+
+    // Handle collection and homepage separately - always show if app embed is enabled
+    if ((pageType === 'collection' || pageType === 'homepage') && config.settings.formMode === 'popup') {
+      console.log('Preventify: Rendering on collection/homepage product cards');
+      renderPopupOnProductCards(shopDomain);
+      // Watch for dynamically loaded product cards
+      watchProductCards(shopDomain);
+      return; // Don't render default button
+    }
+
     // Only render main button/form if app embed exists and page visibility check passes
     if (!appEmbedContainer) {
       console.log('Preventify: No app embed container, only watching cart drawer');
@@ -459,6 +614,40 @@ function watchCartDrawer(shopDomain) {
 
   // Also try to render immediately in case drawer is already open
   buttonRendered = renderPopupInCartDrawer(shopDomain);
+}
+
+// Watch for dynamically loaded product cards (for infinite scroll, lazy loading, etc.)
+function watchProductCards(shopDomain) {
+  const pageType = detectPageType();
+
+  if (pageType !== 'collection' && pageType !== 'homepage') {
+    return;
+  }
+
+  console.log('Preventify: Setting up observer for dynamic product cards');
+
+  let debounceTimer;
+
+  const observer = new MutationObserver(() => {
+    // Debounce to avoid excessive re-renders
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      // Find product cards without buttons
+      const productCardsWithoutButton = document.querySelectorAll('product-card[data-product-id]:not(:has(.preventify-product-card-button))');
+
+      if (productCardsWithoutButton.length > 0) {
+        console.log(`Preventify: Found ${productCardsWithoutButton.length} new product cards to render buttons on`);
+        renderPopupOnProductCards(shopDomain);
+      }
+    }, 500); // Wait 500ms after last mutation
+  });
+
+  // Observe the main content area for new product cards
+  const mainContent = document.querySelector('main') || document.body;
+  observer.observe(mainContent, {
+    childList: true,
+    subtree: true,
+  });
 }
 
 // Initialize when DOM is ready

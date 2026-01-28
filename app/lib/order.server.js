@@ -19,6 +19,14 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     }
   });
 
+  // Calculate total discount for bundle items (Pumper Bundles)
+  let bundleDiscount = 0;
+  items.forEach((item) => {
+    if (item.bundleDiscount && item.bundleDiscount > 0) {
+      bundleDiscount += parseFloat(item.bundleDiscount);
+    }
+  });
+
   // Prepare shipping address
   const shippingAddress = {
     firstName: customerInfo.firstName,
@@ -149,22 +157,16 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       ],
     };
 
-    // Build discount code - Shopify REST API only supports ONE discount code per order
-    // So we need to combine all discounts into a single code
-    const totalDiscount = oneTickDiscount + recoveryDiscountAmount;
+    // Build discount code - combine all discounts into a single code
+    const totalDiscount = bundleDiscount + oneTickDiscount + recoveryDiscountAmount;
     if (totalDiscount > 0) {
-      // Build a descriptive code name showing what discounts are included
-      let discountCodeName = "CUSTOM DISCOUNT";
+      // Build a descriptive code name
       const discountParts = [];
-      if (oneTickDiscount > 0) {
-        discountParts.push(`1-TICK: Rs.${oneTickDiscount.toFixed(2)}`);
-      }
-      if (recoveryDiscountAmount > 0) {
-        discountParts.push(`RECOVERY: Rs.${recoveryDiscountAmount.toFixed(2)}`);
-      }
-      if (discountParts.length > 0) {
-        discountCodeName += ` (${discountParts.join(' + ')})`;
-      }
+      if (bundleDiscount > 0) discountParts.push("BUNDLE");
+      if (oneTickDiscount > 0) discountParts.push("1-TICK");
+      if (recoveryDiscountAmount > 0) discountParts.push("RECOVERY");
+
+      const discountCodeName = `CUSTOM DISCOUNT (${discountParts.join(", ")}: RS.${totalDiscount.toFixed(2)})`;
 
       restOrder.discount_codes = [{
         code: discountCodeName,
