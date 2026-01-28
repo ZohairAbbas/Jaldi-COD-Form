@@ -141,7 +141,7 @@ export function getCurrencySymbol(countryCode) {
 }
 
 /**
- * Validate phone number format
+ * Validate phone number format (matches Shopify's requirements)
  */
 export function validatePhone(phone, countryCode) {
   const country = getCountryData(countryCode);
@@ -157,11 +157,39 @@ export function validatePhone(phone, countryCode) {
     };
   }
 
-  // Basic length validation (most phone numbers are 10-15 digits total)
-  if (cleaned.length < 10 || cleaned.length > 15) {
+  // Extract the phone number without country code
+  const phoneWithoutCode = cleaned.substring(country.phoneCode.length);
+
+  // Country-specific validation rules (matching Shopify's requirements)
+  const validationRules = {
+    'PAK': { minDigits: 10, maxDigits: 10 }, // +92 3XX XXXXXXX = 10 digits
+    'UAE': { minDigits: 9, maxDigits: 9 },   // +971 5X XXX XXXX = 9 digits
+    'QATAR': { minDigits: 8, maxDigits: 8 }, // +974 XXXX XXXX = 8 digits
+    'KUWAIT': { minDigits: 8, maxDigits: 8 }, // +965 XXXX XXXX = 8 digits
+    'KSA': { minDigits: 9, maxDigits: 9 }    // +966 5X XXX XXXX = 9 digits
+  };
+
+  const rules = validationRules[countryCode] || { minDigits: 8, maxDigits: 15 };
+
+  if (phoneWithoutCode.length < rules.minDigits) {
     return {
       isValid: false,
-      message: 'Phone number length is invalid'
+      message: `Phone number must have at least ${rules.minDigits} digits after ${country.phoneCode}`
+    };
+  }
+
+  if (phoneWithoutCode.length > rules.maxDigits) {
+    return {
+      isValid: false,
+      message: `Phone number must have at most ${rules.maxDigits} digits after ${country.phoneCode}`
+    };
+  }
+
+  // Ensure the phone number after country code doesn't start with 0
+  if (phoneWithoutCode.startsWith('0')) {
+    return {
+      isValid: false,
+      message: 'Remove the leading 0 after the country code'
     };
   }
 

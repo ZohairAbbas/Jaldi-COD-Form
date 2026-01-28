@@ -15,6 +15,9 @@ const COUNTRY_NAME_TO_CODE = {
 export async function createShopifyOrder(admin, orderData, shopDomain) {
   const { customerInfo, address, items, total, recoveryDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping' } = orderData;
 
+  // Clean phone number (remove all non-digit characters except +)
+  const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
+
   // Calculate total discount for one-tick upsells
   let oneTickDiscount = 0;
   items.forEach((item) => {
@@ -46,7 +49,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     province: address.province,
     country: address.country || "Pakistan",
     zip: address.postalCode || "",
-    phone: customerInfo.phone,
+    phone: cleanedPhone,
   };
 
   // Prepare billing address (same as shipping for COD)
@@ -126,8 +129,8 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
 
     // Prepare REST API order payload
     const restOrder = {
-      email: customerInfo.email || `noreply+${customerInfo.phone}@example.com`,
-      phone: customerInfo.phone,
+      email: customerInfo.email || `noreply+${cleanedPhone}@example.com`,
+      phone: cleanedPhone,
       line_items: restLineItems,
       shipping_address: restShippingAddress,
       billing_address: restBillingAddress,
@@ -276,8 +279,8 @@ export function validateOrderData(orderData) {
     errors.push("Phone number is required");
     fieldErrors.phone = "Phone number is required";
   } else {
-    // Validate phone format
-    const phoneValidation = validatePhone(orderData.phone, orderData.country || "PAK");
+    // Validate phone format (use countryCode, not country name)
+    const phoneValidation = validatePhone(orderData.phone, orderData.countryCode || "PAK");
     if (!phoneValidation.isValid) {
       errors.push(phoneValidation.message);
       fieldErrors.phone = phoneValidation.message;
