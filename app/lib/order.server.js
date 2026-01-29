@@ -1,4 +1,4 @@
-import { validatePhone, getCurrencySymbol } from './constants.js';
+import { validatePhone, getCurrencySymbol, normalizePrice } from './constants.js';
 
 // Map country names to country codes for currency lookup
 const COUNTRY_NAME_TO_CODE = {
@@ -22,8 +22,8 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
   let oneTickDiscount = 0;
   items.forEach((item) => {
     if (item.isOneTickUpsell && item.price !== undefined && item.productPrice !== undefined) {
-      const productPrice = parseFloat(item.productPrice);
-      const upsellPrice = parseFloat(item.price);
+      const productPrice = normalizePrice(item.productPrice);
+      const upsellPrice = normalizePrice(item.price);
       const discountAmount = productPrice - upsellPrice;
       if (discountAmount > 0) {
         oneTickDiscount += discountAmount * (item.quantity || 1);
@@ -35,7 +35,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
   let bundleDiscount = 0;
   items.forEach((item) => {
     if (item.bundleDiscount && item.bundleDiscount > 0) {
-      bundleDiscount += parseFloat(item.bundleDiscount);
+      bundleDiscount += normalizePrice(item.bundleDiscount);
     }
   });
 
@@ -68,8 +68,8 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       // For one-tick upsells, use the original product price
       // The discount will be applied separately to show the actual upsell price
       const lineItemPrice = item.isOneTickUpsell && item.productPrice
-        ? parseFloat(item.productPrice)
-        : parseFloat(item.price);
+        ? normalizePrice(item.productPrice)
+        : normalizePrice(item.price);
 
       calculatedSubtotal += lineItemPrice * item.quantity;
 
@@ -244,10 +244,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
  */
 export function calculateOrderTotals(items, shippingCost = 0) {
   const subtotal = items.reduce(
-    (sum, item) => sum + parseFloat(item.price) * item.quantity,
+    (sum, item) => sum + normalizePrice(item.price) * item.quantity,
     0,
   );
-  const shipping = parseFloat(shippingCost);
+  const shipping = normalizePrice(shippingCost);
   const total = subtotal + shipping;
 
   return {

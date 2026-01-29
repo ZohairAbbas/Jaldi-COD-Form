@@ -333,11 +333,11 @@ export default function LivePreview({ formConfig, sections, fields, settings }) 
             width: "100%",
             padding: "12px",
             marginTop: "12px",
-            backgroundColor: "#FFFFFF",
-            color: "#000000",
+            backgroundColor: settings?.cardButtonBgColor || "#FFFFFF",
+            color: settings?.cardButtonTextColor || "#000000",
             border: "2px solid #000000",
             borderRadius: "4px",
-            fontSize: "16px",
+            fontSize: `${settings?.cardButtonFontSize || 14}px`,
             fontWeight: "600",
             cursor: "not-allowed",
             display: "flex",
@@ -352,7 +352,7 @@ export default function LivePreview({ formConfig, sections, fields, settings }) 
             <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
             <line x1="1" y1="10" x2="23" y2="10"></line>
           </svg>
-          <span>PAY WITH CARD</span>
+          <span>{settings?.cardButtonText || 'PAY WITH CARD'}</span>
         </button>
       )}
     </div>

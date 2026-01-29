@@ -211,3 +211,96 @@ export function formatPhone(phone, countryCode) {
   // If doesn't have country code, add it
   return country.phoneCode + cleaned;
 }
+
+/**
+ * Normalize price from various formats to a valid number
+ * Handles:
+ * - Comma as thousand separator: "1,500.50" -> 1500.50
+ * - Comma as decimal separator: "1500,50" -> 1500.50
+ * - Mixed formats: "1.500,50" (EU format) -> 1500.50
+ * - Already numeric values: 1500.50 -> 1500.50
+ * - Strings with currency symbols: "Rs.1,500.50" -> 1500.50
+ *
+ * @param {string|number} price - The price value to normalize
+ * @returns {number} - Normalized price as a number
+ */
+export function normalizePrice(price) {
+  // Already a number
+  if (typeof price === 'number') {
+    return isNaN(price) ? 0 : price;
+  }
+
+  // Not a string or number
+  if (typeof price !== 'string') {
+    return 0;
+  }
+
+  // Remove all spaces and currency symbols (common patterns)
+  let cleaned = price.trim()
+    .replace(/[^\d,.-]/g, '') // Keep only digits, comma, dot, minus
+    .trim();
+
+  // Empty string after cleaning
+  if (!cleaned) {
+    return 0;
+  }
+
+  // Detect format by analyzing comma and dot positions
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+
+  // Case 1: Has both comma and dot
+  if (lastComma !== -1 && lastDot !== -1) {
+    if (lastDot > lastComma) {
+      // Format: "1,500.50" (US format) - comma is thousand separator
+      cleaned = cleaned.replace(/,/g, '');
+    } else {
+      // Format: "1.500,50" (EU format) - dot is thousand separator, comma is decimal
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    }
+  }
+  // Case 2: Has only comma
+  else if (lastComma !== -1) {
+    // Check if comma is decimal separator (EU format) or thousand separator
+    const afterComma = cleaned.substring(lastComma + 1);
+
+    // If there are exactly 2 digits after the last comma, treat as decimal separator
+    // Examples: "139,00" "1500,50"
+    if (afterComma.length === 2 && /^\d{2}$/.test(afterComma)) {
+      cleaned = cleaned.replace(',', '.');
+    }
+    // If more than 2 digits or contains more commas, remove all commas (thousand separators)
+    // Examples: "1,500,000" "1,500"
+    else {
+      cleaned = cleaned.replace(/,/g, '');
+    }
+  }
+  // Case 3: Has only dots - keep as is (either decimal or thousand separator)
+  // In most cases, single dot is decimal. Multiple dots would be thousand separators.
+  else if (lastDot !== -1) {
+    const dotCount = (cleaned.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      // Multiple dots: treat as thousand separators, remove all
+      // Example: "1.500.000" -> "1500000"
+      cleaned = cleaned.replace(/\./g, '');
+    }
+    // Single dot: keep as decimal separator
+  }
+
+  // Parse the cleaned string
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Safely parse a price value to ensure it's a valid number
+ * This is a convenience wrapper around normalizePrice for common use cases
+ *
+ * @param {string|number} price - The price value to parse
+ * @param {number} defaultValue - Default value if parsing fails (default: 0)
+ * @returns {number} - Parsed price or default value
+ */
+export function parsePrice(price, defaultValue = 0) {
+  const normalized = normalizePrice(price);
+  return normalized === 0 && defaultValue !== 0 ? defaultValue : normalized;
+}

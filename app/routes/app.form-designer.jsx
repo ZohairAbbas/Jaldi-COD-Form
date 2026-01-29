@@ -10,6 +10,7 @@ import FieldConfigModal from "../components/FormDesigner/FieldConfigModal";
 import LivePreview from "../components/FormDesigner/LivePreview";
 import StyleCustomizer from "../components/FormDesigner/StyleCustomizer";
 import ButtonCustomizer from "../components/Settings/ButtonCustomizer";
+import CardButtonCustomizer from "../components/Settings/CardButtonCustomizer";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -137,7 +138,7 @@ export default function FormDesigner() {
         {/* Navigation Tabs */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns: "1fr 1fr 1fr",
           gap: "0",
           marginBottom: "24px",
           borderBottom: "1px solid #e5e7eb",
@@ -192,7 +193,31 @@ export default function FormDesigner() {
               <line x1="9" y1="9" x2="15" y2="9" />
               <line x1="9" y1="15" x2="15" y2="15" />
             </svg>
-            Button Customization
+            COD Button
+          </button>
+          <button
+            onClick={() => setActiveTab("card-button-customization")}
+            style={{
+              padding: "12px 24px",
+              border: "none",
+              backgroundColor: "transparent",
+              borderBottom: activeTab === "card-button-customization" ? "2px solid #000" : "2px solid transparent",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: activeTab === "card-button-customization" ? "600" : "400",
+              color: activeTab === "card-button-customization" ? "#000" : "#6b7280",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+              <line x1="1" y1="10" x2="23" y2="10"></line>
+            </svg>
+            Card Button
           </button>
         </div>
 
@@ -358,6 +383,62 @@ export default function FormDesigner() {
                   </s-box>
                   <s-text variant="body-sm" tone="subdued">
                     This is how your button will appear on product and cart pages. Hover over the button to see the shadow effect.
+                  </s-text>
+                </s-stack>
+              </s-section>
+            </div>
+          </div>
+        )}
+
+        {/* Card Button Customization Tab Content */}
+        {activeTab === "card-button-customization" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+            {/* Left Column - Customization Options */}
+            <div>
+              <s-section>
+                <CardButtonCustomizer settings={settings} onUpdate={handleSettingsUpdate} />
+              </s-section>
+            </div>
+
+            {/* Right Column - Button Preview */}
+            <div style={{ position: "sticky", top: "20px", height: "fit-content" }}>
+              <s-section>
+                <s-stack direction="block" gap="base">
+                  <s-heading>Button Preview</s-heading>
+                  <s-paragraph>
+                    See how your Pay with Card button will look in the form.
+                  </s-paragraph>
+                  <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                    <button
+                      style={{
+                        width: "100%",
+                        padding: "14px 20px",
+                        backgroundColor: settings.cardButtonBgColor || "#FFFFFF",
+                        color: settings.cardButtonTextColor || "#000000",
+                        border: "2px solid #000000",
+                        borderRadius: "4px",
+                        fontSize: `${settings.cardButtonFontSize || 14}px`,
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                        letterSpacing: "0.5px",
+                        textTransform: "uppercase",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      {/* Credit Card Icon */}
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                        <line x1="1" y1="10" x2="23" y2="10"></line>
+                      </svg>
+                      {settings.cardButtonText || "PAY WITH CARD"}
+                    </button>
+                  </s-box>
+                  <s-text variant="body-sm" tone="subdued">
+                    This button appears below the COD button when "Pay with Card" is enabled in settings.
                   </s-text>
                 </s-stack>
               </s-section>

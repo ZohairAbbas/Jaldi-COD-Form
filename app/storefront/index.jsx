@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import JaldiCODFormApp from './App';
+import { normalizePrice } from '../lib/constants';
 
 console.log('Preventify COD Form & Upsells: Script loaded');
 
@@ -16,12 +17,12 @@ function getPumperBundleData() {
   const priceElement = document.querySelector(`#prvw_totalAmount_${bundleIndex}`);
   if (!priceElement) return null;
 
-  // Parse the price (format: "Rs.1,469.90")
+  // Parse the price (format: "Rs.1,469.90" or "QR 139,00")
   const priceText = priceElement.textContent.trim();
   const priceMatch = priceText.match(/[\d,]+\.?\d*/);
   if (!priceMatch) return null;
 
-  const discountedPrice = parseFloat(priceMatch[0].replace(/,/g, ''));
+  const discountedPrice = normalizePrice(priceMatch[0]);
 
   // Get original price if available
   const originalPriceElement = document.querySelector(`#prvw_originalAmount_${bundleIndex}`);
@@ -29,7 +30,7 @@ function getPumperBundleData() {
   if (originalPriceElement && originalPriceElement.textContent.trim()) {
     const originalMatch = originalPriceElement.textContent.trim().match(/[\d,]+\.?\d*/);
     if (originalMatch) {
-      originalPrice = parseFloat(originalMatch[0].replace(/,/g, ''));
+      originalPrice = normalizePrice(originalMatch[0]);
     }
   }
 
@@ -67,7 +68,7 @@ function getProductData(container) {
 
     // Use Pumper's quantity and price if available
     let quantity = pumperData?.quantity || 1;
-    let price = pumperData?.discountedPrice || parseFloat(productPrice);
+    let price = pumperData?.discountedPrice || normalizePrice(productPrice);
 
     // If no Pumper data, try to get quantity from product form
     if (!pumperData) {
@@ -125,10 +126,10 @@ function getProductCardData(productCard) {
     let price = 0;
 
     if (priceText) {
-      // Extract numeric value from price text (e.g., "Rs.0.00" -> 0)
+      // Extract numeric value from price text (e.g., "Rs.0.00" or "QR 139,00" -> normalized)
       const priceMatch = priceText.match(/[\d,]+\.?\d*/);
       if (priceMatch) {
-        price = parseFloat(priceMatch[0].replace(/,/g, ''));
+        price = normalizePrice(priceMatch[0]);
       }
     }
 
