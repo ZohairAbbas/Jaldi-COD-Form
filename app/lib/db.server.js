@@ -155,13 +155,23 @@ export function getDefaultFormConfig() {
 
   const fields = [
     {
+      id: "full-name",
+      type: "text",
+      label: "Full Name",
+      placeholder: "Full Name",
+      required: true,
+      visible: true,
+      order: 0,
+      section: "shipping-address",
+    },
+    {
       id: "first-name",
       type: "text",
       label: "First name",
       placeholder: "First name",
-      required: true,
-      visible: true,
-      order: 0,
+      required: false,
+      visible: false,
+      order: 1,
       section: "shipping-address",
     },
     {
@@ -169,9 +179,9 @@ export function getDefaultFormConfig() {
       type: "text",
       label: "Last name",
       placeholder: "Last name",
-      required: true,
-      visible: true,
-      order: 1,
+      required: false,
+      visible: false,
+      order: 2,
       section: "shipping-address",
     },
     {
@@ -181,7 +191,7 @@ export function getDefaultFormConfig() {
       placeholder: "email@example.com",
       required: true,
       visible: true,
-      order: 2,
+      order: 3,
       section: "shipping-address",
     },
     {

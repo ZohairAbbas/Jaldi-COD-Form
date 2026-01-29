@@ -57,6 +57,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const isRTL = config.settings?.enableRTL || false;
 
   const [formData, setFormData] = useState({
+    fullName: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -273,6 +274,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const attributionData = getAttributionData();
     const pixelEventId = getEventId();
 
+    // Parse full name into first and last name for Shopify order
+    let derivedFirstName = formData.firstName || formData.firstname || '';
+    let derivedLastName = formData.lastName || formData.lastname || '';
+
+    // If full name is provided, parse it
+    const fullNameValue = formData.fullName || formData.fullname || '';
+    if (fullNameValue.trim()) {
+      const nameParts = fullNameValue.trim().split(/\s+/);
+      if (nameParts.length === 1) {
+        // Single name: use for both first and last name
+        derivedFirstName = nameParts[0];
+        derivedLastName = nameParts[0];
+      } else {
+        // Multiple words: first word is first name, rest is last name
+        derivedFirstName = nameParts[0];
+        derivedLastName = nameParts.slice(1).join(' ');
+      }
+    }
+
     // Transform cart items for submission
     // For bundle items (Pumper Bundles), we need to:
     // 1. Keep the original quantity (e.g., 3)
@@ -304,8 +324,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const orderData = {
       shop: config.shopDomain,
       sessionId: sessionId, // Include session ID for abandoned cart tracking
-      firstName: formData.firstName || formData.firstname,
-      lastName: formData.lastName || formData.lastname,
+      firstName: derivedFirstName,
+      lastName: derivedLastName,
       email: formData.email,
       phone: formData.phone,
       address: formData.address,
@@ -385,9 +405,21 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     // Build checkout query parameters for pre-filling customer info
     const checkoutParams = new URLSearchParams();
 
-    // Get form values - field IDs have hyphens removed (e.g., 'first-name' -> 'firstname')
-    const firstName = formData.firstname || formData.firstName || '';
-    const lastName = formData.lastname || formData.lastName || '';
+    // Parse full name into first/last name for checkout
+    let firstName = formData.firstname || formData.firstName || '';
+    let lastName = formData.lastname || formData.lastName || '';
+
+    const fullNameValue = formData.fullName || formData.fullname || '';
+    if (fullNameValue.trim()) {
+      const nameParts = fullNameValue.trim().split(/\s+/);
+      if (nameParts.length === 1) {
+        firstName = nameParts[0];
+        lastName = nameParts[0];
+      } else {
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ');
+      }
+    }
     const phone = formData.phone || '';
     const address1 = formData.address || '';
     const address2 = formData.address2 || '';
@@ -457,7 +489,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const value = formData[fieldId] || '';
     const error = errors[field.id];
 
-    const hasIcon = ['first-name', 'last-name', 'email', 'phone', 'address', 'city'].includes(field.id);
+    const hasIcon = ['full-name', 'first-name', 'last-name', 'email', 'phone', 'address', 'city'].includes(field.id);
 
     const inputStyle = {
       width: '100%',
@@ -490,7 +522,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     };
 
     const getFieldIcon = (fieldId) => {
-      if (fieldId === 'first-name' || fieldId === 'last-name') return <PersonIcon />;
+      if (fieldId === 'full-name' || fieldId === 'first-name' || fieldId === 'last-name') return <PersonIcon />;
       if (fieldId === 'email') return <EmailIcon />;
       if (fieldId === 'phone') return <PhoneIcon />;
       if (fieldId === 'address' || fieldId === 'city') return <LocationIcon />;
