@@ -1347,11 +1347,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               width: '100%',
               padding: '14px 20px',
               marginTop: '12px',
-              backgroundColor: '#FFFFFF',
-              color: '#000000',
+              backgroundColor: config.settings?.cardButtonBgColor || '#FFFFFF',
+              color: config.settings?.cardButtonTextColor || '#000000',
               border: '2px solid #000000',
               borderRadius: '4px',
-              fontSize: '14px',
+              fontSize: `${config.settings?.cardButtonFontSize || 14}px`,
               fontWeight: '600',
               cursor: (isRedirectingToCheckout || isSubmitting) ? 'not-allowed' : 'pointer',
               opacity: (isRedirectingToCheckout || isSubmitting) ? 0.7 : 1,
@@ -1376,7 +1376,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
                   <line x1="1" y1="10" x2="23" y2="10"></line>
                 </svg>
-                <span>PAY WITH CARD</span>
+                <span>{config.settings?.cardButtonText || 'PAY WITH CARD'}</span>
               </>
             )}
           </button>

@@ -5,6 +5,7 @@ import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
 import { initializePixels, resetEventId } from './pixels';
+import { normalizePrice } from '../lib/constants';
 
 // Default config to show button immediately while real config loads
 const defaultConfig = {
@@ -46,7 +47,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [fullCart, setFullCart] = useState({ items: [] }); // Store full cart separately
   const [productSelection, setProductSelection] = useState('current+cart'); // 'current' or 'current+cart'
   const [configLoaded, setConfigLoaded] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
   const [currentPageType, setCurrentPageType] = useState('unknown');
   const [isProductAvailable, setIsProductAvailable] = useState(true); // Track if current product is available
   const [appPath, setAppPath] = useState('/apps/preventify/'); // Dynamic app path
@@ -174,12 +174,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const priceElement = document.querySelector(`#prvw_totalAmount_${bundleIndex}`);
       if (!priceElement) return null;
 
-      // Parse the price (format: "Rs.1,469.90")
+      // Parse the price (format: "Rs.1,469.90" or "QR 139,00")
       const priceText = priceElement.textContent.trim();
       const priceMatch = priceText.match(/[\d,]+\.?\d*/);
       if (!priceMatch) return null;
 
-      const discountedPrice = parseFloat(priceMatch[0].replace(/,/g, ''));
+      const discountedPrice = normalizePrice(priceMatch[0]);
 
       // Get original price if available
       const originalPriceElement = document.querySelector(`#prvw_originalAmount_${bundleIndex}`);
@@ -187,7 +187,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       if (originalPriceElement && originalPriceElement.textContent.trim()) {
         const originalMatch = originalPriceElement.textContent.trim().match(/[\d,]+\.?\d*/);
         if (originalMatch) {
-          originalPrice = parseFloat(originalMatch[0].replace(/,/g, ''));
+          originalPrice = normalizePrice(originalMatch[0]);
         }
       }
 
@@ -769,30 +769,23 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const result = await response.json();
 
       if (result.success) {
-        setShowSuccess(true);
         setOrderResult(result);
 
         // Check if there's a post-purchase upsell to show
         if (result.postPurchaseUpsell) {
-          // Show success briefly, then show post-purchase upsell
-          setTimeout(() => {
-            setShowSuccess(false);
-            setIsModalOpen(false);
-            setPostPurchaseUpsellConfig(result.postPurchaseUpsell);
-            setShowPostPurchaseUpsell(true);
-            // Track impression for post-purchase upsell
-            trackUpsellStat(result.postPurchaseUpsell.id, 'impression');
-          }, 1500); // 1.5 seconds to show success message
+          // Directly show post-purchase upsell without success modal
+          setIsModalOpen(false);
+          setPostPurchaseUpsellConfig(result.postPurchaseUpsell);
+          setShowPostPurchaseUpsell(true);
+          // Track impression for post-purchase upsell
+          trackUpsellStat(result.postPurchaseUpsell.id, 'impression');
         } else {
-          // No post-purchase upsell, redirect normally
-          setTimeout(() => {
-            if (result.orderStatusUrl) {
-              window.location.href = result.orderStatusUrl;
-            } else {
-              setIsModalOpen(false);
-              setShowSuccess(false);
-            }
-          }, 1000);
+          // No post-purchase upsell, redirect immediately
+          if (result.orderStatusUrl) {
+            window.location.href = result.orderStatusUrl;
+          } else {
+            setIsModalOpen(false);
+          }
         }
       } else {
         // Throw validation error with field-specific errors
@@ -1083,18 +1076,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           detectedCountry={detectedCountry}
           appPath={appPath}
         />
-        {showSuccess && (
-          <div style={{
-            marginTop: '20px',
-            padding: '16px',
-            backgroundColor: '#10b981',
-            color: 'white',
-            borderRadius: '4px',
-            textAlign: 'center',
-          }}>
-            ✓ Order submitted successfully! Redirecting to order confirmation...
-          </div>
-        )}
       </div>
     );
   }
@@ -1142,20 +1123,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           margin: 'auto',
         }}
       >
-        {showSuccess ? (
-          <div style={{
-            padding: '60px 40px',
-            textAlign: 'center',
-          }}>
-            <div style={{
-              fontSize: '64px',
-              color: '#10b981',
-              marginBottom: '20px',
-            }}>✓</div>
-            <h2 style={{ marginBottom: '10px' }}>Order Submitted Successfully!</h2>
-            <p>Redirecting to order confirmation...</p>
-          </div>
-        ) : !configLoaded ? (
+        {!configLoaded ? (
           <div style={{
             padding: '60px 40px',
             textAlign: 'center',

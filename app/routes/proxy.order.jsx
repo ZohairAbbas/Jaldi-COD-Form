@@ -1,6 +1,7 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
 import { getShopByDomain, getUpsells, getEnabledPixels } from "../lib/db.server";
 import { firePurchaseEvent, getCurrencyFromCountry } from "../lib/pixels.server";
+import { normalizePrice } from "../lib/constants";
 import prisma from "../db.server";
 
 export const action = async ({ request }) => {
@@ -34,9 +35,9 @@ export const action = async ({ request }) => {
     // Calculate totals from items if not provided
     const items = orderData.items || [];
     const calculatedSubtotal = items.reduce((sum, item) => {
-      return sum + (parseFloat(item.price) * parseInt(item.quantity));
+      return sum + (normalizePrice(item.price) * parseInt(item.quantity));
     }, 0);
-    const shippingCost = parseFloat(orderData.shippingCost || orderData.shipping || 0);
+    const shippingCost = normalizePrice(orderData.shippingCost || orderData.shipping || 0);
     const calculatedTotal = calculatedSubtotal + shippingCost;
 
     // Create admin API client manually with graphql method and access token

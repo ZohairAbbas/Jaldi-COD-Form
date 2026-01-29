@@ -8,6 +8,7 @@ import {
   getShippingRateById,
   upsertShopifyShippingRates,
 } from "../lib/db.server";
+import { normalizePrice } from "../lib/constants";
 
 /**
  * GET /api/shipping-rates - List all shipping rates for the shop
@@ -117,18 +118,18 @@ async function importShippingRatesFromShopify(shopDomain, accessToken) {
         const conditions = [];
 
         if (rate.weight_low != null && rate.weight_low > 0) {
-          conditions.push({ type: "order_weight_gte", value: parseFloat(rate.weight_low) });
+          conditions.push({ type: "order_weight_gte", value: normalizePrice(rate.weight_low) });
         }
 
         if (rate.weight_high != null && rate.weight_high < 999999) {
-          conditions.push({ type: "order_weight_lt", value: parseFloat(rate.weight_high) });
+          conditions.push({ type: "order_weight_lt", value: normalizePrice(rate.weight_high) });
         }
 
         rates.push({
           shopifyShippingRateId: `weight_${rate.id}`,
           name: `${zone.name} - ${rate.name}`,
           description: `Weight-based shipping for ${zone.name}`,
-          price: parseFloat(rate.price),
+          price: normalizePrice(rate.price),
           conditions: conditions,
         });
       }
@@ -140,14 +141,14 @@ async function importShippingRatesFromShopify(shopDomain, accessToken) {
         if (rate.min_order_subtotal != null) {
           conditions.push({
             type: "order_total_gte",
-            value: parseFloat(rate.min_order_subtotal)
+            value: normalizePrice(rate.min_order_subtotal)
           });
         }
 
         if (rate.max_order_subtotal != null) {
           conditions.push({
             type: "order_total_lt",
-            value: parseFloat(rate.max_order_subtotal)
+            value: normalizePrice(rate.max_order_subtotal)
           });
         }
 
@@ -155,7 +156,7 @@ async function importShippingRatesFromShopify(shopDomain, accessToken) {
           shopifyShippingRateId: `price_${rate.id}`,
           name: `${zone.name} - ${rate.name}`,
           description: `Price-based shipping for ${zone.name}`,
-          price: parseFloat(rate.price),
+          price: normalizePrice(rate.price),
           conditions: conditions,
         });
       }
