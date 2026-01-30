@@ -34,6 +34,7 @@ model Shop {
   country            String          @default("PAK")
   enableMultiCountry Boolean         @default(false)
   supportedCountries Json            @default("[]")
+  setupProgress      Json?           @default("{\"step1Completed\": false, \"step2Completed\": false, \"welcomeDismissed\": false, \"setupGuideDismissed\": false}")
   abandonedCarts     AbandonedCart[]
   downsells          Downsell[]
   formConfig         FormConfig?

@@ -4,7 +4,7 @@ import CODForm from './CODForm';
 import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
-import { initializePixels, resetEventId } from './pixels';
+import { initializePixels, resetEventId, trackPurchase } from './pixels';
 import { normalizePrice } from '../lib/constants';
 
 // Default config to show button immediately while real config loads
@@ -770,6 +770,20 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
       if (result.success) {
         setOrderResult(result);
+
+        // Track Purchase event with the same event ID used for server-side tracking
+        const currency = config.shop?.country === 'PAK' ? 'PKR' :
+                        config.shop?.country === 'UAE' ? 'AED' :
+                        config.shop?.country === 'QATAR' ? 'QAR' :
+                        config.shop?.country === 'KUWAIT' ? 'KWD' :
+                        config.shop?.country === 'KSA' ? 'SAR' : 'PKR';
+
+        trackPurchase({
+          items: orderData.items,
+          total: result.total || orderData.total,
+          orderNumber: result.orderNumber,
+          eventId: orderData.pixelEventId, // Use same event ID for deduplication
+        }, currency);
 
         // Check if there's a post-purchase upsell to show
         if (result.postPurchaseUpsell) {

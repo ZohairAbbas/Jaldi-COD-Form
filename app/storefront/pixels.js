@@ -238,8 +238,18 @@ export function trackAddToCart(item, currency = 'PKR') {
 
 /**
  * Track Purchase event
+ * Uses the custom purchaseEvent name from each pixel config (defaults to 'Purchase')
  */
 export function trackPurchase(orderData, currency = 'PKR') {
+  if (!pixelConfig || !pixelConfig.facebook || pixelConfig.facebook.length === 0) {
+    return;
+  }
+
+  if (!window.fbq) {
+    console.warn('Facebook Pixel not loaded');
+    return;
+  }
+
   const { items, total, orderNumber } = orderData;
 
   const eventData = {
@@ -252,7 +262,22 @@ export function trackPurchase(orderData, currency = 'PKR') {
 
   const eventId = orderData.eventId || getEventId();
 
-  return trackEvent('Purchase', eventData, { eventId });
+  // Track on all configured Facebook pixels with their custom purchase event name
+  pixelConfig.facebook.forEach(pixel => {
+    try {
+      const eventName = pixel.purchaseEvent || 'Purchase';
+      window.fbq('track', eventName, eventData, { eventID: eventId });
+
+      console.log(`[Pixel] Fired ${eventName} on pixel ${pixel.pixelId}`, {
+        eventId,
+        eventData,
+      });
+    } catch (error) {
+      console.error(`Error tracking Purchase on pixel ${pixel.pixelId}:`, error);
+    }
+  });
+
+  return eventId;
 }
 
 /**

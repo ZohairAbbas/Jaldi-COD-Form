@@ -18,6 +18,12 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       data: {
         shopifyDomain,
         accessToken,
+        setupProgress: {
+          step1Completed: false,
+          step2Completed: false,
+          welcomeDismissed: false,
+          setupGuideDismissed: false,
+        },
         settings: {
           create: getDefaultSettings(),
         },
@@ -37,6 +43,26 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       shop = await prisma.shop.update({
         where: { shopifyDomain },
         data: { accessToken },
+        include: {
+          settings: true,
+          formConfig: true,
+          upsells: true,
+        },
+      });
+    }
+
+    // Initialize setupProgress if missing
+    if (!shop.setupProgress) {
+      shop = await prisma.shop.update({
+        where: { shopifyDomain },
+        data: {
+          setupProgress: {
+            step1Completed: false,
+            step2Completed: false,
+            welcomeDismissed: false,
+            setupGuideDismissed: false,
+          },
+        },
         include: {
           settings: true,
           formConfig: true,
@@ -818,6 +844,7 @@ export async function getEnabledPixels(shopId) {
       id: true,
       type: true,
       pixelId: true,
+      accessToken: true,
       purchaseEvent: true,
       enableAddToCart: true,
       enableAddPaymentInfo: true,
@@ -1079,4 +1106,50 @@ export async function ensureFreeShippingRate(shopId) {
   }
 
   return existingFree;
+}
+
+// ============================================
+// DASHBOARD STATS FUNCTIONS
+// ============================================
+
+/**
+ * Get dashboard stats for last 7 days
+ */
+export async function getDashboardStats(shopId) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  // Form opens (sessions created in last 7 days)
+  const formOpens = await prisma.orderSession.count({
+    where: {
+      shopId,
+      createdAt: { gte: sevenDaysAgo },
+    },
+  });
+
+  // Orders in last 7 days
+  const orders = await prisma.order.findMany({
+    where: {
+      shopId,
+      createdAt: { gte: sevenDaysAgo },
+    },
+    select: {
+      total: true,
+    },
+  });
+
+  const orderCount = orders.length;
+
+  // Revenue calculation
+  const revenue = orders.reduce((sum, order) => sum + order.total, 0);
+
+  // Conversion rate
+  const conversionRate = formOpens > 0 ? ((orderCount / formOpens) * 100).toFixed(1) : "0.0";
+
+  return {
+    formOpens,
+    orderCount,
+    revenue,
+    conversionRate: parseFloat(conversionRate),
+  };
 }
