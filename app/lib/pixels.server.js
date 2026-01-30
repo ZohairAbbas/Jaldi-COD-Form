@@ -171,47 +171,43 @@ export async function firePurchaseEvent(pixels, orderData) {
     return [];
   }
 
-  // Build event data
-  const eventData = {
-    eventName: 'Purchase',
-    eventId: eventId || generateEventId(),
-    eventTime: Math.floor(Date.now() / 1000),
-    eventSourceUrl: eventSourceUrl || '',
-    userData: {
-      email: customerInfo.email,
-      phone: customerInfo.phone,
-      firstName: customerInfo.firstName,
-      lastName: customerInfo.lastName,
-      city: address.city,
-      province: address.province,
-      country: address.country,
-      clientIpAddress,
-      clientUserAgent,
-      fbc,
-      fbp,
-      fbclid,
-    },
-    customData: {
-      content_ids: items.map(item => item.variantId || item.id),
-      content_type: 'product',
-      value: total,
-      currency: currency || 'PKR',
-      num_items: items.length,
-      order_id: orderNumber,
-    },
-  };
-
-  // Send to all CAPI pixels
+  // Send to all CAPI pixels with their configured event name
   const results = await Promise.all(
-    capiPixels.map(pixel =>
-      sendFacebookCAPIEvent(
-        pixel,
-        {
-          ...eventData,
-          testEventCode: pixel.testMode ? pixel.testEventCode : null,
-        }
-      )
-    )
+    capiPixels.map(pixel => {
+      const eventData = {
+        eventName: pixel.purchaseEvent || 'Purchase',
+        eventId: eventId || generateEventId(),
+        eventTime: Math.floor(Date.now() / 1000),
+        eventSourceUrl: eventSourceUrl || '',
+        userData: {
+          email: customerInfo.email,
+          phone: customerInfo.phone,
+          firstName: customerInfo.firstName,
+          lastName: customerInfo.lastName,
+          city: address.city,
+          province: address.province,
+          country: address.country,
+          clientIpAddress,
+          clientUserAgent,
+          fbc,
+          fbp,
+          fbclid,
+        },
+        customData: {
+          content_ids: items.map(item => item.variantId || item.id),
+          content_type: 'product',
+          value: total,
+          currency: currency || 'PKR',
+          num_items: items.length,
+          order_id: orderNumber,
+        },
+      };
+
+      return sendFacebookCAPIEvent(pixel, {
+        ...eventData,
+        testEventCode: pixel.testMode ? pixel.testEventCode : null,
+      });
+    })
   );
 
   return results;
