@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { logPixelEvent } from './db.server.js';
+import { getCurrencyCode } from './constants.js';
 
 /**
  * Generate unique event ID for deduplication
@@ -29,16 +30,10 @@ export function hashPhone(phone) {
 
 /**
  * Get currency code from country
+ * @deprecated Use getCurrencyCode from constants.js instead
  */
 export function getCurrencyFromCountry(country) {
-  const currencyMap = {
-    PAK: 'PKR',
-    UAE: 'AED',
-    QATAR: 'QAR',
-    KUWAIT: 'KWD',
-    KSA: 'SAR',
-  };
-  return currencyMap[country] || 'PKR';
+  return getCurrencyCode(country);
 }
 
 /**
@@ -197,7 +192,7 @@ export async function firePurchaseEvent(pixels, orderData) {
           content_ids: items.map(item => item.variantId || item.id),
           content_type: 'product',
           value: total,
-          currency: currency || 'PKR',
+          currency: currency || getCurrencyCode(),
           num_items: items.length,
           order_id: orderNumber,
         },

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData } from './pixels';
+import { getCurrencyCode } from '../lib/constants';
 
 // Country data - must match server-side constants
 const COUNTRIES = {
@@ -116,7 +117,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   // Track InitiateCheckout event when form first opens
   useEffect(() => {
-    const currency = config.shop?.country === 'PAK' ? 'PKR' : config.shop?.country === 'UAE' ? 'AED' : 'PKR';
+    const currency = getCurrencyCode(config.shop?.country);
     trackInitiateCheckout(cart, currency);
   }, []); // Only run once on mount
 
@@ -129,7 +130,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       trackSession(email, phone);
 
       // Track AddPaymentInfo pixel event
-      const currency = config.shop?.country === 'PAK' ? 'PKR' : config.shop?.country === 'UAE' ? 'AED' : 'PKR';
+      const currency = getCurrencyCode(config.shop?.country);
       trackAddPaymentInfo(cart, currency);
     }
   }, [formData.email, formData.phone]);
@@ -1229,7 +1230,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         {oneTickUpsells.length > 0 && oneTickUpsells.map((upsell) => {
           const isSelected = selectedUpsells[upsell.id] || false;
           const getCurrency = () => {
-            return config.shop?.country === 'PAK' ? 'PKR' : 'AED';
+            return getCurrencyCode(config.shop?.country);
           };
 
           // Replace placeholders in checkbox text
@@ -1265,7 +1266,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
                     // Track AddToCart event when upsell is selected
                     if (e.target.checked) {
-                      const currency = config.shop?.country === 'PAK' ? 'PKR' : config.shop?.country === 'UAE' ? 'AED' : 'PKR';
+                      const currency = getCurrencyCode(config.shop?.country);
                       const upsellItem = {
                         id: upsell.product?.id || `upsell-${upsell.id}`,
                         variantId: upsell.product?.variantId,

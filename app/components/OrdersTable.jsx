@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSubmit } from "react-router";
 
-export default function OrdersTable({ orders, pagination, filters }) {
+export default function OrdersTable({ orders, pagination, filters, currencySymbol = 'Rs.' }) {
   const navigate = useNavigate();
   const submit = useSubmit();
   const [searchTerm, setSearchTerm] = useState(filters.search || "");
@@ -229,7 +229,7 @@ export default function OrdersTable({ orders, pagination, filters }) {
                         fontWeight: "500",
                       }}
                     >
-                      Rs. {order.total.toFixed(2)}
+                      {currencySymbol} {order.total.toFixed(2)}
                     </td>
                     <td style={{ padding: "12px" }}>
                       <s-badge tone={getStatusTone(order.status)}>
@@ -378,7 +378,7 @@ export default function OrdersTable({ orders, pagination, filters }) {
                       {item.title} {item.variant && `- ${item.variant}`}
                     </s-text>
                     <s-text>×{item.quantity}</s-text>
-                    <s-text>Rs. {item.price.toFixed(2)}</s-text>
+                    <s-text>{currencySymbol} {item.price.toFixed(2)}</s-text>
                   </s-stack>
                 ))}
               </s-stack>

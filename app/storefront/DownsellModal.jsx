@@ -6,6 +6,7 @@ export default function DownsellModal({
   onAccept,
   onDecline,
   isRTL = false,
+  currencySymbol = 'Rs.',
 }) {
   if (!downsellConfig) {
     return null;
@@ -26,7 +27,7 @@ export default function DownsellModal({
     if (discount.type === "percentage") {
       return `${discount.value}%`;
     }
-    return `Rs.${discount.value}`;
+    return `${currencySymbol}${discount.value}`;
   };
 
   // Replace {discount} in button text

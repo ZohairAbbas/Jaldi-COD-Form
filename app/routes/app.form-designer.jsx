@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop } from "../lib/db.server";
+import { getCurrencySymbol } from "../lib/constants";
 import SectionManager from "../components/FormDesigner/SectionManager";
 import FieldManager from "../components/FormDesigner/FieldManager";
 import FieldConfigModal from "../components/FormDesigner/FieldConfigModal";
@@ -23,11 +24,12 @@ export const loader = async ({ request }) => {
       fields: JSON.parse(shop.formConfig.fields),
     },
     settings: shop.settings,
+    currencySymbol: getCurrencySymbol(shop.country),
   };
 };
 
 export default function FormDesigner() {
-  const { formConfig: initialConfig, settings: initialSettings } = useLoaderData();
+  const { formConfig: initialConfig, settings: initialSettings, currencySymbol } = useLoaderData();
   const shopify = useAppBridge();
   const saveButtonRef = useRef(null)
 
@@ -258,6 +260,7 @@ export default function FormDesigner() {
                       sections={sections}
                       fields={fields}
                       settings={settings}
+                      currencySymbol={currencySymbol}
                     />
                   </div>
                 </s-stack>

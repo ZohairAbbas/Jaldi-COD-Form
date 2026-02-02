@@ -1,4 +1,4 @@
-export default function LivePreview({ formConfig, sections, fields, settings }) {
+export default function LivePreview({ formConfig, sections, fields, settings, currencySymbol = 'Rs.' }) {
   const visibleSections = sections.filter((s) => s.visible).sort((a, b) => a.order - b.order);
   const visibleFields = fields.filter((f) => f.visible).sort((a, b) => a.order - b.order);
 
@@ -213,7 +213,7 @@ export default function LivePreview({ formConfig, sections, fields, settings }) 
                         alignSelf: "center",
                       }}
                     >
-                      Rs. 19.99
+                      {currencySymbol} 19.99
                     </div>
 
                     {/* Remove Button (X) - Top Right */}
@@ -259,7 +259,7 @@ export default function LivePreview({ formConfig, sections, fields, settings }) 
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "15px", fontWeight: "500", color: "#374151" }}>
                     <span>Subtotal</span>
-                    <span style={{ color: "#111827", fontWeight: "600" }}>Rs. 19.99</span>
+                    <span style={{ color: "#111827", fontWeight: "600" }}>{currencySymbol} 19.99</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "15px", fontWeight: "500", color: "#374151" }}>
                     <span>Shipping</span>
@@ -277,7 +277,7 @@ export default function LivePreview({ formConfig, sections, fields, settings }) 
                     }}
                   >
                     <span>Total</span>
-                    <span>Rs. 19.99</span>
+                    <span>{currencySymbol} 19.99</span>
                   </div>
                 </div>
               </div>
@@ -323,7 +323,7 @@ export default function LivePreview({ formConfig, sections, fields, settings }) 
         }}
         disabled
       >
-        COMPLETE ORDER - Rs. 19.99
+        COMPLETE ORDER - {currencySymbol} 19.99
       </button>
 
       {/* Pay with Card Button */}

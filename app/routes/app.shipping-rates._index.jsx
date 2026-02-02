@@ -9,6 +9,7 @@ import {
   deleteShippingRate,
   toggleShippingRateEnabled,
 } from "../lib/db.server";
+import { getCurrencySymbol } from "../lib/constants";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -20,6 +21,7 @@ export const loader = async ({ request }) => {
   return {
     shopId: shop.id,
     shippingRates,
+    currencySymbol: getCurrencySymbol(shop.country),
   };
 };
 
@@ -45,7 +47,7 @@ export const action = async ({ request }) => {
 };
 
 export default function ShippingRates() {
-  const { shippingRates } = useLoaderData();
+  const { shippingRates, currencySymbol } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -373,7 +375,7 @@ export default function ShippingRates() {
                         {rate.price === 0 ? (
                           <span style={{ color: "#10B981", fontWeight: "500" }}>Free</span>
                         ) : (
-                          `Rs.${rate.price.toFixed(2)}`
+                          `${currencySymbol}${rate.price.toFixed(2)}`
                         )}
                       </td>
                       <td style={{ padding: "12px", fontSize: "13px", color: "#6B7280" }}>

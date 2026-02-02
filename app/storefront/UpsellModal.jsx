@@ -6,6 +6,7 @@ export default function UpsellModal({
   onDecline,
   isRTL = false,
   isPostPurchase = false,
+  currencySymbol = 'Rs.',
 }) {
   if (!upsellConfig || !upsellConfig.product) {
     return null;
@@ -37,7 +38,7 @@ export default function UpsellModal({
 
   // Format price with currency
   const formatPrice = (price) => {
-    return `Rs.${price?.toLocaleString("en-US", {
+    return `${currencySymbol}${price?.toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
@@ -164,7 +165,7 @@ export default function UpsellModal({
               >
                 {discount.type === "percentage"
                   ? `${discount.value}% OFF`
-                  : `Save Rs.${discount.value}`}
+                  : `Save ${currencySymbol}${discount.value}`}
               </div>
             </div>
           ) : (

@@ -5,7 +5,7 @@ import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
 import { initializePixels, resetEventId, trackPurchase } from './pixels';
-import { normalizePrice } from '../lib/constants';
+import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
 
 // Default config to show button immediately while real config loads
 const defaultConfig = {
@@ -772,16 +772,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         setOrderResult(result);
 
         // Track Purchase event with the same event ID used for server-side tracking
-        const currency = config.shop?.country === 'PAK' ? 'PKR' :
-                        config.shop?.country === 'UAE' ? 'AED' :
-                        config.shop?.country === 'QATAR' ? 'QAR' :
-                        config.shop?.country === 'KUWAIT' ? 'KWD' :
-                        config.shop?.country === 'KSA' ? 'SAR' : 'PKR';
+        const currency = getCurrencyCode(config.shop?.country);
 
         trackPurchase({
           items: orderData.items,
           total: result.total || orderData.total,
-          orderNumber: result.orderNumber,
+          orderNumber: result.shopifyOrderNumber,
           eventId: orderData.pixelEventId, // Use same event ID for deduplication
         }, currency);
 
@@ -1180,6 +1176,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onAccept={handleUpsellAccept}
           onDecline={handleUpsellDecline}
           isRTL={config?.settings?.enableRTL}
+          currencySymbol={getCurrencySymbol(config?.shop?.country)}
         />,
         document.body
       )}
@@ -1192,6 +1189,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onDecline={handlePostPurchaseDecline}
           isRTL={config?.settings?.enableRTL}
           isPostPurchase={true}
+          currencySymbol={getCurrencySymbol(config?.shop?.country)}
         />,
         document.body
       )}
@@ -1204,6 +1202,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onAccept={handleDownsellAccept}
           onDecline={handleDownsellDecline}
           isRTL={config?.settings?.enableRTL}
+          currencySymbol={getCurrencySymbol(config?.shop?.country)}
         />,
         document.body
       )}

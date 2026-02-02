@@ -10,6 +10,7 @@ import {
   updateUpsell,
   getDefaultUpsell,
 } from "../lib/db.server";
+import { getCurrencySymbol } from "../lib/constants";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -19,13 +20,15 @@ export const loader = async ({ request, params }) => {
   const upsellType = url.searchParams.get("type") || "pre-purchase";
   const duplicateId = url.searchParams.get("duplicate");
 
+  const currencySymbol = getCurrencySymbol(shop.country);
+
   // If editing existing upsell
   if (params.id !== "new") {
     const upsell = await getUpsellById(params.id);
     if (!upsell || upsell.shopId !== shop.id) {
       throw new Response("Upsell not found", { status: 404 });
     }
-    return { upsell, isNew: false, shopId: shop.id };
+    return { upsell, isNew: false, shopId: shop.id, currencySymbol };
   }
 
   // If duplicating
@@ -38,7 +41,7 @@ export const loader = async ({ request, params }) => {
         name: `${sourceUpsell.name} (Copy)`,
         enabled: false,
       };
-      return { upsell: duplicatedUpsell, isNew: true, shopId: shop.id };
+      return { upsell: duplicatedUpsell, isNew: true, shopId: shop.id, currencySymbol };
     }
   }
 
@@ -46,7 +49,7 @@ export const loader = async ({ request, params }) => {
   const defaultUpsell = getDefaultUpsell();
   defaultUpsell.upsellType = upsellType;
 
-  return { upsell: defaultUpsell, isNew: true, shopId: shop.id };
+  return { upsell: defaultUpsell, isNew: true, shopId: shop.id, currencySymbol };
 };
 
 export const action = async ({ request, params }) => {
@@ -81,7 +84,7 @@ export const action = async ({ request, params }) => {
 };
 
 export default function UpsellEditor() {
-  const { upsell: initialUpsell, isNew } = useLoaderData();
+  const { upsell: initialUpsell, isNew, currencySymbol } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -343,7 +346,7 @@ export default function UpsellEditor() {
                     )}
                     <div style={{ flex: 1 }}>
                       <s-text variant="heading-sm">{upsell.productTitle}</s-text>
-                      <s-text tone="subdued">Rs.{upsell.productPrice?.toFixed(2)}</s-text>
+                      <s-text tone="subdued">{currencySymbol}{upsell.productPrice?.toFixed(2)}</s-text>
                     </div>
                     <s-button ref={removeProductBtnRef} variant="tertiary">
                       Remove
@@ -388,7 +391,7 @@ export default function UpsellEditor() {
               {upsell.discountType !== "none" && (
                 <s-stack direction="block" gap="tight">
                   <s-text variant="heading-sm">
-                    Discount Value {upsell.discountType === "percentage" ? "(%)" : "(Rs.)"}
+                    Discount Value {upsell.discountType === "percentage" ? "(%)" : `(${currencySymbol})`}
                   </s-text>
                   <input
                     type="number"
@@ -412,13 +415,13 @@ export default function UpsellEditor() {
                   <s-text variant="body-sm">
                     Original:{" "}
                     <span style={{ textDecoration: "line-through" }}>
-                      Rs.{upsell.productPrice.toFixed(2)}
+                      {currencySymbol}{upsell.productPrice.toFixed(2)}
                     </span>
-                    {" → "}Discounted: <strong>Rs.{discountedPrice?.toFixed(2)}</strong>{" "}
+                    {" → "}Discounted: <strong>{currencySymbol}{discountedPrice?.toFixed(2)}</strong>{" "}
                     (Save{" "}
                     {upsell.discountType === "percentage"
                       ? `${upsell.discountValue}%`
-                      : `Rs.${upsell.discountValue}`}
+                      : `${currencySymbol}${upsell.discountValue}`}
                     )
                   </s-text>
                 </s-box>
@@ -612,7 +615,7 @@ export default function UpsellEditor() {
                               marginRight: "8px",
                             }}
                           >
-                            Rs.{upsell.productPrice?.toFixed(2)}
+                            {currencySymbol}{upsell.productPrice?.toFixed(2)}
                           </span>
                           <span
                             style={{
@@ -621,7 +624,7 @@ export default function UpsellEditor() {
                               color: "#000",
                             }}
                           >
-                            Rs.{discountedPrice?.toFixed(2)}
+                            {currencySymbol}{discountedPrice?.toFixed(2)}
                           </span>
                         </>
                       ) : (
@@ -632,7 +635,7 @@ export default function UpsellEditor() {
                             color: "#000",
                           }}
                         >
-                          Rs.{upsell.productPrice?.toFixed(2)}
+                          {currencySymbol}{upsell.productPrice?.toFixed(2)}
                         </span>
                       )}
                     </div>
