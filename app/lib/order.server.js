@@ -182,7 +182,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       if (oneTickDiscount > 0) discountParts.push("1-TICK");
       if (recoveryDiscountAmount > 0) discountParts.push("RECOVERY");
 
-      const discountCodeName = `CUSTOM DISCOUNT (${discountParts.join(", ")}: RS.${totalDiscount.toFixed(2)})`;
+      // Get currency symbol based on country
+      const countryCode = COUNTRY_NAME_TO_CODE[address.country] || 'PAK';
+      const currencySymbol = getCurrencySymbol(countryCode);
+      const discountCodeName = `CUSTOM DISCOUNT (${discountParts.join(", ")}: ${currencySymbol}${totalDiscount.toFixed(2)})`;
 
       restOrder.discount_codes = [{
         code: discountCodeName,
