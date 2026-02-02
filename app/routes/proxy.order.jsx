@@ -253,6 +253,7 @@ export const action = async ({ request }) => {
       shopifyOrderId: shopifyResult.orderId,
       shopifyOrderNumber: shopifyResult.orderNumber,
       orderStatusUrl: shopifyResult.orderStatusUrl,
+      total: calculatedTotal,
       postPurchaseUpsell: postPurchaseUpsell,
     });
   } catch (error) {

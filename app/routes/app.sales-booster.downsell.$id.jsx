@@ -10,6 +10,7 @@ import {
   updateDownsell,
   getDefaultDownsell,
 } from "../lib/db.server";
+import { getCurrencySymbol } from "../lib/constants";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -17,6 +18,7 @@ export const loader = async ({ request, params }) => {
 
   const url = new URL(request.url);
   const duplicateId = url.searchParams.get("duplicate");
+  const currencySymbol = getCurrencySymbol(shop.country);
 
   // If editing existing downsell
   if (params.id !== "new") {
@@ -24,7 +26,7 @@ export const loader = async ({ request, params }) => {
     if (!downsell || downsell.shopId !== shop.id) {
       throw new Response("Downsell not found", { status: 404 });
     }
-    return { downsell, isNew: false, shopId: shop.id };
+    return { downsell, isNew: false, shopId: shop.id, currencySymbol };
   }
 
   // If duplicating
@@ -37,13 +39,13 @@ export const loader = async ({ request, params }) => {
         name: `${sourceDownsell.name} (Copy)`,
         enabled: false,
       };
-      return { downsell: duplicatedDownsell, isNew: true, shopId: shop.id };
+      return { downsell: duplicatedDownsell, isNew: true, shopId: shop.id, currencySymbol };
     }
   }
 
   // New downsell with defaults
   const defaultDownsell = getDefaultDownsell();
-  return { downsell: defaultDownsell, isNew: true, shopId: shop.id };
+  return { downsell: defaultDownsell, isNew: true, shopId: shop.id, currencySymbol };
 };
 
 export const action = async ({ request, params }) => {
@@ -78,7 +80,7 @@ export const action = async ({ request, params }) => {
 };
 
 export default function DownsellEditor() {
-  const { downsell: initialDownsell, isNew } = useLoaderData();
+  const { downsell: initialDownsell, isNew, currencySymbol } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -149,7 +151,7 @@ export default function DownsellEditor() {
     if (downsell.discountType === "percentage") {
       return `${downsell.discountValue}%`;
     }
-    return `Rs.${downsell.discountValue}`;
+    return `${currencySymbol}${downsell.discountValue}`;
   };
 
   // Replace {discount} in button text for preview

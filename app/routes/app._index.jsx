@@ -2,6 +2,7 @@ import { useLoaderData, Link, useFetcher } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getDashboardStats } from "../lib/db.server";
+import { getCurrencyCode } from "../lib/constants";
 import { useState } from "react";
 
 export const loader = async ({ request }) => {
@@ -13,15 +14,16 @@ export const loader = async ({ request }) => {
   // Get dashboard stats for last 7 days
   const stats = await getDashboardStats(shop.id);
 
-  // Check theme app embed status
+  // Check theme app embed status and get shop currency
   let themeAppEmbedStatus = {
     enabled: false,
     themeId: null,
     themeIdNumeric: null,
   };
+  let shopCurrency = getCurrencyCode(shop.country); // Default fallback based on shop country
 
   try {
-    // Query for main theme and app embeds
+    // Query for main theme, app embeds, and shop currency
     const response = await admin.graphql(
       `#graphql
         query {
@@ -34,11 +36,19 @@ export const loader = async ({ request }) => {
               name
             }
           }
+          shop {
+            currencyCode
+          }
         }
       `
     );
 
     const data = await response.json();
+
+    // Extract shop currency
+    if (data.data?.shop?.currencyCode) {
+      shopCurrency = data.data.shop.currencyCode;
+    }
 
     if (data.data?.themes?.nodes?.[0]) {
       const mainTheme = data.data.themes.nodes[0];
@@ -103,6 +113,7 @@ export const loader = async ({ request }) => {
       domain: shop.shopifyDomain,
       hasFormConfig: !!shop.formConfig,
       hasSettings: !!shop.settings,
+      currency: shopCurrency,
     },
     stats,
     themeAppEmbedStatus,
@@ -142,9 +153,11 @@ export default function Index() {
     setExpandedStep(expandedStep === step ? null : step);
   };
 
-  const handleCompleteStep = (stepNum, currentValue) => {
+  const handleCompleteStep = (stepNum) => {
     // Only allow marking as complete, not uncompleting
-    if (!currentValue) {
+    const isCompleted = stepNum === 1 ? setupProgress.step1Completed : setupProgress.step2Completed;
+
+    if (!isCompleted) {
       fetcher.submit(
         { action: `completeStep${stepNum}`, value: true },
         { method: "POST", action: "/api/setup-progress", encType: "application/json" }
@@ -273,7 +286,7 @@ export default function Index() {
             </div>
             <div style={{ padding: '24px', textAlign: 'center', borderRight: '1px solid #e3e3e3' }}>
               <div style={{ fontSize: '24px', fontWeight: 600, marginBottom: '4px' }}>
-                PKR {stats.revenue.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {shop.currency} {stats.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '13px', color: '#6b7177' }}>Revenue</div>
             </div>
@@ -331,7 +344,7 @@ export default function Index() {
                 <div
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleCompleteStep(1, !setupProgress.step1Completed);
+                    handleCompleteStep(1);
                   }}
                   style={{
                     width: '20px',
@@ -420,7 +433,7 @@ export default function Index() {
                 <div
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleCompleteStep(2, !setupProgress.step2Completed);
+                    handleCompleteStep(2);
                   }}
                   style={{
                     width: '20px',

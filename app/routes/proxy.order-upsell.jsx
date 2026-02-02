@@ -1,4 +1,5 @@
 import { getShopByDomain } from "../lib/db.server";
+import { getCurrencyCode } from "../lib/constants";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -181,7 +182,7 @@ export const action = async ({ request }) => {
                 discount: {
                   fixedValue: {
                     amount: discountAmount.toFixed(2),
-                    currencyCode: "PKR"
+                    currencyCode: getCurrencyCode(shop.country)
                   },
                   description: "Upsell discount"
                 }

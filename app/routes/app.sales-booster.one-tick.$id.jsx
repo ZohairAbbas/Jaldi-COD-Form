@@ -10,6 +10,7 @@ import {
   updateUpsell,
   getDefaultUpsell,
 } from "../lib/db.server";
+import { getCurrencyCode } from "../lib/constants";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -24,7 +25,7 @@ export const loader = async ({ request, params }) => {
     if (!upsell || upsell.shopId !== shop.id) {
       throw new Response("Upsell not found", { status: 404 });
     }
-    return { upsell, isNew: false, shopId: shop.id, shopCurrency: shop.country === "PAK" ? "PKR" : "AED" };
+    return { upsell, isNew: false, shopId: shop.id, shopCurrency: getCurrencyCode(shop.country) };
   }
 
   // If duplicating
@@ -37,14 +38,14 @@ export const loader = async ({ request, params }) => {
         name: `${sourceUpsell.name} (Copy)`,
         enabled: false,
       };
-      return { upsell: duplicatedUpsell, isNew: true, shopId: shop.id, shopCurrency: shop.country === "PAK" ? "PKR" : "AED" };
+      return { upsell: duplicatedUpsell, isNew: true, shopId: shop.id, shopCurrency: getCurrencyCode(shop.country) };
     }
   }
 
   // New upsell with defaults
   const defaultUpsell = getDefaultUpsell("one-tick");
 
-  return { upsell: defaultUpsell, isNew: true, shopId: shop.id, shopCurrency: shop.country === "PAK" ? "PKR" : "AED" };
+  return { upsell: defaultUpsell, isNew: true, shopId: shop.id, shopCurrency: getCurrencyCode(shop.country) };
 };
 
 export const action = async ({ request, params }) => {

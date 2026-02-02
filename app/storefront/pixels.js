@@ -258,6 +258,7 @@ export function trackPurchase(orderData, currency = 'PKR') {
     value: total,
     currency,
     num_items: items.length,
+    order_id: orderNumber,
   };
 
   const eventId = orderData.eventId || getEventId();
