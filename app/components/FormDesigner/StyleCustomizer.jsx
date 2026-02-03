@@ -8,6 +8,7 @@ export default function StyleCustomizer({ formConfig, onUpdate }) {
     padding: "8px",
     borderRadius: "4px",
     border: "1px solid #ccc",
+    boxSizing: "border-box",
   };
 
   return (

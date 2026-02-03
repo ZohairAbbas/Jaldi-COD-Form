@@ -161,7 +161,18 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
         ...(recoveryDiscountAmount > 0 ? [{
           name: "_recovery_discount",
           value: recoveryDiscountAmount.toString()
-        }] : [])
+        }] : []),
+        // Add custom fields to note_attributes
+        ...(orderData.customFields && Object.keys(orderData.customFields).length > 0
+          ? Object.entries(orderData.customFields).map(([fieldId, fieldValue]) => {
+              // Get field label from formConfig if available, otherwise use fieldId
+              const fieldLabel = orderData.fieldLabels?.[fieldId] || fieldId.replace(/custom-/g, '').replace(/-/g, ' ');
+              return {
+                name: fieldLabel,
+                value: String(fieldValue || '')
+              };
+            })
+          : [])
       ],
       transactions: [
         {
@@ -273,10 +284,7 @@ export function validateOrderData(orderData) {
     fieldErrors.firstName = "First name is required";
   }
 
-  if (!orderData.lastName || orderData.lastName.trim() === "") {
-    errors.push("Last name is required");
-    fieldErrors.lastName = "Last name is required";
-  }
+  // lastName is optional now - will be duplicated from firstName if empty
 
   if (!orderData.phone || orderData.phone.trim() === "") {
     errors.push("Phone number is required");

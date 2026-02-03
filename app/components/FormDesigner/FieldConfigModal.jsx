@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
+import { getShopifyFieldConfig, CORE_FIELD_IDS } from "../../lib/constants.js";
 
-export default function FieldConfigModal({ field, isOpen, onClose, onSave }) {
+export default function FieldConfigModal({
+  field,
+  isOpen,
+  onClose,
+  onSave,
+  fieldCategory,
+  shopifyFieldId
+}) {
   const [formData, setFormData] = useState({
     id: "",
     type: "text",
@@ -14,9 +22,46 @@ export default function FieldConfigModal({ field, isOpen, onClose, onSave }) {
 
   useEffect(() => {
     if (field) {
+      // Editing existing field
       setFormData(field);
+    } else if (fieldCategory === "shopify" && shopifyFieldId) {
+      // Adding new Shopify field
+      const shopifyConfig = getShopifyFieldConfig(shopifyFieldId);
+      if (shopifyConfig) {
+        setFormData({
+          id: shopifyConfig.id,
+          type: shopifyConfig.type,
+          label: shopifyConfig.label,
+          placeholder: shopifyConfig.defaultPlaceholder,
+          required: CORE_FIELD_IDS.includes(shopifyConfig.id),
+          visible: true,
+          section: "shipping-address",
+          options: shopifyConfig.defaultOptions || [],
+          order: 999,
+          fieldCategory: "shopify",
+          isCore: CORE_FIELD_IDS.includes(shopifyConfig.id),
+          isDeletable: !CORE_FIELD_IDS.includes(shopifyConfig.id),
+          shopifyProperty: shopifyConfig.shopifyProperty
+        });
+      }
+    } else if (fieldCategory === "custom") {
+      // Adding new custom field
+      setFormData({
+        id: `custom-${Date.now()}`,
+        type: "text",
+        label: "",
+        placeholder: "",
+        required: false,
+        visible: true,
+        section: "shipping-address",
+        options: [],
+        order: 999,
+        fieldCategory: "custom",
+        isCore: false,
+        isDeletable: true
+      });
     } else {
-      // Reset for new field
+      // Reset for new field (fallback)
       setFormData({
         id: `field-${Date.now()}`,
         type: "text",
@@ -27,9 +72,12 @@ export default function FieldConfigModal({ field, isOpen, onClose, onSave }) {
         section: "shipping-address",
         options: [],
         order: 999,
+        fieldCategory: "custom",
+        isCore: false,
+        isDeletable: true
       });
     }
-  }, [field, isOpen]);
+  }, [field, isOpen, fieldCategory, shopifyFieldId]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -72,32 +120,55 @@ export default function FieldConfigModal({ field, isOpen, onClose, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <s-stack direction="block" gap="base">
-          <s-heading>{field ? "Edit Field" : "Add New Field"}</s-heading>
+          <s-stack direction="inline" gap="base" align="space-between">
+            <s-heading>{field ? "Edit Field" : "Add New Field"}</s-heading>
+            {formData.fieldCategory && (
+              <s-badge tone={formData.fieldCategory === "shopify" ? "success" : "neutral"}>
+                {formData.fieldCategory === "shopify" ? "Shopify" : "Custom"}
+              </s-badge>
+            )}
+          </s-stack>
+
+          {formData.isCore && (
+            <s-banner status="info">
+              <s-text>This is a core field and cannot be deleted. You can customize the label and placeholder.</s-text>
+            </s-banner>
+          )}
 
           <form onSubmit={handleSubmit}>
             <s-stack direction="block" gap="base">
-              {/* Field Type */}
-              <s-stack direction="block" gap="tight">
-                <s-text variant="heading-sm">Field Type</s-text>
-                <select
-                  value={formData.type}
-                  onChange={(e) => handleChange("type", e.target.value)}
-                  style={{
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #ccc",
-                    width: "100%",
-                  }}
-                >
-                  <option value="text">Text Input</option>
-                  <option value="dropdown">Dropdown List</option>
-                  <option value="checkbox">Checkbox</option>
-                  <option value="date">Date Selector</option>
-                  <option value="quantity">Quantity Selector</option>
-                  <option value="title">Title/Text</option>
-                  <option value="image">Image/GIF</option>
-                </select>
-              </s-stack>
+              {/* Field Type - Only editable for custom fields */}
+              {formData.fieldCategory === "custom" && (
+                <s-stack direction="block" gap="tight">
+                  <s-text variant="heading-sm">Field Type</s-text>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => handleChange("type", e.target.value)}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ccc",
+                      width: "100%",
+                    }}
+                  >
+                    <option value="text">Text Input</option>
+                    <option value="dropdown">Dropdown List</option>
+                    <option value="checkbox">Checkbox</option>
+                    <option value="date">Date Selector</option>
+                    <option value="quantity">Quantity Selector</option>
+                    <option value="title">Title/Text</option>
+                    <option value="image">Image/GIF</option>
+                  </select>
+                </s-stack>
+              )}
+
+              {/* Show field type as read-only for Shopify fields */}
+              {formData.fieldCategory === "shopify" && (
+                <s-stack direction="block" gap="tight">
+                  <s-text variant="heading-sm">Field Type</s-text>
+                  <s-text tone="subdued">{formData.type.charAt(0).toUpperCase() + formData.type.slice(1)}</s-text>
+                </s-stack>
+              )}
 
               {/* Label */}
               <s-stack direction="block" gap="tight">
@@ -160,16 +231,17 @@ export default function FieldConfigModal({ field, isOpen, onClose, onSave }) {
                 </s-stack>
               )}
 
-              {/* Required Checkbox */}
+              {/* Required Checkbox - Disabled for core fields */}
               <s-stack direction="inline" gap="small" align="center">
                 <input
                   type="checkbox"
                   checked={formData.required}
                   onChange={(e) => handleChange("required", e.target.checked)}
                   id="required-checkbox"
+                  disabled={formData.isCore}
                 />
                 <label htmlFor="required-checkbox">
-                  <s-text>Required field</s-text>
+                  <s-text>Required field {formData.isCore && "(Cannot be changed for core fields)"}</s-text>
                 </label>
               </s-stack>
 
