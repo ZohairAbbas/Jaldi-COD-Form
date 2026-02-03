@@ -1,4 +1,5 @@
 import prisma from "../db.server.js";
+import { CORE_FIELD_IDS } from "./constants.js";
 
 /**
  * Get or create shop record with default settings and form config
@@ -181,34 +182,32 @@ export function getDefaultFormConfig() {
 
   const fields = [
     {
-      id: "full-name",
+      id: "first-name",
       type: "text",
-      label: "Full Name",
-      placeholder: "Full Name",
+      label: "First Name",
+      placeholder: "First Name",
       required: true,
       visible: true,
       order: 0,
       section: "shipping-address",
-    },
-    {
-      id: "first-name",
-      type: "text",
-      label: "First name",
-      placeholder: "First name",
-      required: false,
-      visible: false,
-      order: 1,
-      section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.first_name"
     },
     {
       id: "last-name",
       type: "text",
-      label: "Last name",
-      placeholder: "Last name",
+      label: "Last Name",
+      placeholder: "Last Name",
       required: false,
       visible: false,
-      order: 2,
+      order: 1,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.last_name"
     },
     {
       id: "email",
@@ -217,8 +216,12 @@ export function getDefaultFormConfig() {
       placeholder: "email@example.com",
       required: true,
       visible: true,
-      order: 3,
+      order: 2,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "order.email"
     },
     {
       id: "phone",
@@ -229,6 +232,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 3,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.phone"
     },
     {
       id: "address",
@@ -239,6 +246,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 4,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.address1"
     },
     {
       id: "address2",
@@ -249,6 +260,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 5,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.address2"
     },
     {
       id: "province",
@@ -260,6 +275,10 @@ export function getDefaultFormConfig() {
       order: 6,
       section: "shipping-address",
       options: ["Punjab", "Sindh", "KPK", "Balochistan", "Islamabad"],
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.province"
     },
     {
       id: "city",
@@ -270,6 +289,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 7,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.city"
     },
     {
       id: "postal-code",
@@ -280,6 +303,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 8,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.zip"
     },
   ];
 

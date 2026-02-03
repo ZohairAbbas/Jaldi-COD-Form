@@ -304,3 +304,132 @@ export function parsePrice(price, defaultValue = 0) {
   const normalized = normalizePrice(price);
   return normalized === 0 && defaultValue !== 0 ? defaultValue : normalized;
 }
+
+/**
+ * Form Field Configuration Constants
+ */
+
+// Core field IDs that cannot be deleted
+export const CORE_FIELD_IDS = ["first-name", "phone", "address", "city", "email"];
+
+// Shopify field options with their mappings
+export const SHOPIFY_FIELD_OPTIONS = [
+  {
+    id: "first-name",
+    label: "First Name",
+    type: "text",
+    shopifyProperty: "shipping_address.first_name",
+    icon: "person",
+    defaultPlaceholder: "First Name"
+  },
+  {
+    id: "last-name",
+    label: "Last Name",
+    type: "text",
+    shopifyProperty: "shipping_address.last_name",
+    icon: "person",
+    defaultPlaceholder: "Last Name"
+  },
+  {
+    id: "email",
+    label: "Email",
+    type: "text",
+    shopifyProperty: "order.email",
+    icon: "email",
+    defaultPlaceholder: "email@example.com"
+  },
+  {
+    id: "phone",
+    label: "Phone",
+    type: "text",
+    shopifyProperty: "shipping_address.phone",
+    icon: "phone",
+    defaultPlaceholder: "Phone"
+  },
+  {
+    id: "address",
+    label: "Address",
+    type: "text",
+    shopifyProperty: "shipping_address.address1",
+    icon: "location",
+    defaultPlaceholder: "Address"
+  },
+  {
+    id: "address2",
+    label: "Address 2",
+    type: "text",
+    shopifyProperty: "shipping_address.address2",
+    icon: "location",
+    defaultPlaceholder: "Apartment, suite, etc. (optional)"
+  },
+  {
+    id: "city",
+    label: "City",
+    type: "text",
+    shopifyProperty: "shipping_address.city",
+    icon: "location",
+    defaultPlaceholder: "City"
+  },
+  {
+    id: "province",
+    label: "Province (State)",
+    type: "dropdown",
+    shopifyProperty: "shipping_address.province",
+    icon: "location",
+    defaultPlaceholder: "Province",
+    defaultOptions: ["Punjab", "Sindh", "KPK", "Balochistan", "Islamabad"]
+  },
+  {
+    id: "postal-code",
+    label: "Postal code",
+    type: "text",
+    shopifyProperty: "shipping_address.zip",
+    icon: "location",
+    defaultPlaceholder: "Postal code (optional)"
+  },
+  {
+    id: "country",
+    label: "Country",
+    type: "text",
+    shopifyProperty: "shipping_address.country",
+    icon: "location",
+    defaultPlaceholder: "Country"
+  },
+  {
+    id: "discount-code",
+    label: "Discount Code",
+    type: "text",
+    shopifyProperty: "discount_code",
+    icon: "discount",
+    defaultPlaceholder: "Enter discount code"
+  },
+  {
+    id: "quantity",
+    label: "Quantity",
+    type: "quantity",
+    shopifyProperty: "line_items.quantity",
+    icon: "quantity",
+    defaultPlaceholder: "1"
+  }
+];
+
+/**
+ * Get Shopify field configuration by ID
+ */
+export function getShopifyFieldConfig(fieldId) {
+  return SHOPIFY_FIELD_OPTIONS.find(f => f.id === fieldId);
+}
+
+/**
+ * Check if a field is a core field
+ */
+export function isCoreField(fieldId) {
+  return CORE_FIELD_IDS.includes(fieldId);
+}
+
+/**
+ * Check if a field ID is already in use
+ */
+export function isFieldIdTaken(fieldId, existingFields) {
+  return existingFields.some(f => f.id === fieldId);
+}

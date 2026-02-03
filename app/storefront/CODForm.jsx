@@ -275,23 +275,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const attributionData = getAttributionData();
     const pixelEventId = getEventId();
 
-    // Parse full name into first and last name for Shopify order
+    // Get first and last name from form data
     let derivedFirstName = formData.firstName || formData.firstname || '';
     let derivedLastName = formData.lastName || formData.lastname || '';
 
-    // If full name is provided, parse it
-    const fullNameValue = formData.fullName || formData.fullname || '';
-    if (fullNameValue.trim()) {
-      const nameParts = fullNameValue.trim().split(/\s+/);
-      if (nameParts.length === 1) {
-        // Single name: use for both first and last name
-        derivedFirstName = nameParts[0];
-        derivedLastName = nameParts[0];
-      } else {
-        // Multiple words: first word is first name, rest is last name
-        derivedFirstName = nameParts[0];
-        derivedLastName = nameParts.slice(1).join(' ');
-      }
+    // If last name is empty, duplicate first name (Shopify requires both)
+    if (!derivedLastName || derivedLastName.trim() === '') {
+      derivedLastName = derivedFirstName;
     }
 
     // Transform cart items for submission

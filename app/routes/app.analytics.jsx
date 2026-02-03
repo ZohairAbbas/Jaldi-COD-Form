@@ -1,318 +1,310 @@
+import { useState } from "react";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
+import { getOrCreateShop } from "../lib/db.server";
+import { getCurrencySymbol } from "../lib/constants";
 import db from "../db.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const shop = await getOrCreateShop(session.shop, session.accessToken);
 
-  // Get shop from database
-  const shopData = await db.shop.findUnique({
-    where: { shopifyDomain: shop },
-  });
+  // Get time period from query params (default: 30 days)
+  const url = new URL(request.url);
+  const period = url.searchParams.get("period") || "30";
 
-  if (!shopData) {
-    throw new Response("Shop not found", { status: 404 });
+  let daysAgo;
+  if (period === "all") {
+    daysAgo = new Date("2020-01-01"); // Far back date for "all time"
+  } else {
+    daysAgo = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000);
   }
 
-  // Get analytics data
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-
-  // Total abandoned carts
-  const totalAbandoned = await db.abandonedCart.count({
+  // Get form opens (order sessions)
+  const formOpens = await db.orderSession.count({
     where: {
-      shopId: shopData.id,
-      abandonedAt: { gte: thirtyDaysAgo },
+      shopId: shop.id,
+      startedAt: { gte: daysAgo },
     },
   });
 
-  // Recovered carts
-  const recoveredCarts = await db.abandonedCart.count({
+  // Get form opens with dates
+  const formOpensSessions = await db.orderSession.findMany({
     where: {
-      shopId: shopData.id,
-      recovered: true,
-      abandonedAt: { gte: thirtyDaysAgo },
-    },
-  });
-
-  // Total completed orders
-  const totalOrders = await db.order.count({
-    where: {
-      shopId: shopData.id,
-      createdAt: { gte: thirtyDaysAgo },
-    },
-  });
-
-  // Calculate total value of abandoned carts
-  const abandonedCartsData = await db.abandonedCart.findMany({
-    where: {
-      shopId: shopData.id,
-      abandonedAt: { gte: thirtyDaysAgo },
+      shopId: shop.id,
+      startedAt: { gte: daysAgo },
     },
     select: {
-      totalAmount: true,
+      startedAt: true,
     },
   });
 
-  const totalAbandonedValue = abandonedCartsData.reduce(
-    (sum, cart) => sum + cart.totalAmount,
-    0
-  );
-
-  // Calculate abandonment rate
-  const totalSessions = await db.orderSession.count({
+  // Get orders with dates
+  const ordersData = await db.order.findMany({
     where: {
-      shopId: shopData.id,
-      startedAt: { gte: thirtyDaysAgo },
+      shopId: shop.id,
+      createdAt: { gte: daysAgo },
+    },
+    select: {
+      total: true,
+      createdAt: true,
     },
   });
 
-  const abandonmentRate =
-    totalSessions > 0 ? ((totalAbandoned / totalSessions) * 100).toFixed(1) : 0;
+  const ordersCount = ordersData.length;
+  const totalRevenue = ordersData.reduce((sum, order) => sum + order.total, 0);
 
-  // Get recent abandoned carts
-  const recentAbandoned = await db.abandonedCart.findMany({
-    where: {
-      shopId: shopData.id,
-    },
-    orderBy: {
-      abandonedAt: "desc",
-    },
-    take: 10,
+  // Calculate conversion rate
+  const conversionRate = formOpens > 0 ? ((ordersCount / formOpens) * 100).toFixed(1) : 0;
+
+  // Calculate average order value
+  const avgOrderValue = ordersCount > 0 ? totalRevenue / ordersCount : 0;
+
+  // Prepare chart data (aggregate by day)
+  const chartData = {};
+
+  // Aggregate form opens
+  formOpensSessions.forEach(session => {
+    const date = new Date(session.startedAt).toISOString().split('T')[0];
+    if (!chartData[date]) chartData[date] = { formOpens: 0, orders: 0, revenue: 0 };
+    chartData[date].formOpens += 1;
   });
+
+  // Aggregate orders and revenue
+  ordersData.forEach(order => {
+    const date = new Date(order.createdAt).toISOString().split('T')[0];
+    if (!chartData[date]) chartData[date] = { formOpens: 0, orders: 0, revenue: 0 };
+    chartData[date].orders += 1;
+    chartData[date].revenue += order.total;
+  });
+
+  // Convert to array and sort by date
+  const chartDataArray = Object.entries(chartData)
+    .map(([date, data]) => ({
+      date,
+      ...data,
+      conversionRate: data.formOpens > 0 ? (data.orders / data.formOpens) * 100 : 0,
+      avgOrderValue: data.orders > 0 ? data.revenue / data.orders : 0,
+    }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   return {
     stats: {
-      totalAbandoned,
-      recoveredCarts,
-      totalOrders,
-      totalAbandonedValue,
-      abandonmentRate,
-      totalSessions,
+      formOpens,
+      ordersCount,
+      totalRevenue,
+      conversionRate,
+      avgOrderValue,
     },
-    recentAbandoned,
+    chartData: chartDataArray,
+    period,
+    currencySymbol: getCurrencySymbol(shop.country),
   };
 };
 
 export default function AnalyticsPage() {
-  const { stats, recentAbandoned } = useLoaderData();
+  const { stats, chartData, period: initialPeriod, currencySymbol } = useLoaderData();
+  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod);
+
+  const handlePeriodChange = (newPeriod) => {
+    setSelectedPeriod(newPeriod);
+    window.location.href = `/app/analytics?period=${newPeriod}`;
+  };
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const formatCurrency = (amount) => {
+    return `${currencySymbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const renderAreaChart = (data, dataKey, color) => {
+    if (data.length === 0) {
+      return (
+        <div style={{ padding: "40px", textAlign: "center", color: "#9ca3af" }}>
+          No data available for this period
+        </div>
+      );
+    }
+
+    const maxValue = Math.max(...data.map(d => d[dataKey]));
+    const points = data.map((d, i) => {
+      const x = (i / (data.length - 1)) * 100;
+      const y = 100 - (d[dataKey] / maxValue) * 100;
+      return `${x},${y}`;
+    }).join(' ');
+
+    return (
+      <div style={{ position: "relative", height: "200px", padding: "20px 0" }}>
+        <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: "visible" }}>
+          {/* Grid lines */}
+          <line x1="0" y1="25" x2="100" y2="25" stroke="#f3f4f6" strokeWidth="0.2" />
+          <line x1="0" y1="50" x2="100" y2="50" stroke="#f3f4f6" strokeWidth="0.2" />
+          <line x1="0" y1="75" x2="100" y2="75" stroke="#f3f4f6" strokeWidth="0.2" />
+
+          {/* Area fill */}
+          <polygon
+            points={`0,100 ${points} 100,100`}
+            fill={color}
+            fillOpacity="0.1"
+          />
+
+          {/* Line */}
+          <polyline
+            points={points}
+            fill="none"
+            stroke={color}
+            strokeWidth="0.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+
+          {/* Dots */}
+          {data.map((d, i) => {
+            const x = (i / (data.length - 1)) * 100;
+            const y = 100 - (d[dataKey] / maxValue) * 100;
+            return (
+              <circle
+                key={i}
+                cx={x}
+                cy={y}
+                r="0.8"
+                fill={color}
+              />
+            );
+          })}
+        </svg>
+
+        {/* X-axis labels */}
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", fontSize: "11px", color: "#6b7280" }}>
+          {data.length > 0 && (
+            <>
+              <span>{formatDate(data[0].date)}</span>
+              {data.length > 1 && <span>{formatDate(data[data.length - 1].date)}</span>}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <s-heading>Abandoned Cart Analytics</s-heading>
-      <s-paragraph tone="subdued">
-        Track abandoned checkouts and recover lost revenue (Last 30 days)
-      </s-paragraph>
+    <s-page heading="Analytics">
+      {/* Header with period selector */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <s-text tone="subdued">
+          The dates on this chart use the UTC timezone, not your Shopify timezone. Use this data to understand the performance of your form over time.
+        </s-text>
 
-      {/* Stats Grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-          gap: "16px",
-          marginTop: "24px",
-        }}
-      >
-        {/* Total Abandoned */}
+        <select
+          value={selectedPeriod}
+          onChange={(e) => handlePeriodChange(e.target.value)}
+          style={{
+            padding: "8px 12px",
+            border: "1px solid #d1d5db",
+            borderRadius: "6px",
+            fontSize: "14px",
+            cursor: "pointer",
+            backgroundColor: "white",
+          }}
+        >
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+
+      {/* Main metrics grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: "20px", marginBottom: "20px" }}>
+        {/* Form Opens */}
         <s-card>
-          <div style={{ padding: "16px" }}>
-            <s-text variant="body-sm" tone="subdued">
-              Total Abandoned Carts
+          <div style={{ padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <s-text variant="heading-sm">Form opens</s-text>
+              <span style={{ fontSize: "14px", color: "#9ca3af", cursor: "help" }} title="Number of times the form was opened by customers">
+                ⓘ
+              </span>
+            </div>
+            <s-text variant="heading-2xl" style={{ display: "block", marginBottom: "16px" }}>
+              {stats.formOpens}
             </s-text>
-            <s-text
-              variant="heading-lg"
-              style={{ display: "block", marginTop: "8px" }}
-            >
-              {stats.totalAbandoned}
-            </s-text>
+            {renderAreaChart(chartData, 'formOpens', '#3b82f6')}
           </div>
         </s-card>
 
-        {/* Abandonment Rate */}
+        {/* Orders */}
         <s-card>
-          <div style={{ padding: "16px" }}>
-            <s-text variant="body-sm" tone="subdued">
-              Abandonment Rate
+          <div style={{ padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <s-text variant="heading-sm">Orders</s-text>
+              <span style={{ fontSize: "14px", color: "#9ca3af", cursor: "help" }} title="Total number of completed orders">
+                ⓘ
+              </span>
+            </div>
+            <s-text variant="heading-2xl" style={{ display: "block", marginBottom: "16px" }}>
+              {stats.ordersCount}
             </s-text>
-            <s-text
-              variant="heading-lg"
-              style={{ display: "block", marginTop: "8px" }}
-            >
-              {stats.abandonmentRate}%
-            </s-text>
-            <s-text variant="body-xs" tone="subdued">
-              {stats.totalSessions} total sessions
-            </s-text>
-          </div>
-        </s-card>
-
-        {/* Total Value */}
-        <s-card>
-          <div style={{ padding: "16px" }}>
-            <s-text variant="body-sm" tone="subdued">
-              Total Abandoned Value
-            </s-text>
-            <s-text
-              variant="heading-lg"
-              style={{ display: "block", marginTop: "8px" }}
-            >
-              Rs.{stats.totalAbandonedValue.toFixed(2)}
-            </s-text>
-          </div>
-        </s-card>
-
-        {/* Recovered */}
-        <s-card>
-          <div style={{ padding: "16px" }}>
-            <s-text variant="body-sm" tone="subdued">
-              Recovered Carts
-            </s-text>
-            <s-text
-              variant="heading-lg"
-              style={{ display: "block", marginTop: "8px" }}
-            >
-              {stats.recoveredCarts}
-            </s-text>
+            {renderAreaChart(chartData, 'orders', '#3b82f6')}
           </div>
         </s-card>
       </div>
 
-      {/* Recent Abandoned Carts Table */}
-      <s-section style={{ marginTop: "32px" }}>
-        <s-heading>Recent Abandoned Carts</s-heading>
-
-        {recentAbandoned.length === 0 ? (
-          <s-box padding="large" style={{ textAlign: "center" }}>
-            <s-text tone="subdued">No abandoned carts yet</s-text>
-          </s-box>
-        ) : (
-          <div style={{ marginTop: "16px", overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "14px",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    borderBottom: "1px solid #e5e7eb",
-                    textAlign: "left",
-                  }}
-                >
-                  <th style={{ padding: "12px", fontWeight: "600" }}>
-                    Customer
-                  </th>
-                  <th style={{ padding: "12px", fontWeight: "600" }}>
-                    Contact
-                  </th>
-                  <th style={{ padding: "12px", fontWeight: "600" }}>
-                    Amount
-                  </th>
-                  <th style={{ padding: "12px", fontWeight: "600" }}>
-                    Abandoned At
-                  </th>
-                  <th style={{ padding: "12px", fontWeight: "600" }}>
-                    Status
-                  </th>
-                  <th style={{ padding: "12px", fontWeight: "600" }}>
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentAbandoned.map((cart) => (
-                  <tr
-                    key={cart.id}
-                    style={{ borderBottom: "1px solid #f3f4f6" }}
-                  >
-                    <td style={{ padding: "12px" }}>
-                      {cart.customerFirstName || cart.customerLastName
-                        ? `${cart.customerFirstName || ""} ${
-                            cart.customerLastName || ""
-                          }`.trim()
-                        : "—"}
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      {cart.customerEmail || cart.customerPhone || "—"}
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      Rs.{cart.totalAmount.toFixed(2)}
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      {new Date(cart.abandonedAt).toLocaleString()}
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      {cart.recovered ? (
-                        <span
-                          style={{
-                            color: "#10b981",
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            backgroundColor: "#d1fae5",
-                            fontSize: "12px",
-                            fontWeight: "500",
-                          }}
-                        >
-                          Recovered
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            color: "#f59e0b",
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            backgroundColor: "#fef3c7",
-                            fontSize: "12px",
-                            fontWeight: "500",
-                          }}
-                        >
-                          Abandoned
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      {cart.draftOrderUrl ? (
-                        <a
-                          href={cart.draftOrderUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            color: "#3b82f6",
-                            textDecoration: "underline",
-                          }}
-                        >
-                          View Draft Order
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Revenue Chart (full width) */}
+      <div style={{ marginBottom: "20px" }}>
+        <s-card>
+          <div style={{ padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <s-text variant="heading-sm">Revenue</s-text>
+              <span style={{ fontSize: "14px", color: "#9ca3af", cursor: "help" }} title="Total revenue from completed orders">
+                ⓘ
+              </span>
+            </div>
+            <s-text variant="heading-2xl" style={{ display: "block", marginBottom: "16px" }}>
+              {formatCurrency(stats.totalRevenue)}
+            </s-text>
+            {renderAreaChart(chartData, 'revenue', '#3b82f6')}
           </div>
-        )}
-      </s-section>
+        </s-card>
+      </div>
 
-      {/* Info Box */}
-      <s-box
-        padding="base"
-        borderWidth="base"
-        borderRadius="base"
-        background="subdued"
-        style={{ marginTop: "24px" }}
-      >
-        <s-text variant="body-sm">
-          ℹ️ <strong>How it works:</strong> When a customer starts filling the
-          checkout form but doesn't complete it within 15 minutes, it's marked
-          as abandoned. Draft orders are automatically created in Shopify with
-          the tag <code>abandoned_checkout_preventify_cod_form</code> for easy
-          recovery.
-        </s-text>
-      </s-box>
-    </div>
+      {/* Conversion Rate and AOV */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: "20px", marginBottom: "20px" }}>
+        {/* Conversion Rate */}
+        <s-card>
+          <div style={{ padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <s-text variant="heading-sm">Form conversion rate</s-text>
+              <span style={{ fontSize: "14px", color: "#9ca3af", cursor: "help" }} title="Percentage of form opens that resulted in orders">
+                ⓘ
+              </span>
+            </div>
+            <s-text variant="heading-2xl" style={{ display: "block", marginBottom: "16px" }}>
+              {stats.conversionRate}%
+            </s-text>
+            {renderAreaChart(chartData, 'conversionRate', '#f97316')}
+          </div>
+        </s-card>
+
+        {/* Average Order Value */}
+        <s-card>
+          <div style={{ padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <s-text variant="heading-sm">Average order value</s-text>
+              <span style={{ fontSize: "14px", color: "#9ca3af", cursor: "help" }} title="Average value per order">
+                ⓘ
+              </span>
+            </div>
+            <s-text variant="heading-2xl" style={{ display: "block", marginBottom: "16px" }}>
+              {formatCurrency(stats.avgOrderValue)}
+            </s-text>
+            {renderAreaChart(chartData, 'avgOrderValue', '#3b82f6')}
+          </div>
+        </s-card>
+      </div>
+
+    </s-page>
   );
 }

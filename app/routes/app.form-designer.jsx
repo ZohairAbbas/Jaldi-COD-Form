@@ -7,6 +7,7 @@ import { getOrCreateShop } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
 import SectionManager from "../components/FormDesigner/SectionManager";
 import FieldManager from "../components/FormDesigner/FieldManager";
+import FieldTypeModal from "../components/FormDesigner/FieldTypeModal";
 import FieldConfigModal from "../components/FormDesigner/FieldConfigModal";
 import LivePreview from "../components/FormDesigner/LivePreview";
 import StyleCustomizer from "../components/FormDesigner/StyleCustomizer";
@@ -39,8 +40,11 @@ export default function FormDesigner() {
   const [fields, setFields] = useState(initialConfig.fields);
   const [settings, setSettings] = useState(initialSettings);
   const [isSaving, setIsSaving] = useState(false);
+  const [fieldTypeModalOpen, setFieldTypeModalOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingField, setEditingField] = useState(null);
+  const [selectedFieldCategory, setSelectedFieldCategory] = useState(null);
+  const [selectedShopifyFieldId, setSelectedShopifyFieldId] = useState(null);
 
   const handleSettingsUpdate = (updates) => {
     setSettings((prev) => ({ ...prev, ...updates }));
@@ -90,11 +94,20 @@ export default function FormDesigner() {
 
   const handleAddField = () => {
     setEditingField(null);
+    setFieldTypeModalOpen(true);
+  };
+
+  const handleFieldTypeSelect = (category, shopifyFieldId = null) => {
+    setSelectedFieldCategory(category);
+    setSelectedShopifyFieldId(shopifyFieldId);
+    setFieldTypeModalOpen(false);
     setIsModalOpen(true);
   };
 
   const handleEditField = (field) => {
     setEditingField(field);
+    setSelectedFieldCategory(null);
+    setSelectedShopifyFieldId(null);
     setIsModalOpen(true);
   };
 
@@ -139,88 +152,100 @@ export default function FormDesigner() {
 
         {/* Navigation Tabs */}
         <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: "0",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
           marginBottom: "24px",
-          borderBottom: "1px solid #e5e7eb",
+          padding: "16px 0",
         }}>
-          <button
-            onClick={() => setActiveTab("form-designer")}
-            style={{
-              padding: "12px 24px",
-              border: "none",
-              backgroundColor: "transparent",
-              borderBottom: activeTab === "form-designer" ? "2px solid #000" : "2px solid transparent",
-              cursor: "pointer",
-              fontSize: "14px",
-              fontWeight: activeTab === "form-designer" ? "600" : "400",
-              color: activeTab === "form-designer" ? "#000" : "#6b7280",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-              <polyline points="10 9 9 9 8 9" />
-            </svg>
-            Form Designer
-          </button>
-          <button
-            onClick={() => setActiveTab("button-customization")}
-            style={{
-              padding: "12px 24px",
-              border: "none",
-              backgroundColor: "transparent",
-              borderBottom: activeTab === "button-customization" ? "2px solid #000" : "2px solid transparent",
-              cursor: "pointer",
-              fontSize: "14px",
-              fontWeight: activeTab === "button-customization" ? "600" : "400",
-              color: activeTab === "button-customization" ? "#000" : "#6b7280",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="9" y1="9" x2="15" y2="9" />
-              <line x1="9" y1="15" x2="15" y2="15" />
-            </svg>
-            COD Button
-          </button>
-          <button
-            onClick={() => setActiveTab("card-button-customization")}
-            style={{
-              padding: "12px 24px",
-              border: "none",
-              backgroundColor: "transparent",
-              borderBottom: activeTab === "card-button-customization" ? "2px solid #000" : "2px solid transparent",
-              cursor: "pointer",
-              fontSize: "14px",
-              fontWeight: activeTab === "card-button-customization" ? "600" : "400",
-              color: activeTab === "card-button-customization" ? "#000" : "#6b7280",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-              <line x1="1" y1="10" x2="23" y2="10"></line>
-            </svg>
-            Card Button
-          </button>
+          <div style={{
+            display: "inline-flex",
+            gap: "8px",
+            backgroundColor: "#F6F6F7",
+            padding: "4px",
+            borderRadius: "12px",
+            border: "1px solid #E1E3E5",
+          }}>
+            <button
+              onClick={() => setActiveTab("form-designer")}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                backgroundColor: activeTab === "form-designer" ? "#FFFFFF" : "transparent",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "500",
+                color: activeTab === "form-designer" ? "#202223" : "#6D7175",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                transition: "all 0.2s ease",
+                boxShadow: activeTab === "form-designer" ? "0 1px 3px rgba(0, 0, 0, 0.1)" : "none",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+              </svg>
+              Form Designer
+            </button>
+            <button
+              onClick={() => setActiveTab("button-customization")}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                backgroundColor: activeTab === "button-customization" ? "#FFFFFF" : "transparent",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "500",
+                color: activeTab === "button-customization" ? "#202223" : "#6D7175",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                transition: "all 0.2s ease",
+                boxShadow: activeTab === "button-customization" ? "0 1px 3px rgba(0, 0, 0, 0.1)" : "none",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="9" y1="9" x2="15" y2="9" />
+                <line x1="9" y1="15" x2="15" y2="15" />
+              </svg>
+              COD Button
+            </button>
+            <button
+              onClick={() => setActiveTab("card-button-customization")}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                backgroundColor: activeTab === "card-button-customization" ? "#FFFFFF" : "transparent",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "500",
+                color: activeTab === "card-button-customization" ? "#202223" : "#6D7175",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                transition: "all 0.2s ease",
+                boxShadow: activeTab === "card-button-customization" ? "0 1px 3px rgba(0, 0, 0, 0.1)" : "none",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                <line x1="1" y1="10" x2="23" y2="10"></line>
+              </svg>
+              Card Button
+            </button>
+          </div>
         </div>
 
         {/* Form Designer Tab Content */}
@@ -450,11 +475,24 @@ export default function FormDesigner() {
         )}
       </s-page>
 
+      <FieldTypeModal
+        isOpen={fieldTypeModalOpen}
+        onClose={() => setFieldTypeModalOpen(false)}
+        onSelectType={handleFieldTypeSelect}
+        existingFields={fields}
+      />
+
       <FieldConfigModal
         field={editingField}
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedFieldCategory(null);
+          setSelectedShopifyFieldId(null);
+        }}
         onSave={handleSaveField}
+        fieldCategory={selectedFieldCategory}
+        shopifyFieldId={selectedShopifyFieldId}
       />
     </>
   );
