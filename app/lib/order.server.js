@@ -286,6 +286,12 @@ export function validateOrderData(orderData) {
 
   // lastName is optional now - will be duplicated from firstName if empty
 
+  // Validate email
+  if (!orderData.email || orderData.email.trim() === "") {
+    errors.push("Email is required");
+    fieldErrors.email = "Email is required";
+  }
+
   if (!orderData.phone || orderData.phone.trim() === "") {
     errors.push("Phone number is required");
     fieldErrors.phone = "Phone number is required";
@@ -309,10 +315,7 @@ export function validateOrderData(orderData) {
     fieldErrors.city = "City is required";
   }
 
-  if (!orderData.province || orderData.province.trim() === "") {
-    errors.push("Province is required");
-    fieldErrors.province = "Province is required";
-  }
+  // Province, country, postal code are optional - not validated
 
   // Validate items
   if (!orderData.items || orderData.items.length === 0) {

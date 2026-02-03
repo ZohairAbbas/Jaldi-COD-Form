@@ -106,6 +106,10 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
           visible: true,
           order: 2,
           section: "shipping-address",
+          fieldCategory: "shopify",
+          isCore: true,
+          isDeletable: false,
+          shopifyProperty: "order.email"
         };
 
         // Update order of existing fields that come after email (order >= 2)

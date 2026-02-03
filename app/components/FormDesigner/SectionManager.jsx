@@ -138,31 +138,33 @@ export default function SectionManager({ sections, onUpdate }) {
 
             {/* Right side: action buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {/* Toggle visibility button */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleVisibility(section.id);
-                }}
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '4px',
-                  color: '#5C5F62',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F6F6F7'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                title={section.visible ? "Hide" : "Show"}
-              >
-                {renderIcon(section.visible ? 'hide' : 'show')}
-              </button>
+              {/* Toggle visibility button - hide for shipping-address section */}
+              {section.id !== 'shipping-address' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleVisibility(section.id);
+                  }}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px',
+                    color: '#5C5F62',
+                    transition: 'background-color 0.2s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F6F6F7'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  title={section.visible ? "Hide" : "Show"}
+                >
+                  {renderIcon(section.visible ? 'hide' : 'show')}
+                </button>
+              )}
             </div>
           </div>
         ))}
