@@ -200,31 +200,33 @@ export default function FieldManager({ fields, onUpdate, onEditField, onAddField
                 {renderIcon('edit')}
               </button>
 
-              {/* Toggle visibility button */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleVisibility(field.id);
-                }}
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '4px',
-                  color: '#5C5F62',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F6F6F7'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                title={field.visible ? "Hide" : "Show"}
-              >
-                {renderIcon(field.visible ? 'hide' : 'show')}
-              </button>
+              {/* Toggle visibility button - only for non-core fields */}
+              {!field.isCore && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleVisibility(field.id);
+                  }}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px',
+                    color: '#5C5F62',
+                    transition: 'background-color 0.2s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F6F6F7'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  title={field.visible ? "Hide" : "Show"}
+                >
+                  {renderIcon(field.visible ? 'hide' : 'show')}
+                </button>
+              )}
 
               {/* Delete button - only for deletable fields */}
               {field.isDeletable !== false && !field.isCore && (
