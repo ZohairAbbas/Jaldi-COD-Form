@@ -1,45 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData } from './pixels';
-import { getCurrencyCode } from '../lib/constants';
-
-// Country data - must match server-side constants
-const COUNTRIES = {
-  PAK: {
-    code: 'PAK',
-    phoneCode: '+92',
-    name: 'Pakistan',
-    currencySymbol: 'Rs.',
-    provinces: ['Punjab', 'Sindh', 'Khyber Pakhtunkhwa', 'Balochistan', 'Gilgit-Baltistan', 'Azad Jammu & Kashmir', 'Islamabad Capital Territory']
-  },
-  UAE: {
-    code: 'UAE',
-    phoneCode: '+971',
-    name: 'United Arab Emirates',
-    currencySymbol: 'Dhs.',
-    provinces: ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah']
-  },
-  QATAR: {
-    code: 'QATAR',
-    phoneCode: '+974',
-    name: 'Qatar',
-    currencySymbol: 'QR',
-    provinces: ['Doha', 'Al Rayyan', 'Al Wakrah', 'Al Khor', 'Al Daayen', 'Umm Salal', 'Al Shamal', 'Al Shahaniya']
-  },
-  KUWAIT: {
-    code: 'KUWAIT',
-    phoneCode: '+965',
-    name: 'Kuwait',
-    currencySymbol: 'KD',
-    provinces: ['Al Asimah', 'Hawalli', 'Farwaniya', 'Mubarak Al-Kabeer', 'Ahmadi', 'Jahra']
-  },
-  KSA: {
-    code: 'KSA',
-    phoneCode: '+966',
-    name: 'Saudi Arabia',
-    currencySymbol: 'SAR',
-    provinces: ['Riyadh', 'Makkah', 'Madinah', 'Eastern Province', 'Asir', 'Tabuk', 'Qassim', 'Ha\'il', 'Northern Borders', 'Jizan', 'Najran', 'Al Bahah', 'Al Jawf']
-  }
-};
+import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
+import { getCurrencyCode, COUNTRIES } from '../lib/constants';
 
 export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/' }) {
   // Manual country selection state (for user override)
@@ -119,6 +80,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   useEffect(() => {
     const currency = getCurrencyCode(config.shop?.country);
     trackInitiateCheckout(cart, currency);
+    trackSnapchatStartCheckout(cart, currency);
+    trackTikTokInitiateCheckout(cart, currency);
   }, []); // Only run once on mount
 
   // Track when email or phone is entered (session tracking + AddPaymentInfo pixel event)
@@ -545,6 +508,28 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       case 'dropdown':
         // Use country-based provinces for province field
         const options = field.id === 'province' ? country.provinces : field.options;
+
+        // If province field has no options (empty provinces array), render as text input instead
+        if (field.id === 'province' && (!options || options.length === 0)) {
+          return (
+            <div key={field.id} style={{ marginBottom: '16px' }}>
+              <label style={labelStyle}>
+                {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={value}
+                  onChange={(e) => handleChange(fieldId, e.target.value)}
+                  placeholder={field.placeholder || 'Enter your province/state'}
+                  style={inputStyle}
+                />
+              </div>
+              {error && <div style={errorStyle}>{error}</div>}
+            </div>
+          );
+        }
+
         return (
           <div key={field.id} style={{ marginBottom: '16px' }}>
             <label style={labelStyle}>

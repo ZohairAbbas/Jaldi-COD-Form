@@ -41,9 +41,17 @@ export default function Settings() {
     label: '',
     pixelId: '',
     accessToken: '',
+    // Facebook events
     enableAddToCart: false,
     enableAddPaymentInfo: false,
     enableInitiateCheckout: true,
+    // Snapchat events
+    enableStartCheckout: true,
+    enablePurchase: true,
+    // TikTok events
+    enableTikTokInitiateCheckout: true,
+    enablePlaceAnOrder: true,
+    enableCompletePayment: true,
     testMode: false,
     testEventCode: '',
   });
@@ -111,9 +119,17 @@ export default function Settings() {
       label: '',
       pixelId: '',
       accessToken: '',
+      // Facebook events
       enableAddToCart: false,
       enableAddPaymentInfo: false,
       enableInitiateCheckout: true,
+      // Snapchat events
+      enableStartCheckout: true,
+      enablePurchase: true,
+      // TikTok events
+      enableTikTokInitiateCheckout: true,
+      enablePlaceAnOrder: true,
+      enableCompletePayment: true,
       testMode: false,
       testEventCode: '',
     });
@@ -127,9 +143,17 @@ export default function Settings() {
       label: pixel.label || '',
       pixelId: pixel.pixelId,
       accessToken: pixel.accessToken || '',
-      enableAddToCart: pixel.enableAddToCart,
-      enableAddPaymentInfo: pixel.enableAddPaymentInfo,
-      enableInitiateCheckout: pixel.enableInitiateCheckout,
+      // Facebook events
+      enableAddToCart: pixel.enableAddToCart || false,
+      enableAddPaymentInfo: pixel.enableAddPaymentInfo || false,
+      enableInitiateCheckout: pixel.enableInitiateCheckout !== undefined ? pixel.enableInitiateCheckout : true,
+      // Snapchat events
+      enableStartCheckout: pixel.enableStartCheckout !== undefined ? pixel.enableStartCheckout : true,
+      enablePurchase: pixel.enablePurchase !== undefined ? pixel.enablePurchase : true,
+      // TikTok events
+      enableTikTokInitiateCheckout: pixel.enableTikTokInitiateCheckout !== undefined ? pixel.enableTikTokInitiateCheckout : true,
+      enablePlaceAnOrder: pixel.enablePlaceAnOrder !== undefined ? pixel.enablePlaceAnOrder : true,
+      enableCompletePayment: pixel.enableCompletePayment !== undefined ? pixel.enableCompletePayment : true,
       testMode: pixel.testMode,
       testEventCode: pixel.testEventCode || '',
     });
@@ -799,6 +823,9 @@ export default function Settings() {
                       <td style={{ padding: '12px' }}>
                         {pixel.type === 'facebook_pixel' && 'Facebook Pixel'}
                         {pixel.type === 'facebook_capi' && 'Facebook CAPI'}
+                        {pixel.type === 'snapchat_pixel' && 'Snapchat Pixel'}
+                        {pixel.type === 'tiktok_pixel' && 'TikTok Pixel'}
+                        {pixel.type === 'tiktok_events_api' && 'TikTok Events API'}
                       </td>
                       <td style={{ padding: '12px' }}>{pixel.label || '-'}</td>
                       <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '13px' }}>{pixel.pixelId}</td>
@@ -862,6 +889,10 @@ export default function Settings() {
           <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
             <s-stack direction="block" gap="tight">
               <s-text variant="heading-sm">Events Tracked</s-text>
+
+              <s-text variant="body-sm" style={{ marginTop: '8px' }}>
+                <strong>Facebook:</strong>
+              </s-text>
               <s-text variant="body-sm">
                 • <strong>InitiateCheckout:</strong> Fired when COD form opens
               </s-text>
@@ -872,7 +903,45 @@ export default function Settings() {
                 • <strong>AddToCart:</strong> Fired when one-tick upsell is selected
               </s-text>
               <s-text variant="body-sm">
-                • <strong>Purchase:</strong> Fired after successful order (client + server CAPI)
+                • <strong>Purchase:</strong> Fired after successful order
+              </s-text>
+              <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
+                Facebook Pixel: Client-side tracking
+              </s-text>
+              <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
+                Facebook Conversions API: Server-side tracking with hashed user data
+              </s-text>
+
+              <s-text variant="body-sm" style={{ marginTop: '12px' }}>
+                <strong>Snapchat:</strong>
+              </s-text>
+              <s-text variant="body-sm">
+                • <strong>START_CHECKOUT:</strong> Fired when COD form opens
+              </s-text>
+              <s-text variant="body-sm">
+                • <strong>PURCHASE:</strong> Fired after successful order
+              </s-text>
+              <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
+                Snapchat Pixel: Client-side tracking
+              </s-text>
+
+              <s-text variant="body-sm" style={{ marginTop: '12px' }}>
+                <strong>TikTok:</strong>
+              </s-text>
+              <s-text variant="body-sm">
+                • <strong>InitiateCheckout:</strong> Fired when COD form opens (pixel only)
+              </s-text>
+              <s-text variant="body-sm">
+                • <strong>PlaceAnOrder:</strong> Fired after successful order
+              </s-text>
+              <s-text variant="body-sm">
+                • <strong>CompletePayment:</strong> Fired after successful order
+              </s-text>
+              <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
+                TikTok Pixel: Client-side tracking
+              </s-text>
+              <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
+                TikTok Events API: Server-side tracking (PlaceAnOrder & CompletePayment only)
               </s-text>
             </s-stack>
           </s-box>
@@ -915,6 +984,9 @@ export default function Settings() {
               >
                 <option value="facebook_pixel">Facebook Pixel</option>
                 <option value="facebook_capi">Facebook Conversions API</option>
+                <option value="snapchat_pixel">Snapchat Pixel</option>
+                <option value="tiktok_pixel">TikTok Pixel</option>
+                <option value="tiktok_events_api">TikTok Events API</option>
               </select>
             </div>
 
@@ -958,38 +1030,110 @@ export default function Settings() {
               </div>
             )}
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={pixelFormData.enableInitiateCheckout}
-                  onChange={(e) => setPixelFormData({ ...pixelFormData, enableInitiateCheckout: e.target.checked })}
-                />
-                <span>Enable InitiateCheckout event</span>
-              </label>
-            </div>
+            {/* Facebook-specific events */}
+            {(pixelFormData.type === 'facebook_pixel' || pixelFormData.type === 'facebook_capi') && (
+              <>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pixelFormData.enableInitiateCheckout}
+                      onChange={(e) => setPixelFormData({ ...pixelFormData, enableInitiateCheckout: e.target.checked })}
+                    />
+                    <span>Enable InitiateCheckout event</span>
+                  </label>
+                </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={pixelFormData.enableAddPaymentInfo}
-                  onChange={(e) => setPixelFormData({ ...pixelFormData, enableAddPaymentInfo: e.target.checked })}
-                />
-                <span>Enable AddPaymentInfo event</span>
-              </label>
-            </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pixelFormData.enableAddPaymentInfo}
+                      onChange={(e) => setPixelFormData({ ...pixelFormData, enableAddPaymentInfo: e.target.checked })}
+                    />
+                    <span>Enable AddPaymentInfo event</span>
+                  </label>
+                </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={pixelFormData.enableAddToCart}
-                  onChange={(e) => setPixelFormData({ ...pixelFormData, enableAddToCart: e.target.checked })}
-                />
-                <span>Enable AddToCart event (for upsells)</span>
-              </label>
-            </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pixelFormData.enableAddToCart}
+                      onChange={(e) => setPixelFormData({ ...pixelFormData, enableAddToCart: e.target.checked })}
+                    />
+                    <span>Enable AddToCart event (for upsells)</span>
+                  </label>
+                </div>
+              </>
+            )}
+
+            {/* Snapchat-specific events */}
+            {pixelFormData.type === 'snapchat_pixel' && (
+              <>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pixelFormData.enableStartCheckout}
+                      onChange={(e) => setPixelFormData({ ...pixelFormData, enableStartCheckout: e.target.checked })}
+                    />
+                    <span>Enable START_CHECKOUT event</span>
+                  </label>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pixelFormData.enablePurchase}
+                      onChange={(e) => setPixelFormData({ ...pixelFormData, enablePurchase: e.target.checked })}
+                    />
+                    <span>Enable PURCHASE event</span>
+                  </label>
+                </div>
+              </>
+            )}
+
+            {/* TikTok-specific events */}
+            {(pixelFormData.type === 'tiktok_pixel' || pixelFormData.type === 'tiktok_events_api') && (
+              <>
+                {pixelFormData.type === 'tiktok_pixel' && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={pixelFormData.enableTikTokInitiateCheckout}
+                        onChange={(e) => setPixelFormData({ ...pixelFormData, enableTikTokInitiateCheckout: e.target.checked })}
+                      />
+                      <span>Enable InitiateCheckout event (pixel only)</span>
+                    </label>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pixelFormData.enablePlaceAnOrder}
+                      onChange={(e) => setPixelFormData({ ...pixelFormData, enablePlaceAnOrder: e.target.checked })}
+                    />
+                    <span>Enable PlaceAnOrder event</span>
+                  </label>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pixelFormData.enableCompletePayment}
+                      onChange={(e) => setPixelFormData({ ...pixelFormData, enableCompletePayment: e.target.checked })}
+                    />
+                    <span>Enable CompletePayment event</span>
+                  </label>
+                </div>
+              </>
+            )}
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>

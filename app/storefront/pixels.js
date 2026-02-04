@@ -9,19 +9,34 @@ let currentEventId = null;
  * Initialize pixels with configuration from server
  */
 export function initializePixels(config) {
-  if (!config || !config.facebook || config.facebook.length === 0) {
+  if (!config) {
     return;
   }
 
   pixelConfig = config;
 
   // Initialize Facebook Pixel for each configured pixel
-  config.facebook.forEach(pixel => {
-    loadFacebookPixel(pixel.pixelId);
-  });
+  if (config.facebook && config.facebook.length > 0) {
+    config.facebook.forEach(pixel => {
+      loadFacebookPixel(pixel.pixelId);
+    });
+    // Capture fbclid from URL
+    captureFbClickId();
+  }
 
-  // Capture fbclid from URL
-  captureFbClickId();
+  // Initialize Snapchat Pixel for each configured pixel
+  if (config.snapchat && config.snapchat.length > 0) {
+    config.snapchat.forEach(pixel => {
+      loadSnapchatPixel(pixel.pixelId);
+    });
+  }
+
+  // Initialize TikTok Pixel for each configured pixel
+  if (config.tiktok && config.tiktok.length > 0) {
+    config.tiktok.forEach(pixel => {
+      loadTikTokPixel(pixel.pixelId);
+    });
+  }
 }
 
 /**
@@ -290,4 +305,276 @@ export function getAttributionData() {
     fbc: getFbc(),
     fbclid: getFbclid(),
   };
+}
+
+// ============================================
+// SNAPCHAT PIXEL TRACKING
+// ============================================
+
+/**
+ * Load Snapchat Pixel base code
+ */
+function loadSnapchatPixel(pixelId) {
+  // Check if Snapchat Pixel already loaded
+  if (window.snaptr) {
+    window.snaptr('init', pixelId);
+    return;
+  }
+
+  // Load Snapchat Pixel script
+  (function(e,t,n){if(e.snaptr)return;var a=e.snaptr=function()
+  {a.handleRequest?a.handleRequest.apply(a,arguments):a.queue.push(arguments)};
+  a.queue=[];var s='script';var r=t.createElement(s);r.async=!0;
+  r.src=n;var u=t.getElementsByTagName(s)[0];
+  u.parentNode.insertBefore(r,u);})(window,document,
+  'https://sc-static.net/scevent.min.js');
+
+  // Initialize Snapchat Pixel
+  window.snaptr('init', pixelId);
+
+  // Track PageView automatically
+  window.snaptr('track', 'PAGE_VIEW');
+}
+
+/**
+ * Track START_CHECKOUT event on Snapchat
+ */
+export function trackSnapchatStartCheckout(cart, currency = 'PKR') {
+  if (!pixelConfig || !pixelConfig.snapchat || pixelConfig.snapchat.length === 0) {
+    return;
+  }
+
+  if (!window.snaptr) {
+    console.warn('Snapchat Pixel not loaded');
+    return;
+  }
+
+  const eventData = {
+    currency: currency,
+    price: cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+    item_ids: cart.items.map(item => item.variantId || item.id),
+    number_items: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+  };
+
+  pixelConfig.snapchat.forEach(pixel => {
+    if (!pixel.enableStartCheckout) {
+      return;
+    }
+
+    try {
+      window.snaptr('track', 'START_CHECKOUT', eventData);
+      console.log(`[Snapchat Pixel] Fired START_CHECKOUT on pixel ${pixel.pixelId}`, eventData);
+    } catch (error) {
+      console.error(`Error tracking START_CHECKOUT on Snapchat pixel ${pixel.pixelId}:`, error);
+    }
+  });
+}
+
+/**
+ * Track PURCHASE event on Snapchat
+ */
+export function trackSnapchatPurchase(orderData, currency = 'PKR') {
+  if (!pixelConfig || !pixelConfig.snapchat || pixelConfig.snapchat.length === 0) {
+    return;
+  }
+
+  if (!window.snaptr) {
+    console.warn('Snapchat Pixel not loaded');
+    return;
+  }
+
+  const { items, total, orderNumber } = orderData;
+
+  const eventData = {
+    currency: currency,
+    price: total,
+    transaction_id: orderNumber,
+    item_ids: items.map(item => item.variantId || item.id),
+    number_items: items.length,
+  };
+
+  pixelConfig.snapchat.forEach(pixel => {
+    if (!pixel.enablePurchase) {
+      return;
+    }
+
+    try {
+      window.snaptr('track', 'PURCHASE', eventData);
+      console.log(`[Snapchat Pixel] Fired PURCHASE on pixel ${pixel.pixelId}`, eventData);
+    } catch (error) {
+      console.error(`Error tracking PURCHASE on Snapchat pixel ${pixel.pixelId}:`, error);
+    }
+  });
+}
+
+// ============================================
+// TIKTOK PIXEL TRACKING
+// ============================================
+
+/**
+ * Load TikTok Pixel base code
+ */
+function loadTikTokPixel(pixelId) {
+  // Check if TikTok Pixel already loaded
+  if (window.ttq) {
+    window.ttq.load(pixelId);
+    return;
+  }
+
+  // Load TikTok Pixel script
+  !(function(w, d, t) {
+    w.TiktokAnalyticsObject = t;
+    var ttq = w[t] = w[t] || [];
+    ttq.methods = ["page", "track", "identify", "instances", "debug", "on", "off", "once", "ready", "alias", "group", "enableCookie", "disableCookie"];
+    ttq.setAndDefer = function(t, e) {
+      t[e] = function() {
+        t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
+      };
+    };
+    for (var i = 0; i < ttq.methods.length; i++) ttq.setAndDefer(ttq, ttq.methods[i]);
+    ttq.instance = function(t) {
+      for (var e = ttq._i[t] || [], n = 0; n < ttq.methods.length; n++) ttq.setAndDefer(e, ttq.methods[n]);
+      return e;
+    };
+    ttq.load = function(e, n) {
+      var i = "https://analytics.tiktok.com/i18n/pixel/events.js";
+      ttq._i = ttq._i || {}, ttq._i[e] = [], ttq._i[e]._u = i, ttq._t = ttq._t || {}, ttq._t[e] = +new Date, ttq._o = ttq._o || {}, ttq._o[e] = n || {};
+      var o = document.createElement("script");
+      o.type = "text/javascript", o.async = !0, o.src = i + "?sdkid=" + e + "&lib=" + t;
+      var a = document.getElementsByTagName("script")[0];
+      a.parentNode.insertBefore(o, a);
+    };
+  })(window, document, 'ttq');
+
+  // Initialize TikTok Pixel
+  window.ttq.load(pixelId);
+  window.ttq.page();
+}
+
+/**
+ * Track InitiateCheckout event on TikTok (pixel only)
+ */
+export function trackTikTokInitiateCheckout(cart, currency = 'PKR') {
+  if (!pixelConfig || !pixelConfig.tiktok || pixelConfig.tiktok.length === 0) {
+    return;
+  }
+
+  if (!window.ttq) {
+    console.warn('TikTok Pixel not loaded');
+    return;
+  }
+
+  const eventData = {
+    content_type: 'product',
+    quantity: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+    description: 'COD Form Opened',
+    value: cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+    currency: currency,
+    contents: cart.items.map(item => ({
+      content_id: item.variantId || item.id,
+      content_type: 'product',
+      content_name: item.title,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+  };
+
+  pixelConfig.tiktok.forEach(pixel => {
+    if (!pixel.enableTikTokInitiateCheckout) {
+      return;
+    }
+
+    try {
+      window.ttq.track('InitiateCheckout', eventData);
+      console.log(`[TikTok Pixel] Fired InitiateCheckout on pixel ${pixel.pixelId}`, eventData);
+    } catch (error) {
+      console.error(`Error tracking InitiateCheckout on TikTok pixel ${pixel.pixelId}:`, error);
+    }
+  });
+}
+
+/**
+ * Track PlaceAnOrder event on TikTok
+ */
+export function trackTikTokPlaceAnOrder(orderData, currency = 'PKR') {
+  if (!pixelConfig || !pixelConfig.tiktok || pixelConfig.tiktok.length === 0) {
+    return;
+  }
+
+  if (!window.ttq) {
+    console.warn('TikTok Pixel not loaded');
+    return;
+  }
+
+  const { items, total, orderNumber } = orderData;
+
+  const eventData = {
+    content_type: 'product',
+    quantity: items.length,
+    description: 'Order Placed',
+    value: total,
+    currency: currency,
+    contents: items.map(item => ({
+      content_id: item.variantId || item.id,
+      content_type: 'product',
+      quantity: item.quantity || 1,
+      price: item.price,
+    })),
+  };
+
+  pixelConfig.tiktok.forEach(pixel => {
+    if (!pixel.enablePlaceAnOrder) {
+      return;
+    }
+
+    try {
+      window.ttq.track('PlaceAnOrder', eventData);
+      console.log(`[TikTok Pixel] Fired PlaceAnOrder on pixel ${pixel.pixelId}`, eventData);
+    } catch (error) {
+      console.error(`Error tracking PlaceAnOrder on TikTok pixel ${pixel.pixelId}:`, error);
+    }
+  });
+}
+
+/**
+ * Track CompletePayment event on TikTok
+ */
+export function trackTikTokCompletePayment(orderData, currency = 'PKR') {
+  if (!pixelConfig || !pixelConfig.tiktok || pixelConfig.tiktok.length === 0) {
+    return;
+  }
+
+  if (!window.ttq) {
+    console.warn('TikTok Pixel not loaded');
+    return;
+  }
+
+  const { items, total, orderNumber } = orderData;
+
+  const eventData = {
+    content_type: 'product',
+    quantity: items.length,
+    description: 'Payment Completed',
+    value: total,
+    currency: currency,
+    contents: items.map(item => ({
+      content_id: item.variantId || item.id,
+      content_type: 'product',
+      quantity: item.quantity || 1,
+      price: item.price,
+    })),
+  };
+
+  pixelConfig.tiktok.forEach(pixel => {
+    if (!pixel.enableCompletePayment) {
+      return;
+    }
+
+    try {
+      window.ttq.track('CompletePayment', eventData);
+      console.log(`[TikTok Pixel] Fired CompletePayment on pixel ${pixel.pixelId}`, eventData);
+    } catch (error) {
+      console.error(`Error tracking CompletePayment on TikTok pixel ${pixel.pixelId}:`, error);
+    }
+  });
 }
