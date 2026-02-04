@@ -212,6 +212,23 @@ export const loader = async ({ request }) => {
             testMode: p.testMode,
             testEventCode: p.testEventCode,
           })),
+        snapchat: pixels
+          .filter(p => p.type === 'snapchat_pixel')
+          .map(p => ({
+            pixelId: p.pixelId,
+            enableStartCheckout: p.enableStartCheckout,
+            enablePurchase: p.enablePurchase,
+            testMode: p.testMode,
+          })),
+        tiktok: pixels
+          .filter(p => p.type === 'tiktok_pixel')
+          .map(p => ({
+            pixelId: p.pixelId,
+            enableTikTokInitiateCheckout: p.enableTikTokInitiateCheckout,
+            enablePlaceAnOrder: p.enablePlaceAnOrder,
+            enableCompletePayment: p.enableCompletePayment,
+            testMode: p.testMode,
+          })),
       },
       // Shipping rates for storefront
       shippingRates: shippingRates.map(rate => ({

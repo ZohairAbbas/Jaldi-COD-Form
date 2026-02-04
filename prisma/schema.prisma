@@ -291,14 +291,26 @@ model Downsell {
 model Pixel {
   id                     String       @id @default(cuid())
   shopId                 String
-  type                   String
+  type                   String       // "facebook_pixel" | "facebook_capi" | "snapchat_pixel" | "tiktok_pixel" | "tiktok_events_api"
   label                  String?
   pixelId                String
   accessToken            String?
+
+  // Facebook-specific fields
   purchaseEvent          String       @default("Purchase")
   enableAddToCart        Boolean      @default(false)
   enableAddPaymentInfo   Boolean      @default(false)
   enableInitiateCheckout Boolean      @default(true)
+
+  // Snapchat-specific fields
+  enableStartCheckout    Boolean      @default(true)   // START_CHECKOUT event
+  enablePurchase         Boolean      @default(true)   // PURCHASE event
+
+  // TikTok-specific fields
+  enableTikTokInitiateCheckout Boolean @default(true)  // InitiateCheckout event (pixel only)
+  enablePlaceAnOrder            Boolean @default(true)  // PlaceAnOrder event (pixel + API)
+  enableCompletePayment         Boolean @default(true)  // CompletePayment event (pixel + API)
+
   enabled                Boolean      @default(true)
   testMode               Boolean      @default(false)
   testEventCode          String?

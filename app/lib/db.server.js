@@ -880,8 +880,14 @@ export async function getEnabledPixels(shopId) {
       enableAddToCart: true,
       enableAddPaymentInfo: true,
       enableInitiateCheckout: true,
+      enableStartCheckout: true,
+      enablePurchase: true,
+      enableTikTokInitiateCheckout: true,
+      enablePlaceAnOrder: true,
+      enableCompletePayment: true,
       testMode: true,
       testEventCode: true,
+      shopId: true,
     },
   });
 }
