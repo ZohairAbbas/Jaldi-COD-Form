@@ -1,4 +1,5 @@
 import prisma from "../db.server.js";
+import { CORE_FIELD_IDS } from "./constants.js";
 
 /**
  * Get or create shop record with default settings and form config
@@ -18,6 +19,12 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       data: {
         shopifyDomain,
         accessToken,
+        setupProgress: {
+          step1Completed: false,
+          step2Completed: false,
+          welcomeDismissed: false,
+          setupGuideDismissed: false,
+        },
         settings: {
           create: getDefaultSettings(),
         },
@@ -37,6 +44,26 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       shop = await prisma.shop.update({
         where: { shopifyDomain },
         data: { accessToken },
+        include: {
+          settings: true,
+          formConfig: true,
+          upsells: true,
+        },
+      });
+    }
+
+    // Initialize setupProgress if missing
+    if (!shop.setupProgress) {
+      shop = await prisma.shop.update({
+        where: { shopifyDomain },
+        data: {
+          setupProgress: {
+            step1Completed: false,
+            step2Completed: false,
+            welcomeDismissed: false,
+            setupGuideDismissed: false,
+          },
+        },
         include: {
           settings: true,
           formConfig: true,
@@ -79,6 +106,10 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
           visible: true,
           order: 2,
           section: "shipping-address",
+          fieldCategory: "shopify",
+          isCore: true,
+          isDeletable: false,
+          shopifyProperty: "order.email"
         };
 
         // Update order of existing fields that come after email (order >= 2)
@@ -155,34 +186,32 @@ export function getDefaultFormConfig() {
 
   const fields = [
     {
-      id: "full-name",
+      id: "first-name",
       type: "text",
-      label: "Full Name",
-      placeholder: "Full Name",
+      label: "First Name",
+      placeholder: "First Name",
       required: true,
       visible: true,
       order: 0,
       section: "shipping-address",
-    },
-    {
-      id: "first-name",
-      type: "text",
-      label: "First name",
-      placeholder: "First name",
-      required: false,
-      visible: false,
-      order: 1,
-      section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.first_name"
     },
     {
       id: "last-name",
       type: "text",
-      label: "Last name",
-      placeholder: "Last name",
+      label: "Last Name",
+      placeholder: "Last Name",
       required: false,
       visible: false,
-      order: 2,
+      order: 1,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.last_name"
     },
     {
       id: "email",
@@ -191,8 +220,12 @@ export function getDefaultFormConfig() {
       placeholder: "email@example.com",
       required: true,
       visible: true,
-      order: 3,
+      order: 2,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "order.email"
     },
     {
       id: "phone",
@@ -203,6 +236,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 3,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.phone"
     },
     {
       id: "address",
@@ -213,6 +250,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 4,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.address1"
     },
     {
       id: "address2",
@@ -223,6 +264,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 5,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.address2"
     },
     {
       id: "province",
@@ -234,6 +279,10 @@ export function getDefaultFormConfig() {
       order: 6,
       section: "shipping-address",
       options: ["Punjab", "Sindh", "KPK", "Balochistan", "Islamabad"],
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.province"
     },
     {
       id: "city",
@@ -244,6 +293,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 7,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: true,
+      isDeletable: false,
+      shopifyProperty: "shipping_address.city"
     },
     {
       id: "postal-code",
@@ -254,6 +307,10 @@ export function getDefaultFormConfig() {
       visible: true,
       order: 8,
       section: "shipping-address",
+      fieldCategory: "shopify",
+      isCore: false,
+      isDeletable: true,
+      shopifyProperty: "shipping_address.zip"
     },
   ];
 
@@ -818,12 +875,19 @@ export async function getEnabledPixels(shopId) {
       id: true,
       type: true,
       pixelId: true,
+      accessToken: true,
       purchaseEvent: true,
       enableAddToCart: true,
       enableAddPaymentInfo: true,
       enableInitiateCheckout: true,
+      enableStartCheckout: true,
+      enablePurchase: true,
+      enableTikTokInitiateCheckout: true,
+      enablePlaceAnOrder: true,
+      enableCompletePayment: true,
       testMode: true,
       testEventCode: true,
+      shopId: true,
     },
   });
 }
@@ -1079,4 +1143,50 @@ export async function ensureFreeShippingRate(shopId) {
   }
 
   return existingFree;
+}
+
+// ============================================
+// DASHBOARD STATS FUNCTIONS
+// ============================================
+
+/**
+ * Get dashboard stats for last 7 days
+ */
+export async function getDashboardStats(shopId) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  // Form opens (sessions created in last 7 days)
+  const formOpens = await prisma.orderSession.count({
+    where: {
+      shopId,
+      createdAt: { gte: sevenDaysAgo },
+    },
+  });
+
+  // Orders in last 7 days
+  const orders = await prisma.order.findMany({
+    where: {
+      shopId,
+      createdAt: { gte: sevenDaysAgo },
+    },
+    select: {
+      total: true,
+    },
+  });
+
+  const orderCount = orders.length;
+
+  // Revenue calculation
+  const revenue = orders.reduce((sum, order) => sum + order.total, 0);
+
+  // Conversion rate
+  const conversionRate = formOpens > 0 ? ((orderCount / formOpens) * 100).toFixed(1) : "0.0";
+
+  return {
+    formOpens,
+    orderCount,
+    revenue,
+    conversionRate: parseFloat(conversionRate),
+  };
 }

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { logPixelEvent } from './db.server.js';
+import { getCurrencyCode } from './constants.js';
 
 /**
  * Generate unique event ID for deduplication
@@ -29,16 +30,10 @@ export function hashPhone(phone) {
 
 /**
  * Get currency code from country
+ * @deprecated Use getCurrencyCode from constants.js instead
  */
 export function getCurrencyFromCountry(country) {
-  const currencyMap = {
-    PAK: 'PKR',
-    UAE: 'AED',
-    QATAR: 'QAR',
-    KUWAIT: 'KWD',
-    KSA: 'SAR',
-  };
-  return currencyMap[country] || 'PKR';
+  return getCurrencyCode(country);
 }
 
 /**
@@ -171,47 +166,224 @@ export async function firePurchaseEvent(pixels, orderData) {
     return [];
   }
 
-  // Build event data
-  const eventData = {
-    eventName: 'Purchase',
-    eventId: eventId || generateEventId(),
-    eventTime: Math.floor(Date.now() / 1000),
-    eventSourceUrl: eventSourceUrl || '',
-    userData: {
-      email: customerInfo.email,
-      phone: customerInfo.phone,
-      firstName: customerInfo.firstName,
-      lastName: customerInfo.lastName,
-      city: address.city,
-      province: address.province,
-      country: address.country,
-      clientIpAddress,
-      clientUserAgent,
-      fbc,
-      fbp,
-      fbclid,
-    },
-    customData: {
-      content_ids: items.map(item => item.variantId || item.id),
-      content_type: 'product',
-      value: total,
-      currency: currency || 'PKR',
-      num_items: items.length,
-      order_id: orderNumber,
-    },
-  };
-
-  // Send to all CAPI pixels
+  // Send to all CAPI pixels with their configured event name
   const results = await Promise.all(
-    capiPixels.map(pixel =>
-      sendFacebookCAPIEvent(
-        pixel,
-        {
-          ...eventData,
-          testEventCode: pixel.testMode ? pixel.testEventCode : null,
-        }
-      )
-    )
+    capiPixels.map(pixel => {
+      const eventData = {
+        eventName: pixel.purchaseEvent || 'Purchase',
+        eventId: eventId || generateEventId(),
+        eventTime: Math.floor(Date.now() / 1000),
+        eventSourceUrl: eventSourceUrl || '',
+        userData: {
+          email: customerInfo.email,
+          phone: customerInfo.phone,
+          firstName: customerInfo.firstName,
+          lastName: customerInfo.lastName,
+          city: address.city,
+          province: address.province,
+          country: address.country,
+          clientIpAddress,
+          clientUserAgent,
+          fbc,
+          fbp,
+          fbclid,
+        },
+        customData: {
+          content_ids: items.map(item => item.variantId || item.id),
+          content_type: 'product',
+          value: total,
+          currency: currency || getCurrencyCode(),
+          num_items: items.length,
+          order_id: orderNumber,
+        },
+      };
+
+      return sendFacebookCAPIEvent(pixel, {
+        ...eventData,
+        testEventCode: pixel.testMode ? pixel.testEventCode : null,
+      });
+    })
+  );
+
+  return results;
+}
+
+// ============================================
+// TIKTOK EVENTS API
+// ============================================
+
+/**
+ * Send event to TikTok Events API
+ */
+export async function sendTikTokEventsAPI(pixel, eventData) {
+  const {
+    eventName,
+    eventId,
+    eventTime,
+    eventSourceUrl,
+    userData = {},
+    customData = {},
+    testEventCode,
+  } = eventData;
+
+  try {
+    // Build user data with hashed values
+    const hashedUserData = {
+      ...(userData.email && { email: [hashForFacebook(userData.email)] }),
+      ...(userData.phone && { phone: [hashPhone(userData.phone)] }),
+      ...(userData.clientIpAddress && { ip: userData.clientIpAddress }),
+      ...(userData.clientUserAgent && { user_agent: userData.clientUserAgent }),
+    };
+
+    // Build the TikTok Events API request payload
+    const payload = {
+      pixel_code: pixel.pixelId,
+      event: eventName,
+      event_id: eventId,
+      timestamp: eventTime || Math.floor(Date.now() / 1000).toString(),
+      context: {
+        user: hashedUserData,
+        page: {
+          url: eventSourceUrl || '',
+        },
+        ip: userData.clientIpAddress || '',
+        user_agent: userData.clientUserAgent || '',
+      },
+      properties: {
+        contents: customData.content_ids ? customData.content_ids.map(id => ({ content_id: id })) : [],
+        content_type: customData.content_type || 'product',
+        currency: customData.currency || 'USD',
+        value: customData.value ? String(customData.value) : '0',
+      },
+      ...(testEventCode && { test_event_code: testEventCode }),
+    };
+
+    // Send to TikTok Events API
+    const url = `https://business-api.tiktok.com/open_api/v1.3/pixel/track/`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Token': pixel.accessToken,
+      },
+      body: JSON.stringify({ data: [payload] }),
+    });
+
+    const result = await response.json();
+
+    // Log the event
+    await logPixelEvent({
+      pixelId: pixel.id,
+      shopId: pixel.shopId,
+      eventName,
+      eventId,
+      source: 'server',
+      eventData: payload,
+      status: response.ok ? 'sent' : 'failed',
+      responseCode: response.status,
+      errorMessage: response.ok ? null : JSON.stringify(result),
+      orderId: customData.order_id || null,
+      orderNumber: customData.order_id || null,
+    });
+
+    return {
+      success: response.ok,
+      response: result,
+    };
+  } catch (error) {
+    console.error('TikTok Events API error:', error);
+
+    // Log the failed event
+    await logPixelEvent({
+      pixelId: pixel.id,
+      shopId: pixel.shopId,
+      eventName,
+      eventId,
+      source: 'server',
+      eventData: { error: error.message },
+      status: 'failed',
+      errorMessage: error.message,
+    });
+
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * Fire TikTok Events API events for PlaceAnOrder and CompletePayment
+ */
+export async function fireTikTokEvents(pixels, orderData) {
+  const {
+    orderId,
+    orderNumber,
+    total,
+    items,
+    currency,
+    customerInfo,
+    eventId,
+    eventSourceUrl,
+    clientIpAddress,
+    clientUserAgent,
+  } = orderData;
+
+  const tiktokPixels = pixels.filter(p => p.type === 'tiktok_events_api' && p.enabled);
+
+  if (tiktokPixels.length === 0) {
+    return [];
+  }
+
+  // Fire both PlaceAnOrder and CompletePayment events
+  const results = await Promise.all(
+    tiktokPixels.flatMap(pixel => {
+      const baseEventData = {
+        eventId: eventId || generateEventId(),
+        eventTime: Math.floor(Date.now() / 1000),
+        eventSourceUrl: eventSourceUrl || '',
+        userData: {
+          email: customerInfo.email,
+          phone: customerInfo.phone,
+          clientIpAddress,
+          clientUserAgent,
+        },
+        customData: {
+          content_ids: items.map(item => item.variantId || item.id),
+          content_type: 'product',
+          value: total,
+          currency: currency || 'USD',
+          order_id: orderNumber,
+        },
+      };
+
+      const events = [];
+
+      // PlaceAnOrder event
+      if (pixel.enablePlaceAnOrder) {
+        events.push(
+          sendTikTokEventsAPI(pixel, {
+            ...baseEventData,
+            eventName: 'PlaceAnOrder',
+            testEventCode: pixel.testMode ? pixel.testEventCode : null,
+          })
+        );
+      }
+
+      // CompletePayment event
+      if (pixel.enableCompletePayment) {
+        events.push(
+          sendTikTokEventsAPI(pixel, {
+            ...baseEventData,
+            eventName: 'CompletePayment',
+            testEventCode: pixel.testMode ? pixel.testEventCode : null,
+          })
+        );
+      }
+
+      return events;
+    })
   );
 
   return results;

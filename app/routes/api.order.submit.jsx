@@ -68,6 +68,14 @@ export const action = async ({ request }) => {
       },
     };
 
+    // Get field labels from formConfig for custom fields
+    const fieldLabels = shopData.formConfig?.fields
+      ? JSON.parse(shopData.formConfig.fields).reduce((acc, field) => {
+          acc[field.id] = field.label;
+          return acc;
+        }, {})
+      : {};
+
     const shopifyOrderResult = await createShopifyOrder(admin, {
       customerInfo: {
         firstName: orderData.firstName,
@@ -87,6 +95,8 @@ export const action = async ({ request }) => {
       subtotal: totals.subtotal,
       shipping: totals.shipping,
       total: totals.total,
+      customFields: orderData.customFields || {},
+      fieldLabels: fieldLabels,
     }, shopData.shopifyDomain);
 
     if (shopifyOrderResult.success) {

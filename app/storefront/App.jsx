@@ -4,9 +4,9 @@ import CODForm from './CODForm';
 import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
-import { initializePixels, resetEventId } from './pixels';
-import { normalizePrice } from '../lib/constants';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
+import { initializePixels, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
+import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
 
 // Default config to show button immediately while real config loads
 const defaultConfig = {
@@ -783,6 +783,36 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       if (result.success) {
         setOrderResult(result);
 
+        // Track Purchase event with the same event ID used for server-side tracking
+        const currency = getCurrencyCode(config.shop?.country);
+
+        trackPurchase({
+          items: orderData.items,
+          total: result.total || orderData.total,
+          orderNumber: result.shopifyOrderNumber,
+          eventId: orderData.pixelEventId, // Use same event ID for deduplication
+        }, currency);
+
+        // Track Snapchat Purchase event
+        trackSnapchatPurchase({
+          items: orderData.items,
+          total: result.total || orderData.total,
+          orderNumber: result.shopifyOrderNumber,
+        }, currency);
+
+        // Track TikTok events (PlaceAnOrder and CompletePayment)
+        trackTikTokPlaceAnOrder({
+          items: orderData.items,
+          total: result.total || orderData.total,
+          orderNumber: result.shopifyOrderNumber,
+        }, currency);
+
+        trackTikTokCompletePayment({
+          items: orderData.items,
+          total: result.total || orderData.total,
+          orderNumber: result.shopifyOrderNumber,
+        }, currency);
+
         // Check if there's a post-purchase upsell to show
         if (result.postPurchaseUpsell) {
           // Directly show post-purchase upsell without success modal
@@ -1195,6 +1225,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onAccept={handleUpsellAccept}
           onDecline={handleUpsellDecline}
           isRTL={config?.settings?.enableRTL}
+          currencySymbol={getCurrencySymbol(config?.shop?.country)}
         />,
         document.body
       )}
@@ -1207,6 +1238,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onDecline={handlePostPurchaseDecline}
           isRTL={config?.settings?.enableRTL}
           isPostPurchase={true}
+          currencySymbol={getCurrencySymbol(config?.shop?.country)}
         />,
         document.body
       )}
@@ -1219,6 +1251,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onAccept={handleDownsellAccept}
           onDecline={handleDownsellDecline}
           isRTL={config?.settings?.enableRTL}
+          currencySymbol={getCurrencySymbol(config?.shop?.country)}
         />,
         document.body
       )}

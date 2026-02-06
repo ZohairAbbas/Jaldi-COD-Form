@@ -10,10 +10,12 @@ import {
   updateShippingRate,
   getDefaultShippingRate,
 } from "../lib/db.server";
+import { getCurrencySymbol } from "../lib/constants";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
+  const currencySymbol = getCurrencySymbol(shop.country);
 
   // If editing existing rate
   if (params.id !== "new") {
@@ -21,13 +23,13 @@ export const loader = async ({ request, params }) => {
     if (!rate || rate.shopId !== shop.id) {
       throw new Response("Shipping rate not found", { status: 404 });
     }
-    return { shippingRate: rate, isNew: false, shopId: shop.id };
+    return { shippingRate: rate, isNew: false, shopId: shop.id, currencySymbol };
   }
 
   // New rate with defaults
   const defaultRate = getDefaultShippingRate();
 
-  return { shippingRate: defaultRate, isNew: true, shopId: shop.id };
+  return { shippingRate: defaultRate, isNew: true, shopId: shop.id, currencySymbol };
 };
 
 export const action = async ({ request, params }) => {
@@ -59,7 +61,7 @@ export const action = async ({ request, params }) => {
 };
 
 export default function ShippingRateEditor() {
-  const { shippingRate: initialRate, isNew } = useLoaderData();
+  const { shippingRate: initialRate, isNew, currencySymbol } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -270,7 +272,7 @@ export default function ShippingRateEditor() {
             <s-text variant="heading-sm">Rate price</s-text>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "16px", fontWeight: "500", color: "#6B7280" }}>
-                Rs.
+                {currencySymbol}
               </span>
               <input
                 type="number"

@@ -161,7 +161,18 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
         ...(recoveryDiscountAmount > 0 ? [{
           name: "_recovery_discount",
           value: recoveryDiscountAmount.toString()
-        }] : [])
+        }] : []),
+        // Add custom fields to note_attributes
+        ...(orderData.customFields && Object.keys(orderData.customFields).length > 0
+          ? Object.entries(orderData.customFields).map(([fieldId, fieldValue]) => {
+              // Get field label from formConfig if available, otherwise use fieldId
+              const fieldLabel = orderData.fieldLabels?.[fieldId] || fieldId.replace(/custom-/g, '').replace(/-/g, ' ');
+              return {
+                name: fieldLabel,
+                value: String(fieldValue || '')
+              };
+            })
+          : [])
       ],
       transactions: [
         {
@@ -182,7 +193,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       if (oneTickDiscount > 0) discountParts.push("1-TICK");
       if (recoveryDiscountAmount > 0) discountParts.push("RECOVERY");
 
-      const discountCodeName = `CUSTOM DISCOUNT (${discountParts.join(", ")}: RS.${totalDiscount.toFixed(2)})`;
+      // Get currency symbol based on country
+      const countryCode = COUNTRY_NAME_TO_CODE[address.country] || 'PAK';
+      const currencySymbol = getCurrencySymbol(countryCode);
+      const discountCodeName = `CUSTOM DISCOUNT (${discountParts.join(", ")}: ${currencySymbol}${totalDiscount.toFixed(2)})`;
 
       restOrder.discount_codes = [{
         code: discountCodeName,
@@ -270,9 +284,12 @@ export function validateOrderData(orderData) {
     fieldErrors.firstName = "First name is required";
   }
 
-  if (!orderData.lastName || orderData.lastName.trim() === "") {
-    errors.push("Last name is required");
-    fieldErrors.lastName = "Last name is required";
+  // lastName is optional now - will be duplicated from firstName if empty
+
+  // Validate email
+  if (!orderData.email || orderData.email.trim() === "") {
+    errors.push("Email is required");
+    fieldErrors.email = "Email is required";
   }
 
   if (!orderData.phone || orderData.phone.trim() === "") {
@@ -298,10 +315,7 @@ export function validateOrderData(orderData) {
     fieldErrors.city = "City is required";
   }
 
-  if (!orderData.province || orderData.province.trim() === "") {
-    errors.push("Province is required");
-    fieldErrors.province = "Province is required";
-  }
+  // Province, country, postal code are optional - not validated
 
   // Validate items
   if (!orderData.items || orderData.items.length === 0) {

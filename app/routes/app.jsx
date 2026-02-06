@@ -52,7 +52,6 @@ export default function App() {
           <s-link href="/app/settings">Settings</s-link>
           <s-link href="/app/sales-booster">Sales Booster</s-link>
           <s-link href="/app/shipping-rates">Shipping Rates</s-link>
-          <s-link href="/app/orders">Orders</s-link>
           <s-link href="/app/analytics">Analytics</s-link>
           <s-link href="/app/billing">Billing</s-link>
         </s-app-nav>

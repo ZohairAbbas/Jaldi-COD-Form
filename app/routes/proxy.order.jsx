@@ -1,6 +1,6 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
 import { getShopByDomain, getUpsells, getEnabledPixels } from "../lib/db.server";
-import { firePurchaseEvent, getCurrencyFromCountry } from "../lib/pixels.server";
+import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
 import { normalizePrice } from "../lib/constants";
 import prisma from "../db.server";
 
@@ -203,6 +203,26 @@ export const action = async ({ request }) => {
           console.error('Pixel tracking error:', err);
           // Don't fail the order if pixel tracking fails
         });
+
+        // Fire TikTok Events API (PlaceAnOrder and CompletePayment)
+        fireTikTokEvents(pixels, {
+          orderId: dbOrder.id,
+          orderNumber: shopifyResult.orderNumber,
+          total: calculatedTotal,
+          items: items,
+          currency,
+          customerInfo: {
+            email: orderData.email,
+            phone: orderData.phone,
+          },
+          eventId: orderData.pixelEventId,
+          eventSourceUrl: request.headers.get('referer') || '',
+          clientIpAddress,
+          clientUserAgent,
+        }).catch(err => {
+          console.error('TikTok Events API error:', err);
+          // Don't fail the order if pixel tracking fails
+        });
       }
     } catch (pixelError) {
       console.error('Pixel initialization error:', pixelError);
@@ -253,6 +273,7 @@ export const action = async ({ request }) => {
       shopifyOrderId: shopifyResult.orderId,
       shopifyOrderNumber: shopifyResult.orderNumber,
       orderStatusUrl: shopifyResult.orderStatusUrl,
+      total: calculatedTotal,
       postPurchaseUpsell: postPurchaseUpsell,
     });
   } catch (error) {
