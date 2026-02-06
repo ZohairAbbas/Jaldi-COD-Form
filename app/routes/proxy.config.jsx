@@ -28,6 +28,9 @@ export const loader = async ({ request }) => {
     // Return public configuration (no sensitive data)
     return Response.json({
       appPath,
+      ENV: {
+        MIXPANEL_TOKEN: process.env.MIXPANEL_TOKEN || "",
+      },
       formConfig: {
         formTitle: shopData.formConfig.formTitle,
         textColor: shopData.formConfig.textColor,

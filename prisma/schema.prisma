@@ -44,6 +44,26 @@ model Shop {
   settings           Settings?
   shippingRates      ShippingRate[]
   upsells            Upsell[]
+  subscription       Subscription?
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  shopId             String    @unique
+  mantleCustomerId   String?
+  planId             String?
+  planName           String?
+  status             String    @default("trialing")
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  trialEndsAt        DateTime?
+  usageCharges       Json      @default("[]")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  shop               Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([status])
 }
 
 model Settings {
