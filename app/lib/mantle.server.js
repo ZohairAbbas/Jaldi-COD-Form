@@ -9,7 +9,7 @@
  */
 
 import { MantleClient } from '@heymantle/client';
-import db from './db.server';
+import db from '../db.server';
 
 let mantleClient = null;
 
