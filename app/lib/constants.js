@@ -571,7 +571,6 @@ export const SHOPIFY_FIELD_OPTIONS = [
     shopifyProperty: "shipping_address.province",
     icon: "location",
     defaultPlaceholder: "Province",
-    defaultOptions: ["Punjab", "Sindh", "KPK", "Balochistan", "Islamabad"]
   },
   {
     id: "postal-code",
