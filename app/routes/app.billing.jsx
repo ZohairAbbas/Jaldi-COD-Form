@@ -4,7 +4,9 @@
  * Manage subscription, view plans, and handle billing
  */
 
-import { useLoaderData, Form, useActionData } from 'react-router';
+import { useLoaderData, Form, useActionData, redirect } from 'react-router';
+import { useEffect } from 'react';
+import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
 import { getOrCreateShop } from '../lib/db.server';
 import {
@@ -22,6 +24,20 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
+  // Check if redirected back from Shopify charge approval
+  const url = new URL(request.url);
+  const chargeApproved = url.searchParams.get('charge_approved') === 'true';
+
+  if (chargeApproved) {
+    console.log('[Billing] Charge approved, syncing subscription status');
+    // Sync subscription status after charge approval
+    try {
+      await syncSubscriptionStatus(shop, session.accessToken);
+    } catch (error) {
+      console.error('Failed to sync subscription after charge approval:', error);
+    }
+  }
+
   // Get or create customer in Mantle
   let customer = null;
   try {
@@ -33,13 +49,14 @@ export const loader = async ({ request }) => {
   // Get subscription details
   const subscription = await getSubscription(shop.id);
 
-  // Get available plans
-  const plans = await getPlans();
+  // Get available plans (pass shop and accessToken)
+  const plans = await getPlans(shop, session.accessToken);
 
   // Track page view
   trackServerEvent(shop.shopifyDomain, 'Billing Page Viewed', {
     has_subscription: !!subscription,
     subscription_status: subscription?.status,
+    charge_approved: chargeApproved,
   });
 
   return {
@@ -50,6 +67,7 @@ export const loader = async ({ request }) => {
     subscription,
     customer,
     plans,
+    chargeApproved,
   };
 };
 
@@ -64,19 +82,29 @@ export const action = async ({ request }) => {
     if (action === 'subscribe') {
       const planId = formData.get('planId');
 
-      const subscription = await subscribeToPlan(
+      const result = await subscribeToPlan(
         shop,
         planId,
         session.accessToken
       );
 
-      // Track subscription event
+      // For Flex Billing, always expect a confirmation URL
+      if (result.confirmationUrl) {
+        // Return the URL for client-side redirect using App Bridge
+        return {
+          success: true,
+          confirmationUrl: result.confirmationUrl,
+          requiresApproval: true
+        };
+      }
+
+      // Track subscription event (for non-flex plans)
       trackServerEvent(shop.shopifyDomain, BILLING_EVENTS.SUBSCRIPTION_STARTED, {
         plan_id: planId,
-        plan_name: subscription.planName,
+        plan_name: result.planName || result.subscription?.planName,
       });
 
-      return { success: true, subscription };
+      return { success: true, subscription: result };
     }
 
     if (action === 'cancel') {
@@ -109,22 +137,49 @@ export const action = async ({ request }) => {
 };
 
 export default function BillingPage() {
-  const { shop, subscription, customer, plans } = useLoaderData();
+  const { shop, subscription, customer, plans, chargeApproved } = useLoaderData();
   const actionData = useActionData();
+  const app = useAppBridge();
 
   const hasActiveSubscription =
     subscription &&
     ['active', 'trialing'].includes(subscription.status) &&
     !subscription.cancelAtPeriodEnd;
 
+  // Handle redirect to Shopify charge approval page
+  useEffect(() => {
+    if (actionData?.confirmationUrl) {
+      console.log('[Billing] Redirecting to confirmation URL:', actionData.confirmationUrl);
+      // Redirect the entire page to the Shopify charge approval URL
+      // Using window.top.location to break out of iframe if needed
+      if (window.top) {
+        window.top.location.href = actionData.confirmationUrl;
+      } else {
+        window.location.href = actionData.confirmationUrl;
+      }
+    }
+  }, [actionData]);
+
   return (
     <s-page heading="Billing & Subscription">
       {/* Success/Error Messages */}
-      {actionData?.success && (
+      {chargeApproved && (
+        <s-banner status="success" style={{ marginBottom: '16px' }}>
+          🎉 Subscription charge approved successfully! Your plan is now active.
+        </s-banner>
+      )}
+
+      {actionData?.success && !actionData?.confirmationUrl && !chargeApproved && (
         <s-banner status="success" style={{ marginBottom: '16px' }}>
           {actionData.cancelled
             ? 'Subscription cancelled successfully'
             : 'Subscription updated successfully'}
+        </s-banner>
+      )}
+
+      {actionData?.confirmationUrl && (
+        <s-banner status="info" style={{ marginBottom: '16px' }}>
+          Redirecting to Shopify to approve the subscription charge...
         </s-banner>
       )}
 
@@ -242,9 +297,11 @@ export default function BillingPage() {
                   )}
 
                   <s-text variant="heading-xl">
-                    ${plan.price}
+                    ${plan.presentmentAmount || plan.price || 0}
                     {plan.interval && (
-                      <s-text variant="body-sm">/{plan.interval}</s-text>
+                      <s-text variant="body-sm">
+                        /{plan.interval === 'EVERY_30_DAYS' ? 'month' : plan.recurringInterval || 'month'}
+                      </s-text>
                     )}
                   </s-text>
 
