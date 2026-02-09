@@ -114,15 +114,23 @@ function getProductCardData(productCard) {
     if (!productId) {
       const productIdInput = productCard.querySelector('input[name="product-id"]');
       productId = productIdInput?.value;
+      console.log('Preventify: Product ID from input:', productId);
     }
 
-    if (!productId) return null;
+    if (!productId) {
+      console.log('Preventify: No product ID found, skipping');
+      return null;
+    }
 
     // Get variant ID from the hidden input in the quick-add form
     const variantInput = productCard.querySelector('input[name="id"]');
     const variantId = variantInput?.value;
+    console.log('Preventify: Variant ID:', variantId);
 
-    if (!variantId) return null;
+    if (!variantId) {
+      console.log('Preventify: No variant ID found, skipping');
+      return null;
+    }
 
     // Get product title - try multiple selectors
     let titleElement = productCard.querySelector('.text-block p, h3');
