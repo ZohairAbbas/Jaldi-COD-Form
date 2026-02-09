@@ -351,13 +351,18 @@ function renderPopupOnProductCards(shopDomain) {
         return;
       }
 
-      // Create button container - placed below the card content
+      // Find and hide the Add to Cart button area
+      const quickAddContainer = productCard.querySelector('.quick-add');
+      if (quickAddContainer) {
+        quickAddContainer.style.display = 'none';
+      }
+
+      // Create button container - replaces Add to Cart
       const buttonContainer = document.createElement('div');
       buttonContainer.className = 'preventify-product-card-button';
       buttonContainer.style.cssText = `
         position: relative;
         z-index: 10;
-        margin-top: 8px;
       `;
       buttonContainer.dataset.shop = shopDomain;
 
@@ -371,8 +376,12 @@ function renderPopupOnProductCards(shopDomain) {
       const root = createRoot(buttonContainer);
       root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} />);
 
-      // Append button after the card (below pricing)
-      productCard.appendChild(buttonContainer);
+      // Place button where Add to Cart was
+      if (quickAddContainer) {
+        quickAddContainer.parentNode.insertBefore(buttonContainer, quickAddContainer);
+      } else {
+        productCard.appendChild(buttonContainer);
+      }
       console.log(`Preventify: Rendered button on product card ${index} for product ${productData.title}`);
     } catch (error) {
       console.error(`Preventify: Error rendering button on product card ${index}`, error);
