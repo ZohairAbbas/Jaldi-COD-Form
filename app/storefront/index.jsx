@@ -351,43 +351,28 @@ function renderPopupOnProductCards(shopDomain) {
         return;
       }
 
-      // Find the image area to overlay button on - try multiple selectors
-      let cardGallery = productCard.querySelector('.card-gallery');
-
-      // Fallback: Try .card__media (Dawn theme and similar)
-      if (!cardGallery) {
-        cardGallery = productCard.querySelector('.card__media');
-      }
-
-      if (!cardGallery) {
-        console.log(`Preventify: Could not find image area for product card ${index}`);
-        return;
-      }
-
-      // Make sure card-gallery has relative positioning for absolute child
-      const galleryStyle = window.getComputedStyle(cardGallery);
-      if (galleryStyle.position === 'static') {
-        cardGallery.style.position = 'relative';
-      }
-
-      // Create button container - positioned at bottom of image
+      // Create button container - placed below the card content
       const buttonContainer = document.createElement('div');
       buttonContainer.className = 'preventify-product-card-button';
       buttonContainer.style.cssText = `
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        right: 10px;
+        position: relative;
         z-index: 10;
+        margin-top: 8px;
       `;
       buttonContainer.dataset.shop = shopDomain;
+
+      // Stop clicks from propagating to parent links
+      buttonContainer.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      });
 
       // Render React component
       const root = createRoot(buttonContainer);
       root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} />);
 
-      // Append button inside the card-gallery (not after)
-      cardGallery.appendChild(buttonContainer);
+      // Append button after the card (below pricing)
+      productCard.appendChild(buttonContainer);
       console.log(`Preventify: Rendered button on product card ${index} for product ${productData.title}`);
     } catch (error) {
       console.error(`Preventify: Error rendering button on product card ${index}`, error);
