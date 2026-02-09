@@ -107,7 +107,15 @@ function getProductCardData(productCard) {
   if (!productCard) return null;
 
   try {
-    const productId = productCard.dataset.productId;
+    // Try to get product ID from data attribute first
+    let productId = productCard.dataset.productId;
+
+    // Fallback: Look for hidden input with name="product-id" (Dawn theme)
+    if (!productId) {
+      const productIdInput = productCard.querySelector('input[name="product-id"]');
+      productId = productIdInput?.value;
+    }
+
     if (!productId) return null;
 
     // Get variant ID from the hidden input in the quick-add form
@@ -116,29 +124,41 @@ function getProductCardData(productCard) {
 
     if (!variantId) return null;
 
-    // Get product title from the text-block or h3
-    const titleElement = productCard.querySelector('.text-block p, h3');
+    // Get product title - try multiple selectors
+    let titleElement = productCard.querySelector('.text-block p, h3');
+    // Fallback: Try .card__heading (Dawn theme)
+    if (!titleElement) {
+      titleElement = productCard.querySelector('.card__heading a, .card__heading');
+    }
     const productTitle = titleElement?.textContent?.trim();
 
-    // Get price from product-price component
-    const priceElement = productCard.querySelector('product-price .price');
+    // Get price - try multiple selectors
+    let priceElement = productCard.querySelector('product-price .price');
+    // Fallback: Try .price-item--sale or .price-item (Dawn theme)
+    if (!priceElement) {
+      priceElement = productCard.querySelector('.price-item--sale, .price-item--regular');
+    }
     const priceText = priceElement?.textContent?.trim();
     let price = 0;
 
     if (priceText) {
-      // Extract numeric value from price text (e.g., "Rs.0.00" or "QR 139,00" -> normalized)
+      // Extract numeric value from price text (e.g., "Rs.0.00" or "QAR 129,00" -> normalized)
       const priceMatch = priceText.match(/[\d,]+\.?\d*/);
       if (priceMatch) {
         price = normalizePrice(priceMatch[0]);
       }
     }
 
-    // Get product image from the first slideshow-slide img
-    const imageElement = productCard.querySelector('slideshow-slide img, .product-media__image');
+    // Get product image - try multiple selectors
+    let imageElement = productCard.querySelector('slideshow-slide img, .product-media__image');
+    // Fallback: Try .card__media img or .media img (Dawn theme)
+    if (!imageElement) {
+      imageElement = productCard.querySelector('.card__media img, .media img');
+    }
     const productImage = imageElement?.src;
 
     // Check if product is sold out by looking for sold out badge
-    const soldOutBadge = productCard.querySelector('.product-badges__badge');
+    const soldOutBadge = productCard.querySelector('.product-badges__badge, .badge');
     const isSoldOut = soldOutBadge?.textContent?.trim().toLowerCase().includes('sold out');
 
     if (isSoldOut) {
