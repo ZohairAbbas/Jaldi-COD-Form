@@ -173,7 +173,7 @@ function getProductCardData(productCard) {
       return null;
     }
 
-    return {
+    const productData = {
       variantId: `gid://shopify/ProductVariant/${variantId}`,
       title: productTitle || 'Product',
       variant: null,
@@ -181,6 +181,9 @@ function getProductCardData(productCard) {
       price: price,
       image: productImage,
     };
+
+    console.log('Preventify: Extracted product data:', productData);
+    return productData;
   } catch (error) {
     console.error('Preventify: Error extracting product card data', error);
     return null;
