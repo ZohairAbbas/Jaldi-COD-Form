@@ -286,11 +286,7 @@ export function validateOrderData(orderData) {
 
   // lastName is optional now - will be duplicated from firstName if empty
 
-  // Validate email
-  if (!orderData.email || orderData.email.trim() === "") {
-    errors.push("Email is required");
-    fieldErrors.email = "Email is required";
-  }
+  // Email is now optional - no validation needed
 
   if (!orderData.phone || orderData.phone.trim() === "") {
     errors.push("Phone number is required");

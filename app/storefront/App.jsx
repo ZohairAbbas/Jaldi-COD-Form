@@ -665,15 +665,16 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           // On cart page, use all cart items
           setCart({ items: cartItems });
         }
-      } else if (cartItems.length === 0 || !config?.settings?.allowCartItems) {
-        // For popup mode when no cart items or cart items disabled
+      } else if (cartItems.length === 0) {
+        // For popup mode when no cart items
         if (currentProduct) {
           setCart({ items: [currentProduct] });
         } else {
           setCart({ items: [] });
         }
       } else {
-        // For popup mode with cart items allowed, combine current product + cart by default
+        // For popup mode with cart items, combine current product + cart by default
+        // (This happens both when allowCartItems is enabled or disabled)
         if (currentProduct) {
           setCart({ items: [currentProduct, ...cartItems] });
         } else {
@@ -694,12 +695,19 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Update cart based on product selection
   useEffect(() => {
-    if (mode === 'popup' && config?.settings?.allowCartItems && currentProduct) {
-      if (productSelection === 'current') {
-        setCart({ items: [currentProduct] });
-      } else {
-        // current+cart
+    if (mode === 'popup' && currentProduct) {
+      // When allowCartItems is DISABLED, always include both cart and current product
+      if (!config?.settings?.allowCartItems) {
         setCart({ items: [currentProduct, ...fullCart.items] });
+      }
+      // When allowCartItems is ENABLED, respect the user's selection
+      else if (config?.settings?.allowCartItems) {
+        if (productSelection === 'current') {
+          setCart({ items: [currentProduct] });
+        } else {
+          // current+cart
+          setCart({ items: [currentProduct, ...fullCart.items] });
+        }
       }
     }
   }, [productSelection, config, mode, currentProduct, fullCart]);

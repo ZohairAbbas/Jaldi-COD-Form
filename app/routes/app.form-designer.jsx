@@ -13,6 +13,7 @@ import LivePreview from "../components/FormDesigner/LivePreview";
 import StyleCustomizer from "../components/FormDesigner/StyleCustomizer";
 import ButtonCustomizer from "../components/Settings/ButtonCustomizer";
 import CardButtonCustomizer from "../components/Settings/CardButtonCustomizer";
+import FormModeSelector from "../components/Settings/FormModeSelector";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -253,6 +254,10 @@ export default function FormDesigner() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
             {/* Left Column - Configuration */}
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <s-section>
+                <FormModeSelector settings={settings} onUpdate={handleSettingsUpdate} />
+              </s-section>
+
               <s-section>
                 <SectionManager sections={sections} onUpdate={setSections} />
               </s-section>
