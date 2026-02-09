@@ -504,7 +504,7 @@ export function parsePrice(price, defaultValue = 0) {
  */
 
 // Core field IDs that cannot be deleted
-export const CORE_FIELD_IDS = ["first-name", "phone", "address", "city", "email"];
+export const CORE_FIELD_IDS = ["first-name", "phone", "address", "city"];
 
 // Shopify field options with their mappings
 export const SHOPIFY_FIELD_OPTIONS = [
@@ -571,7 +571,6 @@ export const SHOPIFY_FIELD_OPTIONS = [
     shopifyProperty: "shipping_address.province",
     icon: "location",
     defaultPlaceholder: "Province",
-    defaultOptions: ["Punjab", "Sindh", "KPK", "Balochistan", "Islamabad"]
   },
   {
     id: "postal-code",

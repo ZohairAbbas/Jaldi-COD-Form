@@ -290,8 +290,14 @@ function renderPopupOnProductCards(shopDomain) {
 
   console.log(`Preventify: Rendering popup buttons on ${pageType} product cards`);
 
-  // Find all product cards
-  const productCards = document.querySelectorAll('product-card[data-product-id]');
+  // Find all product cards - try multiple selectors for different themes
+  let productCards = document.querySelectorAll('product-card[data-product-id]');
+
+  // Fallback: Try li.grid__item (Dawn theme and similar)
+  if (productCards.length === 0) {
+    console.log('Preventify: No product-card elements found, trying li.grid__item');
+    productCards = document.querySelectorAll('li.grid__item .card-wrapper');
+  }
 
   if (productCards.length === 0) {
     console.log('Preventify: No product cards found on page');
@@ -314,11 +320,16 @@ function renderPopupOnProductCards(shopDomain) {
         return;
       }
 
-      // Find the card-gallery (image area) to overlay button on
-      const cardGallery = productCard.querySelector('.card-gallery');
+      // Find the image area to overlay button on - try multiple selectors
+      let cardGallery = productCard.querySelector('.card-gallery');
+
+      // Fallback: Try .card__media (Dawn theme and similar)
+      if (!cardGallery) {
+        cardGallery = productCard.querySelector('.card__media');
+      }
 
       if (!cardGallery) {
-        console.log(`Preventify: Could not find card-gallery for product card ${index}`);
+        console.log(`Preventify: Could not find image area for product card ${index}`);
         return;
       }
 

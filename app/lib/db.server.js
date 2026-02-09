@@ -102,13 +102,13 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
           type: "text",
           label: "Email",
           placeholder: "email@example.com",
-          required: true,
+          required: false,
           visible: true,
           order: 2,
           section: "shipping-address",
           fieldCategory: "shopify",
-          isCore: true,
-          isDeletable: false,
+          isCore: false,
+          isDeletable: true,
           shopifyProperty: "order.email"
         };
 
@@ -218,13 +218,13 @@ export function getDefaultFormConfig() {
       type: "text",
       label: "Email",
       placeholder: "email@example.com",
-      required: true,
+      required: false,
       visible: true,
       order: 2,
       section: "shipping-address",
       fieldCategory: "shopify",
-      isCore: true,
-      isDeletable: false,
+      isCore: false,
+      isDeletable: true,
       shopifyProperty: "order.email"
     },
     {
