@@ -15,6 +15,9 @@ export function initializePixels(config) {
 
   pixelConfig = config;
 
+  // Capture UTM parameters from URL
+  captureUtmParams();
+
   // Initialize Facebook Pixel for each configured pixel
   if (config.facebook && config.facebook.length > 0) {
     config.facebook.forEach(pixel => {
@@ -72,6 +75,47 @@ function loadFacebookPixel(pixelId) {
 
   // Track PageView automatically
   window.fbq('track', 'PageView');
+}
+
+/**
+ * Capture UTM parameters from URL and store in sessionStorage
+ */
+export function captureUtmParams() {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+
+    utmKeys.forEach(key => {
+      const value = urlParams.get(key);
+      if (value) {
+        sessionStorage.setItem(`jaldi_${key}`, value);
+      }
+    });
+  } catch (error) {
+    console.error('Error capturing UTM params:', error);
+  }
+}
+
+/**
+ * Get stored UTM parameters
+ */
+export function getUtmData() {
+  try {
+    const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    const utmData = {};
+
+    utmKeys.forEach(key => {
+      const value = sessionStorage.getItem(`jaldi_${key}`);
+      if (value) {
+        utmData[key] = value;
+      }
+    });
+
+    return utmData;
+  } catch (error) {
+    console.error('Error getting UTM data:', error);
+    return {};
+  }
 }
 
 /**
@@ -304,6 +348,7 @@ export function getAttributionData() {
     fbp: getFbp(),
     fbc: getFbc(),
     fbclid: getFbclid(),
+    ...getUtmData(),
   };
 }
 

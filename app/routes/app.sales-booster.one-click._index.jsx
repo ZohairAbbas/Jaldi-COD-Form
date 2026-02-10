@@ -222,9 +222,6 @@ export default function SalesBooster() {
         <s-stack direction="block" gap="base">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <s-text variant="heading-sm">2. Create your upsells</s-text>
-            <s-button ref={secondaryAddBtnRef} variant="primary">
-              + Add upsell
-            </s-button>
           </div>
 
           {/* Search */}

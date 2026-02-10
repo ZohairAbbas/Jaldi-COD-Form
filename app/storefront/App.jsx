@@ -71,26 +71,20 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Multi-country detection state
   const [detectedCountry, setDetectedCountry] = useState(null);
 
-  console.log('Preventify COD Form & Upsells: Rendered with mode', mode, 'shop', shopDomain, 'currentProduct', currentProduct);
-
   useEffect(() => {
-    console.log('Preventify COD Form & Upsells: Loading config');
     loadConfig();
   }, []);
 
   // Detect page type on mount and check product availability
   useEffect(() => {
     const pathname = window.location.pathname;
-    console.log('Detecting page type from pathname:', pathname);
 
     // Check for cart page (could be /cart or /cart/)
     if (pathname === '/cart' || pathname.startsWith('/cart/') || pathname.endsWith('/cart')) {
-      console.log('Detected page type: cart');
       setCurrentPageType('cart');
     }
     // Check for product page
     else if (pathname.includes('/products/')) {
-      console.log('Detected page type: product');
       setCurrentPageType('product');
 
       // Check product availability on product pages
@@ -98,17 +92,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }
     // Check for collection page
     else if (pathname.includes('/collections/')) {
-      console.log('Detected page type: collection');
       setCurrentPageType('collection');
     }
     // Check for homepage
     else if (pathname === '/' || pathname === '') {
-      console.log('Detected page type: homepage');
       setCurrentPageType('homepage');
     }
     // Unknown page type
     else {
-      console.log('Detected page type: unknown');
       setCurrentPageType('unknown');
     }
   }, []);
@@ -134,7 +125,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       if (variantId) {
         const variant = productData.variants.find(v => v.id === parseInt(variantId));
         if (variant && !variant.available) {
-          console.log('Preventify: Current variant is sold out');
           setIsProductAvailable(false);
           setCurrentProduct(null);
           setCart({ items: [] });
@@ -192,8 +182,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         }
       }
 
-      console.log('Preventify: Pumper Bundle detected', { quantity, discountedPrice, originalPrice });
-
       return {
         quantity,
         discountedPrice,
@@ -219,7 +207,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
         // Check if variant is available (not sold out)
         if (!variant.available) {
-          console.log('Preventify: Variant is sold out, not updating product data');
           setIsProductAvailable(false);
           return null;
         }
@@ -296,14 +283,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         return;
       }
 
-      console.log('Preventify: Variant changed from', lastKnownVariantId, 'to', newVariantId);
       isUpdating = true;
       lastKnownVariantId = newVariantId;
 
       const newProductData = await fetchVariantData(newVariantId);
 
       if (newProductData) {
-        console.log('Preventify: Updating product data', newProductData);
         setCurrentProduct(newProductData);
         setCart(prevCart => {
           // Keep only cart items (not the current product)
@@ -331,7 +316,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const pumperKey = `${pumperData.quantity}-${pumperData.discountedPrice}`;
       if (pumperKey === lastKnownPumperBundle) return false;
 
-      console.log('Preventify: Pumper Bundle selection changed', pumperData);
       lastKnownPumperBundle = pumperKey;
       lastKnownQuantity = pumperData.quantity;
 
@@ -365,7 +349,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           newProductData.hasBundleDiscount = true;
         }
 
-        console.log('Preventify: Updating with Pumper Bundle price', newProductData);
         setCurrentProduct(newProductData);
         setCart(prevCart => {
           const cartItems = prevCart.items.filter(item => {
@@ -392,7 +375,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       // Check for variant changes
       const currentVariantId = getSelectedVariantId();
       if (currentVariantId && currentVariantId !== lastKnownVariantId) {
-        console.log('Preventify: Poll detected variant change');
         updateProductVariant(currentVariantId);
       }
 
@@ -403,7 +385,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         if (quantityInput) {
           const currentQuantity = parseInt(quantityInput.value);
           if (!isNaN(currentQuantity) && currentQuantity > 0 && currentQuantity !== lastKnownQuantity) {
-            console.log('Preventify: Poll detected quantity change from', lastKnownQuantity, 'to', currentQuantity);
             lastKnownQuantity = currentQuantity;
             setCurrentProduct(prev => prev ? { ...prev, quantity: currentQuantity } : prev);
             setCart(prevCart => {
@@ -427,7 +408,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       if (quantityInput) {
         const newQuantity = parseInt(quantityInput.value);
         if (!isNaN(newQuantity) && newQuantity > 0 && newQuantity !== lastKnownQuantity) {
-          console.log('Preventify: Quantity changed from', lastKnownQuantity, 'to', newQuantity);
           lastKnownQuantity = newQuantity;
           setCurrentProduct(prev => prev ? { ...prev, quantity: newQuantity } : prev);
           setCart(prevCart => {
@@ -461,7 +441,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         setTimeout(() => {
           const currentVariantId = getSelectedVariantId();
           if (currentVariantId && currentVariantId !== lastKnownVariantId) {
-            console.log('Preventify: Click detected variant change');
             updateProductVariant(currentVariantId);
           }
         }, 100);
@@ -494,7 +473,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const urlParams = new URLSearchParams(window.location.search);
       const urlVariantId = urlParams.get('variant');
       if (urlVariantId && urlVariantId !== lastKnownVariantId) {
-        console.log('Preventify: URL change detected variant');
         updateProductVariant(urlVariantId);
       }
     };
@@ -527,7 +505,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Load cart after config is loaded
   useEffect(() => {
     if (config) {
-      console.log('Preventify COD Form & Upsells: Loading cart with config', config);
       loadCart();
     }
   }, [config]);
@@ -546,18 +523,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   const loadConfig = async () => {
     try {
-      console.log('Preventify COD Form & Upsells: Fetching config for shop', shopDomain);
       // Use default app path for initial config fetch
       const response = await fetch(`/apps/preventify/proxy/config?shop=${shopDomain}`);
       const data = await response.json();
-      console.log('Preventify COD Form & Upsells: Config loaded', data);
       setConfig(data);
       setConfigLoaded(true);
 
       // Set dynamic app path from config
       if (data.appPath) {
         setAppPath(data.appPath);
-        console.log('Preventify COD Form & Upsells: Using app path', data.appPath);
       }
 
       // Initialize pixel tracking
@@ -619,7 +593,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     // Check cache first
     const cached = getCachedCountry();
     if (cached) {
-      console.log('Preventify: Using cached country:', cached);
       setDetectedCountry(cached);
       return;
     }
@@ -636,7 +609,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       clearTimeout(timeoutId);
 
       const data = await response.json();
-      console.log('Preventify: Country detected:', data.country, 'source:', data.source);
       setDetectedCountry(data.country);
       cacheCountry(data.country);
     } catch (error) {
@@ -697,7 +669,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       console.error('Failed to load cart:', error);
       // If cart fetch fails but we have a current product, use it
       if (currentProduct) {
-        console.log('Preventify COD Form & Upsells: Cart fetch failed, using current product', currentProduct);
         setCart({ items: [currentProduct] });
       } else {
         setCart({ items: [] });
@@ -748,25 +719,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
     // Collection and homepage always show buttons (controlled by app embed being enabled)
     if (currentPageType === 'collection' || currentPageType === 'homepage') {
-      console.log('shouldShowButton: Collection/homepage, always showing button');
       return true;
     }
 
     if (mode !== 'popup') {
-      console.log('shouldShowButton: Not popup mode, showing button');
       return true; // Only applies to popup mode
     }
 
     const visibility = config?.settings?.buttonPageVisibility || 'product';
-    console.log('shouldShowButton check:', {
-      visibility,
-      currentPageType,
-      shouldShow: (
-        (visibility === 'product' && currentPageType === 'product') ||
-        (visibility === 'cart' && currentPageType === 'cart') ||
-        (visibility === 'both' && ['product', 'cart'].includes(currentPageType))
-      )
-    });
 
     if (visibility === 'disabled') return false;
     if (visibility === 'product') return currentPageType === 'product';
@@ -1078,9 +1038,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
       const result = await response.json();
 
-      if (result.success) {
-        console.log('Post-purchase upsell added to order');
-      } else {
+      if (!result.success) {
         console.error('Failed to add upsell to order:', result.error);
       }
     } catch (error) {
@@ -1117,7 +1075,6 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Don't render if product is sold out on product pages
   if (currentPageType === 'product' && !isProductAvailable) {
-    console.log('Preventify: Product is sold out, not rendering form/button');
     return null;
   }
 

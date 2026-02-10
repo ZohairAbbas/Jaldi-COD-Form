@@ -4,8 +4,6 @@ import db from "../db.server";
 export const action = async ({ request }) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
 
-  console.log(`Received ${topic} webhook for ${shop}`);
-
   try {
     // Check if order has our cart attributes indicating it came from Pay with Card
     const noteAttributes = payload.note_attributes || [];
@@ -15,11 +13,8 @@ export const action = async ({ request }) => {
 
     // Only process orders that came from our Pay with Card flow
     if (!preventifySource || preventifySource.value !== "card_checkout") {
-      console.log("Order not from Preventify Pay with Card, skipping");
       return new Response();
     }
-
-    console.log("Processing Preventify Pay with Card order:", payload.id);
 
     // Find the shop in our database
     const shopData = await db.shop.findUnique({
@@ -37,7 +32,6 @@ export const action = async ({ request }) => {
     });
 
     if (existingOrder) {
-      console.log("Order already exists, skipping:", payload.id);
       return new Response();
     }
 
@@ -86,8 +80,6 @@ export const action = async ({ request }) => {
         customFields: JSON.stringify({}),
       },
     });
-
-    console.log("Created order in database:", order.id, "Shopify order:", payload.name);
 
     return new Response();
   } catch (error) {

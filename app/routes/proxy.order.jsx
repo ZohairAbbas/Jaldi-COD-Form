@@ -62,6 +62,15 @@ export const action = async ({ request }) => {
       },
     };
 
+    // Extract UTM data from pixel attribution for Shopify note_attributes
+    const utmAttribution = {
+      ...(orderData.pixelAttribution?.utm_source && { utm_source: orderData.pixelAttribution.utm_source }),
+      ...(orderData.pixelAttribution?.utm_medium && { utm_medium: orderData.pixelAttribution.utm_medium }),
+      ...(orderData.pixelAttribution?.utm_campaign && { utm_campaign: orderData.pixelAttribution.utm_campaign }),
+      ...(orderData.pixelAttribution?.utm_term && { utm_term: orderData.pixelAttribution.utm_term }),
+      ...(orderData.pixelAttribution?.utm_content && { utm_content: orderData.pixelAttribution.utm_content }),
+    };
+
     // Create order in Shopify FIRST
     const shopifyResult = await createShopifyOrder(
       admin,
@@ -87,6 +96,7 @@ export const action = async ({ request }) => {
         recoveryDiscount: orderData.recoveryDiscount, // Pass recovery discount from downsell
         shippingCost: shippingCost,
         shippingRateName: orderData.shippingRateName || 'Standard Shipping',
+        utmData: utmAttribution, // UTM parameters for note_attributes
       },
       shop.shopifyDomain // Pass shop domain for REST API call
     );
@@ -145,6 +155,12 @@ export const action = async ({ request }) => {
               : (orderData.customFields || {})),
           shippingRateId: orderData.shippingRateId,
           shippingRateName: orderData.shippingRateName,
+          // UTM attribution data
+          ...(orderData.pixelAttribution?.utm_source && { utm_source: orderData.pixelAttribution.utm_source }),
+          ...(orderData.pixelAttribution?.utm_medium && { utm_medium: orderData.pixelAttribution.utm_medium }),
+          ...(orderData.pixelAttribution?.utm_campaign && { utm_campaign: orderData.pixelAttribution.utm_campaign }),
+          ...(orderData.pixelAttribution?.utm_term && { utm_term: orderData.pixelAttribution.utm_term }),
+          ...(orderData.pixelAttribution?.utm_content && { utm_content: orderData.pixelAttribution.utm_content }),
         }),
       },
     });
@@ -176,6 +192,15 @@ export const action = async ({ request }) => {
           || '';
         const clientUserAgent = request.headers.get('user-agent') || '';
 
+        // Extract UTM data from pixel attribution
+        const utmData = {
+          ...(orderData.pixelAttribution?.utm_source && { utm_source: orderData.pixelAttribution.utm_source }),
+          ...(orderData.pixelAttribution?.utm_medium && { utm_medium: orderData.pixelAttribution.utm_medium }),
+          ...(orderData.pixelAttribution?.utm_campaign && { utm_campaign: orderData.pixelAttribution.utm_campaign }),
+          ...(orderData.pixelAttribution?.utm_term && { utm_term: orderData.pixelAttribution.utm_term }),
+          ...(orderData.pixelAttribution?.utm_content && { utm_content: orderData.pixelAttribution.utm_content }),
+        };
+
         // Fire purchase event to all enabled CAPI pixels
         firePurchaseEvent(pixels, {
           orderId: dbOrder.id,
@@ -199,6 +224,7 @@ export const action = async ({ request }) => {
           clientIpAddress,
           clientUserAgent,
           ...orderData.pixelAttribution, // fbp, fbc, fbclid from client
+          utmData, // UTM parameters for custom_data
         }).catch(err => {
           console.error('Pixel tracking error:', err);
           // Don't fail the order if pixel tracking fails
@@ -219,6 +245,7 @@ export const action = async ({ request }) => {
           eventSourceUrl: request.headers.get('referer') || '',
           clientIpAddress,
           clientUserAgent,
+          utmData, // UTM parameters for custom properties
         }).catch(err => {
           console.error('TikTok Events API error:', err);
           // Don't fail the order if pixel tracking fails

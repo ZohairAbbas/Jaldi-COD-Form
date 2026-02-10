@@ -13,7 +13,7 @@ const COUNTRY_NAME_TO_CODE = {
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping' } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {} } = orderData;
 
   // Clean phone number (remove all non-digit characters except +)
   const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
@@ -172,7 +172,14 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
                 value: String(fieldValue || '')
               };
             })
-          : [])
+          : []),
+        // Add UTM attribution data to note_attributes
+        ...Object.entries(utmData)
+          .filter(([, value]) => value)
+          .map(([key, value]) => ({
+            name: key,
+            value: String(value),
+          })),
       ],
       transactions: [
         {
@@ -225,10 +232,6 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     }
 
     const orderResult = await orderResponse.json();
-
-    // Log the full response for debugging
-    console.log("Order creation response:", JSON.stringify(orderResult, null, 2));
-
     const order = orderResult.order;
 
     if (!order?.id) {

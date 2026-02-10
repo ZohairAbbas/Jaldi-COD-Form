@@ -158,6 +158,7 @@ export async function firePurchaseEvent(pixels, orderData) {
     fbc,
     fbp,
     fbclid,
+    utmData,
   } = orderData;
 
   const capiPixels = pixels.filter(p => p.type === 'facebook_capi' && p.enabled);
@@ -195,6 +196,7 @@ export async function firePurchaseEvent(pixels, orderData) {
           currency: currency || getCurrencyCode(),
           num_items: items.length,
           order_id: orderNumber,
+          ...utmData,
         },
       };
 
@@ -328,6 +330,7 @@ export async function fireTikTokEvents(pixels, orderData) {
     eventSourceUrl,
     clientIpAddress,
     clientUserAgent,
+    utmData,
   } = orderData;
 
   const tiktokPixels = pixels.filter(p => p.type === 'tiktok_events_api' && p.enabled);
@@ -355,6 +358,7 @@ export async function fireTikTokEvents(pixels, orderData) {
           value: total,
           currency: currency || 'USD',
           order_id: orderNumber,
+          ...utmData,
         },
       };
 
