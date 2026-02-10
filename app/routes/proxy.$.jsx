@@ -85,8 +85,6 @@ async function handleCronAbandonedCarts(request) {
       },
     });
 
-    console.log(`Found ${abandonedSessions.length} abandoned sessions across all shops`);
-
     const results = {
       total: abandonedSessions.length,
       processed: 0,

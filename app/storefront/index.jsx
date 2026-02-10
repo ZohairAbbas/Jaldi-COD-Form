@@ -2,8 +2,6 @@ import { createRoot } from 'react-dom/client';
 import JaldiCODFormApp from './App';
 import { normalizePrice } from '../lib/constants';
 
-console.log('Preventify COD Form & Upsells: Script loaded');
-
 // Helper to get Pumper Bundles data if available
 function getPumperBundleData() {
   // Find the selected radio button in Pumper Bundles
@@ -34,8 +32,6 @@ function getPumperBundleData() {
     }
   }
 
-  console.log('Preventify: Initial Pumper Bundle detected', { quantity, discountedPrice, originalPrice });
-
   return {
     quantity,
     discountedPrice,
@@ -58,7 +54,6 @@ function getProductData(container) {
 
   // Check if product is available (not sold out)
   if (productAvailable === 'false') {
-    console.log('Preventify: Product is sold out, not showing form');
     return null;
   }
 
@@ -114,21 +109,17 @@ function getProductCardData(productCard) {
     if (!productId) {
       const productIdInput = productCard.querySelector('input[name="product-id"]');
       productId = productIdInput?.value;
-      console.log('Preventify: Product ID from input:', productId);
     }
 
     if (!productId) {
-      console.log('Preventify: No product ID found, skipping');
       return null;
     }
 
     // Get variant ID from the hidden input in the quick-add form
     const variantInput = productCard.querySelector('input[name="id"]');
     const variantId = variantInput?.value;
-    console.log('Preventify: Variant ID:', variantId);
 
     if (!variantId) {
-      console.log('Preventify: No variant ID found, skipping');
       return null;
     }
 
@@ -170,14 +161,12 @@ function getProductCardData(productCard) {
     const isSoldOut = soldOutBadge?.textContent?.trim().toLowerCase().includes('sold out');
 
     if (isSoldOut) {
-      console.log('Preventify: Product card is sold out, skipping');
       return null;
     }
 
     // Check if Add to Cart button is disabled
     const addButton = productCard.querySelector('button[name="add"]');
     if (addButton?.disabled) {
-      console.log('Preventify: Product card add button is disabled, skipping');
       return null;
     }
 
@@ -190,7 +179,6 @@ function getProductCardData(productCard) {
       image: productImage,
     };
 
-    console.log('Preventify: Extracted product data:', productData);
     return productData;
   } catch (error) {
     console.error('Preventify: Error extracting product card data', error);
@@ -240,7 +228,6 @@ function hideNativeButtons(config) {
     );
     checkoutButtons.forEach(btn => {
       btn.style.display = 'none';
-      console.log('Preventify: Hidden checkout button');
     });
   }
 
@@ -251,7 +238,6 @@ function hideNativeButtons(config) {
     );
     addToCartButtons.forEach(btn => {
       btn.style.display = 'none';
-      console.log('Preventify: Hidden Add to Cart button');
     });
   }
 
@@ -262,7 +248,6 @@ function hideNativeButtons(config) {
     );
     buyNowButtons.forEach(btn => {
       btn.style.display = 'none';
-      console.log('Preventify: Hidden Buy Now button');
     });
   }
 }
@@ -319,23 +304,17 @@ function renderPopupOnProductCards(shopDomain) {
     return;
   }
 
-  console.log(`Preventify: Rendering popup buttons on ${pageType} product cards`);
-
   // Find all product cards - try multiple selectors for different themes
   let productCards = document.querySelectorAll('product-card[data-product-id]');
 
   // Fallback: Try li.grid__item (Dawn theme and similar)
   if (productCards.length === 0) {
-    console.log('Preventify: No product-card elements found, trying li.grid__item');
     productCards = document.querySelectorAll('li.grid__item .card-wrapper');
   }
 
   if (productCards.length === 0) {
-    console.log('Preventify: No product cards found on page');
     return;
   }
-
-  console.log(`Preventify: Found ${productCards.length} product cards`);
 
   productCards.forEach((productCard, index) => {
     try {
@@ -347,7 +326,6 @@ function renderPopupOnProductCards(shopDomain) {
       // Extract product data from card
       const productData = getProductCardData(productCard);
       if (!productData) {
-        console.log(`Preventify: Skipping product card ${index} - no product data`);
         return;
       }
 
@@ -382,7 +360,6 @@ function renderPopupOnProductCards(shopDomain) {
       } else {
         productCard.appendChild(buttonContainer);
       }
-      console.log(`Preventify: Rendered button on product card ${index} for product ${productData.title}`);
     } catch (error) {
       console.error(`Preventify: Error rendering button on product card ${index}`, error);
     }
@@ -410,9 +387,6 @@ function renderPopupAtDefault(shopDomain, productData) {
       const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
       const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
       targetContainer.after(button);
-      console.log('Preventify: Rendered popup button at default product position');
-    } else {
-      console.log('Preventify: Could not find product form container');
     }
   } else if (pageType === 'cart') {
     // Find checkout button area - priority: after checkout button's parent (.cart__ctas) > after checkout button
@@ -433,9 +407,6 @@ function renderPopupAtDefault(shopDomain, productData) {
       const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
       const button = createPopupButton(appEmbedContainer, shopDomain, null, 'cart');
       targetContainer.after(button);
-      console.log('Preventify: Rendered popup button at default cart position');
-    } else {
-      console.log('Preventify: Could not find cart container');
     }
   }
 }
@@ -461,9 +432,6 @@ function renderEmbeddedAtDefault(shopDomain, productData) {
       const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
       const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
       targetContainer.after(form);
-      console.log('Preventify: Rendered embedded form at default product position');
-    } else {
-      console.log('Preventify: Could not find product form container');
     }
   } else if (pageType === 'cart') {
     // Find checkout button area - priority: after checkout button's parent (.cart__ctas) > after checkout button
@@ -484,9 +452,6 @@ function renderEmbeddedAtDefault(shopDomain, productData) {
       const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
       const form = createEmbeddedForm(appEmbedContainer, shopDomain, null);
       targetContainer.after(form);
-      console.log('Preventify: Rendered embedded form at default cart position');
-    } else {
-      console.log('Preventify: Could not find cart container');
     }
   }
 }
@@ -498,15 +463,10 @@ async function initializePreventify() {
   const hasManualEmbeddedBlock = document.querySelector('[data-preventify-manual-embedded]');
   const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
 
-  console.log('Preventify: Manual popup block:', hasManualPopupBlock);
-  console.log('Preventify: Manual embedded block:', hasManualEmbeddedBlock);
-  console.log('Preventify: App embed container:', appEmbedContainer);
-
   // If manual blocks exist, render in them directly
   if (hasManualPopupBlock) {
     const shopDomain = hasManualPopupBlock.dataset.shop;
     const productData = getProductData(hasManualPopupBlock);
-    console.log('Preventify: Initializing popup mode in manual block for shop', shopDomain);
     const root = createRoot(hasManualPopupBlock);
     root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} />);
     return; // Don't render default
@@ -515,7 +475,6 @@ async function initializePreventify() {
   if (hasManualEmbeddedBlock) {
     const shopDomain = hasManualEmbeddedBlock.dataset.shop;
     const productData = getProductData(hasManualEmbeddedBlock);
-    console.log('Preventify: Initializing embedded mode in manual block for shop', shopDomain);
     const root = createRoot(hasManualEmbeddedBlock);
     root.render(<JaldiCODFormApp mode="embedded" shopDomain={shopDomain} currentProduct={productData} />);
     return; // Don't render default
@@ -525,7 +484,6 @@ async function initializePreventify() {
   const shopDomain = appEmbedContainer?.dataset.shop || window.Shopify?.shop;
 
   if (!shopDomain) {
-    console.log('Preventify: Could not determine shop domain');
     return;
   }
 
@@ -541,8 +499,6 @@ async function initializePreventify() {
     const response = await fetch(`${initialAppPath}proxy/config?shop=${shopDomain}`);
     const config = await response.json();
 
-    console.log('Preventify: Config loaded', config);
-
     // Hide native buttons based on settings (runs on product/cart pages)
     hideNativeButtons(config);
 
@@ -553,11 +509,9 @@ async function initializePreventify() {
 
     // Detect current page type
     const pageType = detectPageType();
-    console.log('Preventify: Current page type:', pageType);
 
     // Handle collection and homepage separately - always show if app embed is enabled
     if ((pageType === 'collection' || pageType === 'homepage') && config.settings.formMode === 'popup') {
-      console.log('Preventify: Rendering on collection/homepage product cards');
       renderPopupOnProductCards(shopDomain);
       // Watch for dynamically loaded product cards
       watchProductCards(shopDomain);
@@ -566,13 +520,11 @@ async function initializePreventify() {
 
     // Only render main button/form if app embed exists and page visibility check passes
     if (!appEmbedContainer) {
-      console.log('Preventify: No app embed container, only watching cart drawer');
       return;
     }
 
     // Check if should show main button/form on this page
     if (!shouldShowOnPage(config)) {
-      console.log('Preventify: Page visibility check failed for main button');
       return;
     }
 
@@ -613,7 +565,6 @@ function renderPopupInCartDrawer(shopDomain) {
     root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={null} isCartDrawer={true} />);
 
     drawerCtas.after(buttonContainer);
-    console.log('Preventify: Rendered popup button in cart drawer');
     return true;
   }
   return false;
@@ -661,8 +612,6 @@ function watchProductCards(shopDomain) {
     return;
   }
 
-  console.log('Preventify: Setting up observer for dynamic product cards');
-
   let debounceTimer;
 
   const observer = new MutationObserver(() => {
@@ -673,7 +622,6 @@ function watchProductCards(shopDomain) {
       const productCardsWithoutButton = document.querySelectorAll('product-card[data-product-id]:not(:has(.preventify-product-card-button))');
 
       if (productCardsWithoutButton.length > 0) {
-        console.log(`Preventify: Found ${productCardsWithoutButton.length} new product cards to render buttons on`);
         renderPopupOnProductCards(shopDomain);
       }
     }, 500); // Wait 500ms after last mutation

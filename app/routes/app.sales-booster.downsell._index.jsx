@@ -126,7 +126,6 @@ export default function DownsellsList() {
 
   const handleMovePriority = (id, direction) => {
     // TODO: Implement priority reordering
-    console.log("Move priority", id, direction);
   };
 
   return (

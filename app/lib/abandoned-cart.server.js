@@ -28,7 +28,6 @@ export async function createDraftOrderForAbandonedCart(admin, abandonedCart, sho
 
     // Skip if no valid contact info (can't recover without contact)
     if (!validEmail && !validPhone) {
-      console.log(`Skipping draft order for cart ${abandonedCart.id} - no valid contact info`);
       return {
         success: false,
         skipped: true,

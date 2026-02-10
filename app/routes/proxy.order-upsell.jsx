@@ -66,7 +66,6 @@ export const action = async ({ request }) => {
       );
 
       const beginEditResult = await beginEditResponse.json();
-      console.log("Order edit begin response:", JSON.stringify(beginEditResult, null, 2));
 
       // Check for GraphQL errors
       if (beginEditResult.errors) {
@@ -130,7 +129,6 @@ export const action = async ({ request }) => {
       );
 
       const addVariantResult = await addVariantResponse.json();
-      console.log("Add variant result:", JSON.stringify(addVariantResult, null, 2));
 
       if (addVariantResult.data?.orderEditAddVariant?.userErrors?.length > 0) {
         console.error("Order edit add variant errors:", addVariantResult.data.orderEditAddVariant.userErrors);
@@ -144,15 +142,10 @@ export const action = async ({ request }) => {
 
       // Get the line item ID that was just added
       const lineItemId = addVariantResult.data?.orderEditAddVariant?.calculatedLineItem?.id;
-      console.log("Line item ID:", lineItemId);
-      console.log("Upsell item price:", upsellItem.price);
-      console.log("Upsell item original price:", upsellItem.originalPrice);
-      console.log("Price is different:", upsellItem.price !== upsellItem.originalPrice);
 
       // If a custom price is provided and different from original, apply a discount
       if (lineItemId && upsellItem.price && upsellItem.price !== upsellItem.originalPrice) {
         const discountAmount = upsellItem.originalPrice - upsellItem.price;
-        console.log("Applying discount amount:", discountAmount.toFixed(2));
 
         const applyDiscountResponse = await fetch(
           `https://${shop.shopifyDomain}/admin/api/2025-01/graphql.json`,
@@ -192,18 +185,11 @@ export const action = async ({ request }) => {
         );
 
         const discountResult = await applyDiscountResponse.json();
-        console.log("Apply discount result:", JSON.stringify(discountResult, null, 2));
 
         if (discountResult.data?.orderEditAddLineItemDiscount?.userErrors?.length > 0) {
           console.error("Order edit add discount errors:", discountResult.data.orderEditAddLineItemDiscount.userErrors);
           // Continue anyway - the item was added, just at original price
         }
-      } else {
-        console.log("NOT applying discount. Conditions:", {
-          hasLineItemId: !!lineItemId,
-          hasPrice: !!upsellItem.price,
-          isDifferent: upsellItem.price !== upsellItem.originalPrice
-        });
       }
 
       // Commit the order edit
@@ -237,7 +223,6 @@ export const action = async ({ request }) => {
       );
 
       const commitResult = await commitResponse.json();
-      console.log("Commit result:", JSON.stringify(commitResult, null, 2));
 
       if (commitResult.data?.orderEditCommit?.userErrors?.length > 0) {
         console.error("Order edit commit errors:", commitResult.data.orderEditCommit.userErrors);
@@ -247,7 +232,6 @@ export const action = async ({ request }) => {
         });
       }
 
-      console.log("Upsell successfully added with price:", upsellItem.price);
       return Response.json({
         success: true,
         message: "Upsell item added to order successfully",
