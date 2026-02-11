@@ -3,6 +3,7 @@ import { getShopByDomain, getUpsells, getEnabledPixels } from "../lib/db.server"
 import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
 import { normalizePrice } from "../lib/constants";
 import prisma from "../db.server";
+import { upsertCustomerProfile } from "../lib/sms.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -164,6 +165,24 @@ export const action = async ({ request }) => {
         }),
       },
     });
+
+    // Save/update customer profile for OTP auto-fill on future orders
+    try {
+      await upsertCustomerProfile(shop.id, {
+        phone: orderData.phone,
+        firstName: orderData.firstName,
+        lastName: orderData.lastName,
+        email: orderData.email,
+        address: orderData.address,
+        address2: orderData.address2,
+        city: orderData.city,
+        province: orderData.province,
+        postalCode: orderData.postalCode,
+        countryCode: orderData.countryCode || "PAK",
+      });
+    } catch (profileError) {
+      console.error("Failed to upsert customer profile:", profileError);
+    }
 
     // Mark session as completed if sessionId is provided
     if (orderData.sessionId) {

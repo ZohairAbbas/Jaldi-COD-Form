@@ -43,7 +43,27 @@ model Shop {
   pixels             Pixel[]
   settings           Settings?
   shippingRates      ShippingRate[]
+  subscription       Subscription?
   upsells            Upsell[]
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  shopId             String    @unique
+  mantleCustomerId   String?
+  planId             String?
+  planName           String?
+  status             String    @default("trialing")
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  trialEndsAt        DateTime?
+  usageCharges       Json      @default("[]")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  shop               Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([status])
 }
 
 model Settings {
@@ -347,6 +367,52 @@ model PixelEvent {
   @@index([eventName])
   @@index([createdAt])
   @@index([orderId])
+}
+
+model CustomerProfile {
+  id              String       @id @default(cuid())
+  shopId          String
+  phone           String
+  firstName       String?
+  lastName        String?
+  email           String?
+  address         String?
+  address2        String?
+  city            String?
+  province        String?
+  postalCode      String?
+  countryCode     String       @default("PAK")
+  totalOrders     Int          @default(0)
+  completedOrders Int          @default(0)
+  rtoOrders       Int          @default(0)
+  rtoRate         Float        @default(0)
+  riskScore       String       @default("UNKNOWN")
+  isBlacklisted   Boolean      @default(false)
+  firstOrderAt    DateTime?
+  lastOrderAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  otpSessions     OTPSession[]
+
+  @@unique([shopId, phone])
+  @@index([shopId])
+  @@index([phone])
+}
+
+model OTPSession {
+  id          String           @id @default(cuid())
+  shopId      String
+  phone       String
+  otp         String
+  verified    Boolean          @default(false)
+  expiresAt   DateTime
+  attempts    Int              @default(0)
+  createdAt   DateTime         @default(now())
+  customerId  String?
+  customer    CustomerProfile? @relation(fields: [customerId], references: [id])
+
+  @@index([shopId, phone])
+  @@index([expiresAt])
 }
 
 model ShippingRate {

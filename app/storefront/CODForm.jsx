@@ -36,6 +36,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
 
+  // OTP verification state
+  const [otpStep, setOtpStep] = useState('form'); // 'form' | 'otp'
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [pendingOrderData, setPendingOrderData] = useState(null);
+  const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
+
   // One-Tick Upsells state
   const [selectedUpsells, setSelectedUpsells] = useState(() => {
     // Initialize with preselected upsells
@@ -108,6 +118,126 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       return prev;
     });
   }, [country.phoneCode]);
+
+  // OTP countdown timer
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCountdown]);
+
+  // Customer lookup on phone blur
+  const handlePhoneBlur = async () => {
+    const phone = formData.phone;
+    const digitsAfterCode = phone?.slice(country.phoneCode.length) || '';
+    // Only lookup if phone has valid length (10 digits for Pakistan)
+    if (digitsAfterCode.length < 10) return;
+
+    setIsLookingUpCustomer(true);
+    try {
+      const response = await fetch(`${appPath}proxy/customer-lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: config.shopDomain, phone }),
+      });
+      const data = await response.json();
+      if (data.customer) {
+        // Auto-fill form fields with customer data (only fill empty fields)
+        setFormData(prev => ({
+          ...prev,
+          firstName: prev.firstName || data.customer.firstName || '',
+          lastname: prev.lastname || data.customer.lastName || '',
+          lastName: prev.lastName || data.customer.lastName || '',
+          email: prev.email || data.customer.email || '',
+          address: prev.address || data.customer.address || '',
+          address2: prev.address2 || data.customer.address2 || '',
+          city: prev.city || data.customer.city || '',
+          province: prev.province || data.customer.province || '',
+          postalCode: prev.postalCode || data.customer.postalCode || '',
+        }));
+      }
+    } catch (error) {
+      console.error('Customer lookup failed:', error);
+    } finally {
+      setIsLookingUpCustomer(false);
+    }
+  };
+
+  // Send OTP to customer's phone
+  const handleSendOtp = async () => {
+    setIsSendingOtp(true);
+    setOtpError('');
+    setOtpCode('');
+    try {
+      const response = await fetch(`${appPath}proxy/otp-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: config.shopDomain, phone: formData.phone }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setOtpStep('otp');
+        setOtpCountdown(60); // 60 second cooldown for resend
+      } else {
+        setOtpError(data.error || 'Failed to send OTP');
+      }
+    } catch (error) {
+      setOtpError('Failed to send OTP. Please try again.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Verify OTP and submit order
+  const handleVerifyOtp = async () => {
+    if (otpCode.length !== 6) {
+      setOtpError('Please enter the 6-digit code');
+      return;
+    }
+    setIsVerifyingOtp(true);
+    setOtpError('');
+    try {
+      const response = await fetch(`${appPath}proxy/otp-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: config.shopDomain, phone: formData.phone, otp: otpCode }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        // OTP verified — submit the pending order
+        if (pendingOrderData) {
+          try {
+            await onSubmit(pendingOrderData);
+          } catch (error) {
+            console.error('Order submission error:', error);
+            if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
+              setErrors(error.fieldErrors);
+              setOtpStep('form'); // Go back to form to show errors
+              setPendingOrderData(null);
+            } else {
+              alert('Failed to submit order: ' + error.message);
+            }
+          } finally {
+            setIsSubmitting(false);
+          }
+        }
+      } else {
+        setOtpError(data.error || 'Invalid OTP');
+      }
+    } catch (error) {
+      setOtpError('Verification failed. Please try again.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
 
   const formStyle = {
     backgroundColor: config.formConfig.backgroundColor,
@@ -307,28 +437,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       pixelAttribution: attributionData,
     };
 
-    try {
-      await onSubmit(orderData);
-    } catch (error) {
-      console.error('Order submission error:', error);
-
-      // If server returned field-specific errors, display them
-      if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
-        setErrors(error.fieldErrors);
-        // Scroll to first error field
-        const firstErrorField = Object.keys(error.fieldErrors)[0];
-        const errorElement = document.querySelector(`[name="${firstErrorField}"]`);
-        if (errorElement) {
-          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          errorElement.focus();
-        }
-      } else {
-        // Generic error message if no field-specific errors
-        alert('Failed to submit order: ' + error.message);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Instead of submitting directly, store order data and trigger OTP
+    setPendingOrderData(orderData);
+    await handleSendOtp();
+    // Don't setIsSubmitting(false) here — it stays true until OTP completes or user cancels
   };
 
   // Handle Pay with Card - redirects to Shopify checkout via cart permalink
@@ -496,10 +608,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
                 value={value}
                 onChange={(e) => handleChange(fieldId, e.target.value)}
+                onBlur={field.id === 'phone' ? handlePhoneBlur : undefined}
                 placeholder={field.id === 'phone' ? `${country.phoneCode}3001234567` : field.id === 'email' ? 'email@example.com' : field.placeholder}
                 maxLength={field.id === 'phone' ? 15 : undefined}
                 style={inputStyle}
               />
+              {field.id === 'phone' && isLookingUpCustomer && (
+                <div style={{ position: 'absolute', ...(isRTL ? { left: '12px' } : { right: '12px' }), top: '50%', transform: 'translateY(-50%)' }}>
+                  <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
+                </div>
+              )}
             </div>
             {error && <div style={errorStyle}>{error}</div>}
           </div>
@@ -1359,6 +1477,162 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         )}
       </form>
       </div>
+
+      {/* OTP Verification Overlay */}
+      {otpStep === 'otp' && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(255,255,255,0.97)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 24px',
+          zIndex: 10,
+        }}>
+          {/* Lock Icon */}
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}>
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+
+          <h3 style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: '#111827',
+            marginBottom: '8px',
+            textAlign: 'center',
+          }}>
+            Verify Your Phone Number
+          </h3>
+
+          <p style={{
+            fontSize: '14px',
+            color: '#6B7280',
+            marginBottom: '24px',
+            textAlign: 'center',
+          }}>
+            We sent a 6-digit code to <strong>{formData.phone}</strong>
+          </p>
+
+          {/* OTP Input */}
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={otpCode}
+            onChange={(e) => {
+              const val = e.target.value.replace(/\D/g, '');
+              setOtpCode(val);
+              setOtpError('');
+            }}
+            placeholder="Enter 6-digit code"
+            autoFocus
+            style={{
+              width: '200px',
+              padding: '14px 16px',
+              fontSize: '18px',
+              fontWeight: '400',
+              textAlign: 'center',
+              letterSpacing: '2px',
+              border: otpError ? '2px solid #EF4444' : '2px solid #D1D5DB',
+              borderRadius: '8px',
+              outline: 'none',
+              marginBottom: '8px',
+            }}
+          />
+
+          {/* OTP Error */}
+          {otpError && (
+            <p style={{ color: '#EF4444', fontSize: '13px', marginBottom: '16px', textAlign: 'center' }}>
+              {otpError}
+            </p>
+          )}
+
+          {/* Verify Button */}
+          <button
+            type="button"
+            onClick={handleVerifyOtp}
+            disabled={isVerifyingOtp || otpCode.length !== 6}
+            style={{
+              width: '200px',
+              padding: '12px 20px',
+              backgroundColor: '#000000',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: (isVerifyingOtp || otpCode.length !== 6) ? 'not-allowed' : 'pointer',
+              opacity: (isVerifyingOtp || otpCode.length !== 6) ? 0.6 : 1,
+              marginTop: '8px',
+              marginBottom: '16px',
+              textTransform: 'uppercase',
+            }}
+          >
+            {isVerifyingOtp ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <div className="jaldi-loading"></div>
+                <span>Verifying...</span>
+              </div>
+            ) : 'VERIFY & PLACE ORDER'}
+          </button>
+
+          {/* Resend OTP */}
+          <div style={{ textAlign: 'center' }}>
+            {otpCountdown > 0 ? (
+              <p style={{ fontSize: '13px', color: '#9CA3AF' }}>
+                Resend code in {otpCountdown}s
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                disabled={isSendingOtp}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#000000',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: 0,
+                }}
+              >
+                {isSendingOtp ? 'Sending...' : 'Resend code'}
+              </button>
+            )}
+          </div>
+
+          {/* Back button */}
+          <button
+            type="button"
+            onClick={() => {
+              setOtpStep('form');
+              setOtpCode('');
+              setOtpError('');
+              setIsSubmitting(false);
+              setPendingOrderData(null);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6B7280',
+              fontSize: '13px',
+              cursor: 'pointer',
+              marginTop: '16px',
+              padding: 0,
+            }}
+          >
+            Change phone number
+          </button>
+        </div>
+      )}
     </div>
   );
 }
