@@ -111,13 +111,25 @@ function getProductCardData(productCard) {
       productId = productIdInput?.value;
     }
 
+    // Fallback: Look for button with data-product-id (AI Flash Sale cards)
+    if (!productId) {
+      const flashSaleButton = productCard.querySelector('button[data-product-id]');
+      productId = flashSaleButton?.dataset.productId;
+    }
+
     if (!productId) {
       return null;
     }
 
     // Get variant ID from the hidden input in the quick-add form
     const variantInput = productCard.querySelector('input[name="id"]');
-    const variantId = variantInput?.value;
+    let variantId = variantInput?.value;
+
+    // Fallback: Look for button with data-variant-id (AI Flash Sale cards)
+    if (!variantId) {
+      const flashSaleButton = productCard.querySelector('button[data-variant-id]');
+      variantId = flashSaleButton?.dataset.variantId;
+    }
 
     if (!variantId) {
       return null;
@@ -129,6 +141,10 @@ function getProductCardData(productCard) {
     if (!titleElement) {
       titleElement = productCard.querySelector('.card__heading a, .card__heading');
     }
+    // Fallback: Try AI Flash Sale title (h3 > a)
+    if (!titleElement) {
+      titleElement = productCard.querySelector('[class*="ai-flash-sale-title"] a, [class*="ai-flash-sale-title"]');
+    }
     const productTitle = titleElement?.textContent?.trim();
 
     // Get price - try multiple selectors
@@ -136,6 +152,10 @@ function getProductCardData(productCard) {
     // Fallback: Try .price-item--sale or .price-item (Dawn theme)
     if (!priceElement) {
       priceElement = productCard.querySelector('.price-item--sale, .price-item--regular');
+    }
+    // Fallback: Try AI Flash Sale sale price
+    if (!priceElement) {
+      priceElement = productCard.querySelector('[class*="ai-flash-sale-sale-price"]');
     }
     const priceText = priceElement?.textContent?.trim();
     let price = 0;
@@ -154,10 +174,14 @@ function getProductCardData(productCard) {
     if (!imageElement) {
       imageElement = productCard.querySelector('.card__media img, .media img');
     }
+    // Fallback: Try AI Flash Sale image
+    if (!imageElement) {
+      imageElement = productCard.querySelector('[class*="ai-flash-sale-image-wrapper"] img, [class*="ai-flash-sale-image"]');
+    }
     const productImage = imageElement?.src;
 
     // Check if product is sold out by looking for sold out badge
-    const soldOutBadge = productCard.querySelector('.product-badges__badge, .badge');
+    const soldOutBadge = productCard.querySelector('.product-badges__badge, .badge, [class*="ai-flash-sale-badge"]');
     const isSoldOut = soldOutBadge?.textContent?.trim().toLowerCase().includes('sold out');
 
     if (isSoldOut) {
@@ -312,6 +336,11 @@ function renderPopupOnProductCards(shopDomain) {
     productCards = document.querySelectorAll('li.grid__item .card-wrapper');
   }
 
+  // Fallback: Try AI Flash Sale cards (class starts with "ai-flash-sale-card-")
+  if (productCards.length === 0) {
+    productCards = document.querySelectorAll('[class*="ai-flash-sale-card-"]');
+  }
+
   if (productCards.length === 0) {
     return;
   }
@@ -333,6 +362,12 @@ function renderPopupOnProductCards(shopDomain) {
       const quickAddContainer = productCard.querySelector('.quick-add');
       if (quickAddContainer) {
         quickAddContainer.style.display = 'none';
+      }
+
+      // Fallback: Hide AI Flash Sale Add to Cart button
+      const flashSaleAddToCart = productCard.querySelector('button[class*="ai-flash-sale-add-to-cart"]');
+      if (flashSaleAddToCart) {
+        flashSaleAddToCart.style.display = 'none';
       }
 
       // Create button container - replaces Add to Cart
@@ -357,6 +392,8 @@ function renderPopupOnProductCards(shopDomain) {
       // Place button where Add to Cart was
       if (quickAddContainer) {
         quickAddContainer.parentNode.insertBefore(buttonContainer, quickAddContainer);
+      } else if (flashSaleAddToCart) {
+        flashSaleAddToCart.parentNode.insertBefore(buttonContainer, flashSaleAddToCart);
       } else {
         productCard.appendChild(buttonContainer);
       }
@@ -619,7 +656,11 @@ function watchProductCards(shopDomain) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       // Find product cards without buttons
-      const productCardsWithoutButton = document.querySelectorAll('product-card[data-product-id]:not(:has(.preventify-product-card-button))');
+      const productCardsWithoutButton = document.querySelectorAll(
+        'product-card[data-product-id]:not(:has(.preventify-product-card-button)), ' +
+        'li.grid__item .card-wrapper:not(:has(.preventify-product-card-button)), ' +
+        '[class*="ai-flash-sale-card-"]:not(:has(.preventify-product-card-button))'
+      );
 
       if (productCardsWithoutButton.length > 0) {
         renderPopupOnProductCards(shopDomain);
