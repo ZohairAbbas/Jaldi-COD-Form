@@ -4,7 +4,7 @@ import CODForm from './CODForm';
 import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
-import { initializePixels, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
+import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
 
 // Default config to show button immediately while real config loads
@@ -532,6 +532,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       // Use app path from Liquid template (most reliable), fallback to config response
       const resolvedAppPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
       setAppPath(resolvedAppPath);
+
+      // Capture UTM params regardless of pixel config
+      captureUtmParams();
 
       // Initialize pixel tracking
       if (data.pixels) {

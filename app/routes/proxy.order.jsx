@@ -63,6 +63,14 @@ export const action = async ({ request }) => {
       },
     };
 
+    // Log UTM debug info to identify missing attribution cases
+    console.log('[UTM Debug]', JSON.stringify({
+      hasPixelAttribution: !!orderData.pixelAttribution,
+      utmKeys: orderData.pixelAttribution ? Object.keys(orderData.pixelAttribution).filter(k => k.startsWith('utm_')) : [],
+      pixelAttribution: orderData.pixelAttribution || null,
+      phone: orderData.phone?.slice(-4), // last 4 digits for matching to order
+    }));
+
     // Extract UTM data from pixel attribution for Shopify note_attributes
     const utmAttribution = {
       ...(orderData.pixelAttribution?.utm_source && { utm_source: orderData.pixelAttribution.utm_source }),

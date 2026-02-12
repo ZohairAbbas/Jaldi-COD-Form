@@ -93,6 +93,7 @@ model Settings {
   cardButtonBgColor    String   @default("#FFFFFF")
   cardButtonTextColor  String   @default("#000000")
   cardButtonFontSize   Int      @default(14)
+  enableOTP            Boolean  @default(false)
   shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 

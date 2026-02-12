@@ -662,6 +662,39 @@ export default function Settings() {
           )}
         </s-stack>
       </s-section>
+
+      {/* OTP Verification Setting */}
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>OTP Verification</s-heading>
+          <s-paragraph>
+            Require customers to verify their phone number via SMS OTP before placing a COD order. This helps reduce fake orders and RTOs.
+          </s-paragraph>
+
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.enableOTP || false}
+              onChange={(e) => handleUpdate({ enableOTP: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+              <s-text variant="heading-sm">Enable OTP Verification</s-text>
+              <s-text variant="body-sm" tone="subdued">
+                When enabled, customers must verify their phone number with a 6-digit code sent via SMS before their order is placed. Returning customers will have their address auto-filled.
+              </s-text>
+            </s-stack>
+          </label>
+
+          {settings.enableOTP && (
+            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+              <s-text variant="body-sm">
+                ℹ️ OTP is sent via SMS when the customer clicks "Complete Order". They must enter the 6-digit code to confirm. Rate limited to 3 OTPs per phone every 15 minutes. OTP expires after 5 minutes.
+              </s-text>
+            </s-box>
+          )}
+        </s-stack>
+      </s-section>
         </>
       )}
 

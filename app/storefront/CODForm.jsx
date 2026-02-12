@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
 import { getCurrencyCode, COUNTRIES } from '../lib/constants';
 
@@ -45,6 +45,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [pendingOrderData, setPendingOrderData] = useState(null);
   const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
+  const [focusedOtpIndex, setFocusedOtpIndex] = useState(-1);
+  const otpInputRefs = useRef([]);
 
   // One-Tick Upsells state
   const [selectedUpsells, setSelectedUpsells] = useState(() => {
@@ -437,10 +439,33 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       pixelAttribution: attributionData,
     };
 
-    // Instead of submitting directly, store order data and trigger OTP
-    setPendingOrderData(orderData);
-    await handleSendOtp();
-    // Don't setIsSubmitting(false) here — it stays true until OTP completes or user cancels
+    // If OTP is enabled, trigger OTP flow before submitting
+    if (config.settings?.enableOTP) {
+      setPendingOrderData(orderData);
+      await handleSendOtp();
+      // Don't setIsSubmitting(false) here — it stays true until OTP completes or user cancels
+      return;
+    }
+
+    // OTP disabled — submit directly
+    try {
+      await onSubmit(orderData);
+    } catch (error) {
+      console.error('Order submission error:', error);
+      if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
+        setErrors(error.fieldErrors);
+        const firstErrorField = Object.keys(error.fieldErrors)[0];
+        const errorElement = document.querySelector(`[name="${firstErrorField}"]`);
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          errorElement.focus();
+        }
+      } else {
+        alert('Failed to submit order: ' + error.message);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle Pay with Card - redirects to Shopify checkout via cart permalink
@@ -1486,7 +1511,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(255,255,255,0.97)',
+          backgroundColor: '#ffffff',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -1494,64 +1519,171 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           padding: '32px 24px',
           zIndex: 10,
         }}>
-          {/* Lock Icon */}
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}>
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
+          {/* Shield Icon with animated ring */}
+          <div style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            backgroundColor: '#F0F9FF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+            border: '2px solid #DBEAFE',
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="M9 12l2 2 4-4" />
+            </svg>
+          </div>
 
           <h3 style={{
-            fontSize: '18px',
-            fontWeight: '600',
+            fontSize: '20px',
+            fontWeight: '700',
             color: '#111827',
-            marginBottom: '8px',
+            marginBottom: '6px',
             textAlign: 'center',
           }}>
-            Verify Your Phone Number
+            Verify Your Phone
           </h3>
 
           <p style={{
             fontSize: '14px',
             color: '#6B7280',
-            marginBottom: '24px',
+            marginBottom: '4px',
             textAlign: 'center',
           }}>
-            We sent a 6-digit code to <strong>{formData.phone}</strong>
+            Enter the 6-digit code sent to
+          </p>
+          <p style={{
+            fontSize: '15px',
+            color: '#111827',
+            fontWeight: '600',
+            marginBottom: '28px',
+            textAlign: 'center',
+            letterSpacing: '0.5px',
+          }}>
+            {formData.phone}
           </p>
 
-          {/* OTP Input */}
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            value={otpCode}
-            onChange={(e) => {
-              const val = e.target.value.replace(/\D/g, '');
-              setOtpCode(val);
-              setOtpError('');
-            }}
-            placeholder="Enter 6-digit code"
-            autoFocus
-            style={{
-              width: '200px',
-              padding: '14px 16px',
-              fontSize: '18px',
-              fontWeight: '400',
-              textAlign: 'center',
-              letterSpacing: '2px',
-              border: otpError ? '2px solid #EF4444' : '2px solid #D1D5DB',
-              borderRadius: '8px',
-              outline: 'none',
-              marginBottom: '8px',
-            }}
-          />
+          {/* 6 Individual OTP Boxes */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '8px',
+            justifyContent: 'center',
+          }}>
+            {[0, 1, 2, 3, 4, 5].map((index) => {
+              const digit = otpCode[index] || '';
+              const isFocused = focusedOtpIndex === index;
+              const isFilled = digit !== '';
+              return (
+                <input
+                  key={index}
+                  ref={(el) => { otpInputRefs.current[index] = el; }}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  autoFocus={index === 0}
+                  onFocus={() => setFocusedOtpIndex(index)}
+                  onBlur={() => setFocusedOtpIndex(-1)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    if (!val) return;
+                    const newCode = otpCode.split('');
+                    newCode[index] = val[val.length - 1];
+                    // Fill any gaps with empty strings
+                    for (let i = 0; i < 6; i++) {
+                      if (!newCode[i]) newCode[i] = '';
+                    }
+                    const joined = newCode.join('').replace(/\s/g, '');
+                    setOtpCode(joined);
+                    setOtpError('');
+                    // Auto-focus next box
+                    if (index < 5 && otpInputRefs.current[index + 1]) {
+                      otpInputRefs.current[index + 1].focus();
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    // On backspace, clear current and go to previous
+                    if (e.key === 'Backspace') {
+                      e.preventDefault();
+                      const newCode = otpCode.split('');
+                      if (newCode[index]) {
+                        newCode[index] = '';
+                        setOtpCode(newCode.join(''));
+                      } else if (index > 0) {
+                        newCode[index - 1] = '';
+                        setOtpCode(newCode.join(''));
+                        otpInputRefs.current[index - 1]?.focus();
+                      }
+                    }
+                    // Arrow keys navigation
+                    if (e.key === 'ArrowLeft' && index > 0) {
+                      otpInputRefs.current[index - 1]?.focus();
+                    }
+                    if (e.key === 'ArrowRight' && index < 5) {
+                      otpInputRefs.current[index + 1]?.focus();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                    if (pasted) {
+                      setOtpCode(pasted);
+                      setOtpError('');
+                      const focusIdx = Math.min(pasted.length, 5);
+                      otpInputRefs.current[focusIdx]?.focus();
+                    }
+                  }}
+                  style={{
+                    width: '46px',
+                    height: '54px',
+                    textAlign: 'center',
+                    fontSize: '22px',
+                    fontWeight: '700',
+                    color: '#111827',
+                    border: otpError
+                      ? '2px solid #EF4444'
+                      : isFocused
+                        ? '2px solid #2563EB'
+                        : isFilled
+                          ? '2px solid #111827'
+                          : '2px solid #D1D5DB',
+                    borderRadius: '10px',
+                    outline: 'none',
+                    backgroundColor: isFilled ? '#F8FAFC' : '#FFFFFF',
+                    transition: 'all 0.15s ease',
+                    caretColor: '#2563EB',
+                  }}
+                />
+              );
+            })}
+          </div>
 
           {/* OTP Error */}
-          {otpError && (
-            <p style={{ color: '#EF4444', fontSize: '13px', marginBottom: '16px', textAlign: 'center' }}>
-              {otpError}
-            </p>
-          )}
+          <div style={{ minHeight: '24px', marginBottom: '8px' }}>
+            {otpError && (
+              <p style={{
+                color: '#EF4444',
+                fontSize: '13px',
+                textAlign: 'center',
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+                {otpError}
+              </p>
+            )}
+          </div>
 
           {/* Verify Button */}
           <button
@@ -1559,19 +1691,20 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             onClick={handleVerifyOtp}
             disabled={isVerifyingOtp || otpCode.length !== 6}
             style={{
-              width: '200px',
-              padding: '12px 20px',
-              backgroundColor: '#000000',
-              color: '#FFFFFF',
+              width: '100%',
+              maxWidth: '310px',
+              padding: '14px 20px',
+              backgroundColor: otpCode.length === 6 ? '#000000' : '#D1D5DB',
+              color: otpCode.length === 6 ? '#FFFFFF' : '#9CA3AF',
               border: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
+              borderRadius: '8px',
+              fontSize: '15px',
               fontWeight: '600',
               cursor: (isVerifyingOtp || otpCode.length !== 6) ? 'not-allowed' : 'pointer',
-              opacity: (isVerifyingOtp || otpCode.length !== 6) ? 0.6 : 1,
-              marginTop: '8px',
-              marginBottom: '16px',
+              transition: 'all 0.2s ease',
+              marginBottom: '20px',
               textTransform: 'uppercase',
+              letterSpacing: '0.5px',
             }}
           >
             {isVerifyingOtp ? (
@@ -1582,40 +1715,55 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             ) : 'VERIFY & PLACE ORDER'}
           </button>
 
-          {/* Resend OTP */}
-          <div style={{ textAlign: 'center' }}>
+          {/* Resend / Timer */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            marginBottom: '8px',
+          }}>
             {otpCountdown > 0 ? (
-              <p style={{ fontSize: '13px', color: '#9CA3AF' }}>
-                Resend code in {otpCountdown}s
-              </p>
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span style={{ fontSize: '13px', color: '#9CA3AF' }}>
+                  Resend code in <strong style={{ color: '#6B7280' }}>{otpCountdown}s</strong>
+                </span>
+              </>
             ) : (
-              <button
-                type="button"
-                onClick={handleSendOtp}
-                disabled={isSendingOtp}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#000000',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  padding: 0,
-                }}
-              >
-                {isSendingOtp ? 'Sending...' : 'Resend code'}
-              </button>
+              <>
+                <span style={{ fontSize: '13px', color: '#6B7280' }}>Didn't receive the code?</span>
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={isSendingOtp}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563EB',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {isSendingOtp ? 'Sending...' : 'Resend'}
+                </button>
+              </>
             )}
           </div>
 
-          {/* Back button */}
+          {/* Back / Change phone */}
           <button
             type="button"
             onClick={() => {
               setOtpStep('form');
               setOtpCode('');
               setOtpError('');
+              setFocusedOtpIndex(-1);
               setIsSubmitting(false);
               setPendingOrderData(null);
             }}
@@ -1625,10 +1773,18 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               color: '#6B7280',
               fontSize: '13px',
               cursor: 'pointer',
-              marginTop: '16px',
-              padding: 0,
+              marginTop: '4px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
             }}
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
             Change phone number
           </button>
         </div>
