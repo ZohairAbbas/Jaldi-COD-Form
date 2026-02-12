@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
 import { getCurrencyCode, COUNTRIES } from '../lib/constants';
 
@@ -35,6 +35,18 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
+
+  // OTP verification state
+  const [otpStep, setOtpStep] = useState('form'); // 'form' | 'otp'
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [pendingOrderData, setPendingOrderData] = useState(null);
+  const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
+  const [focusedOtpIndex, setFocusedOtpIndex] = useState(-1);
+  const otpInputRefs = useRef([]);
 
   // One-Tick Upsells state
   const [selectedUpsells, setSelectedUpsells] = useState(() => {
@@ -108,6 +120,126 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       return prev;
     });
   }, [country.phoneCode]);
+
+  // OTP countdown timer
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCountdown]);
+
+  // Customer lookup on phone blur
+  const handlePhoneBlur = async () => {
+    const phone = formData.phone;
+    const digitsAfterCode = phone?.slice(country.phoneCode.length) || '';
+    // Only lookup if phone has valid length (10 digits for Pakistan)
+    if (digitsAfterCode.length < 10) return;
+
+    setIsLookingUpCustomer(true);
+    try {
+      const response = await fetch(`${appPath}proxy/customer-lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: config.shopDomain, phone }),
+      });
+      const data = await response.json();
+      if (data.customer) {
+        // Auto-fill form fields with customer data (only fill empty fields)
+        setFormData(prev => ({
+          ...prev,
+          firstName: prev.firstName || data.customer.firstName || '',
+          lastname: prev.lastname || data.customer.lastName || '',
+          lastName: prev.lastName || data.customer.lastName || '',
+          email: prev.email || data.customer.email || '',
+          address: prev.address || data.customer.address || '',
+          address2: prev.address2 || data.customer.address2 || '',
+          city: prev.city || data.customer.city || '',
+          province: prev.province || data.customer.province || '',
+          postalCode: prev.postalCode || data.customer.postalCode || '',
+        }));
+      }
+    } catch (error) {
+      console.error('Customer lookup failed:', error);
+    } finally {
+      setIsLookingUpCustomer(false);
+    }
+  };
+
+  // Send OTP to customer's phone
+  const handleSendOtp = async () => {
+    setIsSendingOtp(true);
+    setOtpError('');
+    setOtpCode('');
+    try {
+      const response = await fetch(`${appPath}proxy/otp-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: config.shopDomain, phone: formData.phone }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setOtpStep('otp');
+        setOtpCountdown(60); // 60 second cooldown for resend
+      } else {
+        setOtpError(data.error || 'Failed to send OTP');
+      }
+    } catch (error) {
+      setOtpError('Failed to send OTP. Please try again.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Verify OTP and submit order
+  const handleVerifyOtp = async () => {
+    if (otpCode.length !== 6) {
+      setOtpError('Please enter the 6-digit code');
+      return;
+    }
+    setIsVerifyingOtp(true);
+    setOtpError('');
+    try {
+      const response = await fetch(`${appPath}proxy/otp-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: config.shopDomain, phone: formData.phone, otp: otpCode }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        // OTP verified — submit the pending order
+        if (pendingOrderData) {
+          try {
+            await onSubmit(pendingOrderData);
+          } catch (error) {
+            console.error('Order submission error:', error);
+            if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
+              setErrors(error.fieldErrors);
+              setOtpStep('form'); // Go back to form to show errors
+              setPendingOrderData(null);
+            } else {
+              alert('Failed to submit order: ' + error.message);
+            }
+          } finally {
+            setIsSubmitting(false);
+          }
+        }
+      } else {
+        setOtpError(data.error || 'Invalid OTP');
+      }
+    } catch (error) {
+      setOtpError('Verification failed. Please try again.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
 
   const formStyle = {
     backgroundColor: config.formConfig.backgroundColor,
@@ -307,15 +439,21 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       pixelAttribution: attributionData,
     };
 
+    // If OTP is enabled, trigger OTP flow before submitting
+    if (config.settings?.enableOTP) {
+      setPendingOrderData(orderData);
+      await handleSendOtp();
+      // Don't setIsSubmitting(false) here — it stays true until OTP completes or user cancels
+      return;
+    }
+
+    // OTP disabled — submit directly
     try {
       await onSubmit(orderData);
     } catch (error) {
       console.error('Order submission error:', error);
-
-      // If server returned field-specific errors, display them
       if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
         setErrors(error.fieldErrors);
-        // Scroll to first error field
         const firstErrorField = Object.keys(error.fieldErrors)[0];
         const errorElement = document.querySelector(`[name="${firstErrorField}"]`);
         if (errorElement) {
@@ -323,7 +461,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           errorElement.focus();
         }
       } else {
-        // Generic error message if no field-specific errors
         alert('Failed to submit order: ' + error.message);
       }
     } finally {
@@ -496,10 +633,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
                 value={value}
                 onChange={(e) => handleChange(fieldId, e.target.value)}
+                onBlur={field.id === 'phone' ? handlePhoneBlur : undefined}
                 placeholder={field.id === 'phone' ? `${country.phoneCode}3001234567` : field.id === 'email' ? 'email@example.com' : field.placeholder}
                 maxLength={field.id === 'phone' ? 15 : undefined}
                 style={inputStyle}
               />
+              {field.id === 'phone' && isLookingUpCustomer && (
+                <div style={{ position: 'absolute', ...(isRTL ? { left: '12px' } : { right: '12px' }), top: '50%', transform: 'translateY(-50%)' }}>
+                  <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
+                </div>
+              )}
             </div>
             {error && <div style={errorStyle}>{error}</div>}
           </div>
@@ -1359,6 +1502,293 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         )}
       </form>
       </div>
+
+      {/* OTP Verification Overlay */}
+      {otpStep === 'otp' && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: '#ffffff',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 24px',
+          zIndex: 10,
+        }}>
+          {/* Shield Icon with animated ring */}
+          <div style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            backgroundColor: '#F0F9FF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+            border: '2px solid #DBEAFE',
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="M9 12l2 2 4-4" />
+            </svg>
+          </div>
+
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: '700',
+            color: '#111827',
+            marginBottom: '6px',
+            textAlign: 'center',
+          }}>
+            Verify Your Phone
+          </h3>
+
+          <p style={{
+            fontSize: '14px',
+            color: '#6B7280',
+            marginBottom: '4px',
+            textAlign: 'center',
+          }}>
+            Enter the 6-digit code sent to
+          </p>
+          <p style={{
+            fontSize: '15px',
+            color: '#111827',
+            fontWeight: '600',
+            marginBottom: '28px',
+            textAlign: 'center',
+            letterSpacing: '0.5px',
+          }}>
+            {formData.phone}
+          </p>
+
+          {/* 6 Individual OTP Boxes */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '8px',
+            justifyContent: 'center',
+          }}>
+            {[0, 1, 2, 3, 4, 5].map((index) => {
+              const digit = otpCode[index] || '';
+              const isFocused = focusedOtpIndex === index;
+              const isFilled = digit !== '';
+              return (
+                <input
+                  key={index}
+                  ref={(el) => { otpInputRefs.current[index] = el; }}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  autoFocus={index === 0}
+                  onFocus={() => setFocusedOtpIndex(index)}
+                  onBlur={() => setFocusedOtpIndex(-1)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    if (!val) return;
+                    const newCode = otpCode.split('');
+                    newCode[index] = val[val.length - 1];
+                    // Fill any gaps with empty strings
+                    for (let i = 0; i < 6; i++) {
+                      if (!newCode[i]) newCode[i] = '';
+                    }
+                    const joined = newCode.join('').replace(/\s/g, '');
+                    setOtpCode(joined);
+                    setOtpError('');
+                    // Auto-focus next box
+                    if (index < 5 && otpInputRefs.current[index + 1]) {
+                      otpInputRefs.current[index + 1].focus();
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    // On backspace, clear current and go to previous
+                    if (e.key === 'Backspace') {
+                      e.preventDefault();
+                      const newCode = otpCode.split('');
+                      if (newCode[index]) {
+                        newCode[index] = '';
+                        setOtpCode(newCode.join(''));
+                      } else if (index > 0) {
+                        newCode[index - 1] = '';
+                        setOtpCode(newCode.join(''));
+                        otpInputRefs.current[index - 1]?.focus();
+                      }
+                    }
+                    // Arrow keys navigation
+                    if (e.key === 'ArrowLeft' && index > 0) {
+                      otpInputRefs.current[index - 1]?.focus();
+                    }
+                    if (e.key === 'ArrowRight' && index < 5) {
+                      otpInputRefs.current[index + 1]?.focus();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                    if (pasted) {
+                      setOtpCode(pasted);
+                      setOtpError('');
+                      const focusIdx = Math.min(pasted.length, 5);
+                      otpInputRefs.current[focusIdx]?.focus();
+                    }
+                  }}
+                  style={{
+                    width: '46px',
+                    height: '54px',
+                    textAlign: 'center',
+                    fontSize: '22px',
+                    fontWeight: '700',
+                    color: '#111827',
+                    border: otpError
+                      ? '2px solid #EF4444'
+                      : isFocused
+                        ? '2px solid #2563EB'
+                        : isFilled
+                          ? '2px solid #111827'
+                          : '2px solid #D1D5DB',
+                    borderRadius: '10px',
+                    outline: 'none',
+                    backgroundColor: isFilled ? '#F8FAFC' : '#FFFFFF',
+                    transition: 'all 0.15s ease',
+                    caretColor: '#2563EB',
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          {/* OTP Error */}
+          <div style={{ minHeight: '24px', marginBottom: '8px' }}>
+            {otpError && (
+              <p style={{
+                color: '#EF4444',
+                fontSize: '13px',
+                textAlign: 'center',
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+                {otpError}
+              </p>
+            )}
+          </div>
+
+          {/* Verify Button */}
+          <button
+            type="button"
+            onClick={handleVerifyOtp}
+            disabled={isVerifyingOtp || otpCode.length !== 6}
+            style={{
+              width: '100%',
+              maxWidth: '310px',
+              padding: '14px 20px',
+              backgroundColor: otpCode.length === 6 ? '#000000' : '#D1D5DB',
+              color: otpCode.length === 6 ? '#FFFFFF' : '#9CA3AF',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '15px',
+              fontWeight: '600',
+              cursor: (isVerifyingOtp || otpCode.length !== 6) ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              marginBottom: '20px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            }}
+          >
+            {isVerifyingOtp ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <div className="jaldi-loading"></div>
+                <span>Verifying...</span>
+              </div>
+            ) : 'VERIFY & PLACE ORDER'}
+          </button>
+
+          {/* Resend / Timer */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            marginBottom: '8px',
+          }}>
+            {otpCountdown > 0 ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span style={{ fontSize: '13px', color: '#9CA3AF' }}>
+                  Resend code in <strong style={{ color: '#6B7280' }}>{otpCountdown}s</strong>
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: '13px', color: '#6B7280' }}>Didn't receive the code?</span>
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={isSendingOtp}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563EB',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {isSendingOtp ? 'Sending...' : 'Resend'}
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Back / Change phone */}
+          <button
+            type="button"
+            onClick={() => {
+              setOtpStep('form');
+              setOtpCode('');
+              setOtpError('');
+              setFocusedOtpIndex(-1);
+              setIsSubmitting(false);
+              setPendingOrderData(null);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6B7280',
+              fontSize: '13px',
+              cursor: 'pointer',
+              marginTop: '4px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Change phone number
+          </button>
+        </div>
+      )}
     </div>
   );
 }

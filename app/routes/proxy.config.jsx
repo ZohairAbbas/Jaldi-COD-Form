@@ -71,6 +71,8 @@ export const loader = async ({ request }) => {
         cardButtonBgColor: shopData.settings.cardButtonBgColor,
         cardButtonTextColor: shopData.settings.cardButtonTextColor,
         cardButtonFontSize: shopData.settings.cardButtonFontSize,
+        // OTP verification
+        enableOTP: shopData.settings.enableOTP,
       },
       shop: {
         country: shopData.country || 'PAK',

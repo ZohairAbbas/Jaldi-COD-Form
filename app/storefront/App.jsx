@@ -4,8 +4,8 @@ import CODForm from './CODForm';
 import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
+import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
-import { initializePixels, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
 
 // Default config to show button immediately while real config loads
@@ -523,16 +523,19 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   const loadConfig = async () => {
     try {
-      // Use default app path for initial config fetch
-      const response = await fetch(`/apps/preventify/proxy/config?shop=${shopDomain}`);
+      // Use app path from Liquid template global, fallback to default
+      const initialAppPath = window.PREVENTIFY_APP_PATH || '/apps/preventify/';
+      const response = await fetch(`${initialAppPath}proxy/config?shop=${shopDomain}`);
       const data = await response.json();
       setConfig(data);
       setConfigLoaded(true);
 
-      // Set dynamic app path from config
-      if (data.appPath) {
-        setAppPath(data.appPath);
-      }
+      // Use app path from Liquid template (most reliable), fallback to config response
+      const resolvedAppPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
+      setAppPath(resolvedAppPath);
+
+      // Capture UTM params regardless of pixel config
+      captureUtmParams();
 
       // Initialize pixel tracking
       if (data.pixels) {

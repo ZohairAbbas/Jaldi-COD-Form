@@ -972,29 +972,42 @@ export default function DownsellEditor() {
                   >
                     <div
                       style={{
-                        width: `${downsell.plaqueSize * 2}px`,
-                        height: `${downsell.plaqueSize * 2}px`,
-                        background: downsell.plaqueBackgroundColor,
-                        borderRadius: "50%",
+                        width: `${downsell.plaqueSize * 2.5}px`,
+                        height: `${downsell.plaqueSize * 2.5}px`,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         position: "relative",
                       }}
                     >
-                      {/* Starburst spikes using CSS */}
-                      <div
+                      {/* Starburst SVG background */}
+                      <svg
+                        viewBox="0 0 200 200"
                         style={{
                           position: "absolute",
                           width: "100%",
                           height: "100%",
-                          background: downsell.plaqueBackgroundColor,
-                          clipPath: "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
                         }}
-                      />
+                      >
+                        <path
+                          d={(() => {
+                            const cx = 100, cy = 100, outerR = 98, innerR = 72, points = 20;
+                            let d = '';
+                            for (let i = 0; i < points * 2; i++) {
+                              const angle = (Math.PI * i) / points - Math.PI / 2;
+                              const r = i % 2 === 0 ? outerR : innerR;
+                              const x = cx + r * Math.cos(angle);
+                              const y = cy + r * Math.sin(angle);
+                              d += (i === 0 ? 'M' : 'L') + `${x},${y}`;
+                            }
+                            return d + 'Z';
+                          })()}
+                          fill={downsell.plaqueBackgroundColor}
+                        />
+                      </svg>
                       <span
                         style={{
-                          fontSize: `${Math.max(18, downsell.plaqueSize * 0.6)}px`,
+                          fontSize: `${Math.max(20, downsell.plaqueSize * 0.7)}px`,
                           fontWeight: "700",
                           color: downsell.plaqueDiscountColor,
                           position: "relative",
