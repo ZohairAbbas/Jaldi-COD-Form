@@ -52,7 +52,10 @@ export default defineConfig({
   build: {
     assetsInlineLimit: 0,
   },
+  ssr: {
+    noExternal: ['@heymantle/client', '@heymantle/react'],
+  },
   optimizeDeps: {
-    include: ["@shopify/app-bridge-react"],
+    include: ["@shopify/app-bridge-react", "mixpanel-browser"],
   },
 });

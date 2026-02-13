@@ -5,6 +5,7 @@ import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
+import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
 
 // Default config to show button immediately while real config loads
@@ -545,6 +546,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       if (data.shop?.enableMultiCountry) {
         detectCountry(data);
       }
+
+      // Initialize Mixpanel for storefront tracking
+      if (data.ENV?.MIXPANEL_TOKEN) {
+        initStorefrontMixpanel(data.ENV.MIXPANEL_TOKEN, shopDomain);
+        trackStorefrontEvent('App Loaded', {
+          has_config: !!data.formConfig,
+          form_mode: data.settings?.formMode,
+          has_upsells: data.upsells?.prePurchase?.length > 0,
+          has_downsells: data.downsells?.length > 0,
+        });
+      }
     } catch (error) {
       console.error('Failed to load config:', error);
       // Keep using default config on error
@@ -809,6 +821,13 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Handle button click - check for upsell first
   const handleBuyButtonClick = () => {
+    // Track button click
+    trackButtonClick('cod_button', {
+      has_current_product: !!currentProduct,
+      cart_items_count: cart.items.length,
+      page_type: currentPageType,
+    });
+
     const activeUpsell = getActivePrePurchaseUpsell();
 
     // If there's an active upsell and hasn't been shown yet, show upsell modal first
@@ -816,9 +835,19 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       setShowUpsellModal(true);
       // Track impression
       trackUpsellStat(activeUpsell.id, 'impression');
+      trackStorefrontEvent('Pre-Purchase Upsell Viewed', {
+        upsell_id: activeUpsell.id,
+        product_title: activeUpsell.product?.title,
+        discount_type: activeUpsell.discount?.type,
+        discount_value: activeUpsell.discount?.value,
+      });
     } else {
       // No upsell or already handled, go straight to COD form
       setIsModalOpen(true);
+      trackStorefrontEvent('COD Form Opened', {
+        has_upsell_product: !!upsellProduct,
+        cart_items_count: getCartWithUpsell().items.length,
+      });
     }
   };
 

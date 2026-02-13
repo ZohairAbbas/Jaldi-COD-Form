@@ -2,28 +2,64 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import { getOrCreateShop } from "../lib/db.server";
+import { getSubscription } from "../lib/mantle.server";
+import MixpanelProvider from "../components/MixpanelProvider";
+import BillingBanner from "../components/BillingBanner";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
-  // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  // Get shop and subscription data for billing banner and analytics
+  const shop = await getOrCreateShop(session.shop, session.accessToken);
+  const subscription = await getSubscription(shop.id);
+
+  return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    shop: {
+      id: shop.id,
+      shopifyDomain: shop.shopifyDomain,
+      country: shop.country,
+      enableMultiCountry: shop.enableMultiCountry,
+      hasFormConfig: !!shop.formConfig,
+      hasSettings: !!shop.settings,
+    },
+    subscription,
+    ENV: {
+      MIXPANEL_TOKEN: process.env.MIXPANEL_TOKEN || "",
+    },
+    user: {
+      email: session.email,
+      name: session.firstName ? `${session.firstName} ${session.lastName || ''}`.trim() : null,
+    },
+  };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData();
+  const { apiKey, shop, subscription, ENV, user } = useLoaderData();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-app-nav>
-        <s-link href="/app">Dashboard</s-link>
-        <s-link href="/app/form-designer">Form Designer</s-link>
-        <s-link href="/app/settings">Settings</s-link>
-        <s-link href="/app/sales-booster">Sales Booster</s-link>
-        <s-link href="/app/shipping-rates">Shipping Rates</s-link>
-        <s-link href="/app/analytics">Analytics</s-link>
-      </s-app-nav>
-      <Outlet />
+      <MixpanelProvider shop={shop} user={user}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.ENV = ${JSON.stringify(ENV)};`,
+          }}
+        />
+        <s-app-nav>
+          <s-link href="/app">Dashboard</s-link>
+          <s-link href="/app/form-designer">Form Designer</s-link>
+          <s-link href="/app/settings">Settings</s-link>
+          <s-link href="/app/sales-booster">Sales Booster</s-link>
+          <s-link href="/app/shipping-rates">Shipping Rates</s-link>
+          <s-link href="/app/analytics">Analytics</s-link>
+          <s-link href="/app/billing">Billing</s-link>
+        </s-app-nav>
+        <div style={{ padding: '16px' }}>
+          <BillingBanner subscription={subscription} />
+          <Outlet />
+        </div>
+      </MixpanelProvider>
     </AppProvider>
   );
 }
