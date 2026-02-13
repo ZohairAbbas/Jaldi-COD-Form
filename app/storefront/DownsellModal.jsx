@@ -137,7 +137,7 @@ export default function DownsellModal({
               justifyContent: "center",
             }}
           >
-            {/* Starburst SVG background */}
+            {/* Starburst SVG background with gradient */}
             <svg
               viewBox="0 0 200 200"
               style={{
@@ -146,6 +146,12 @@ export default function DownsellModal({
                 height: "100%",
               }}
             >
+              <defs>
+                <linearGradient id="jaldi-starburst-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor={customization.plaqueBackgroundColor} />
+                  <stop offset="100%" stopColor={customization.plaqueGradientEndColor || "#FF1493"} />
+                </linearGradient>
+              </defs>
               <path
                 d={(() => {
                   const cx = 100, cy = 100, outerR = 98, innerR = 72, points = 20;
@@ -159,16 +165,17 @@ export default function DownsellModal({
                   }
                   return d + 'Z';
                 })()}
-                fill={customization.plaqueBackgroundColor}
+                fill="url(#jaldi-starburst-gradient)"
               />
             </svg>
             <span
               style={{
                 fontSize: `${Math.max(20, customization.plaqueSize * 0.7)}px`,
                 fontWeight: "700",
-                color: customization.plaqueDiscountColor,
+                color: "#FFFFFF",
                 position: "relative",
                 zIndex: 1,
+                textShadow: "0 1px 3px rgba(0,0,0,0.3)",
               }}
             >
               {getDiscountDisplay()}

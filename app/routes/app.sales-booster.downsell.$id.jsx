@@ -511,7 +511,21 @@ export default function DownsellEditor() {
                       />
                     </s-stack>
                     <s-stack direction="block" gap="tight">
-                      <s-text variant="body-sm">Background color</s-text>
+                      <s-text variant="body-sm">Plaque size</s-text>
+                      <input
+                        type="range"
+                        value={downsell.plaqueSize}
+                        onChange={(e) => handleUpdate({ plaqueSize: parseInt(e.target.value) })}
+                        min="30"
+                        max="100"
+                        style={{ width: "100%" }}
+                      />
+                    </s-stack>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <s-stack direction="block" gap="tight">
+                      <s-text variant="body-sm">Gradient start</s-text>
                       <input
                         type="text"
                         value={downsell.plaqueBackgroundColor}
@@ -526,15 +540,12 @@ export default function DownsellEditor() {
                         }}
                       />
                     </s-stack>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                     <s-stack direction="block" gap="tight">
-                      <s-text variant="body-sm">Discount color</s-text>
+                      <s-text variant="body-sm">Gradient end</s-text>
                       <input
                         type="text"
-                        value={downsell.plaqueDiscountColor}
-                        onChange={(e) => handleUpdate({ plaqueDiscountColor: e.target.value })}
+                        value={downsell.plaqueGradientEndColor || "#FF1493"}
+                        onChange={(e) => handleUpdate({ plaqueGradientEndColor: e.target.value })}
                         style={{
                           width: "100%",
                           padding: "10px 12px",
@@ -543,17 +554,6 @@ export default function DownsellEditor() {
                           fontSize: "14px",
                           boxSizing: "border-box",
                         }}
-                      />
-                    </s-stack>
-                    <s-stack direction="block" gap="tight">
-                      <s-text variant="body-sm">Plaque size</s-text>
-                      <input
-                        type="range"
-                        value={downsell.plaqueSize}
-                        onChange={(e) => handleUpdate({ plaqueSize: parseInt(e.target.value) })}
-                        min="30"
-                        max="100"
-                        style={{ width: "100%" }}
                       />
                     </s-stack>
                   </div>
@@ -980,7 +980,7 @@ export default function DownsellEditor() {
                         position: "relative",
                       }}
                     >
-                      {/* Starburst SVG background */}
+                      {/* Starburst SVG background with gradient */}
                       <svg
                         viewBox="0 0 200 200"
                         style={{
@@ -989,6 +989,12 @@ export default function DownsellEditor() {
                           height: "100%",
                         }}
                       >
+                        <defs>
+                          <linearGradient id="jaldi-preview-starburst-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor={downsell.plaqueBackgroundColor} />
+                            <stop offset="100%" stopColor={downsell.plaqueGradientEndColor || "#FF1493"} />
+                          </linearGradient>
+                        </defs>
                         <path
                           d={(() => {
                             const cx = 100, cy = 100, outerR = 98, innerR = 72, points = 20;
@@ -1002,16 +1008,17 @@ export default function DownsellEditor() {
                             }
                             return d + 'Z';
                           })()}
-                          fill={downsell.plaqueBackgroundColor}
+                          fill="url(#jaldi-preview-starburst-gradient)"
                         />
                       </svg>
                       <span
                         style={{
                           fontSize: `${Math.max(20, downsell.plaqueSize * 0.7)}px`,
                           fontWeight: "700",
-                          color: downsell.plaqueDiscountColor,
+                          color: "#FFFFFF",
                           position: "relative",
                           zIndex: 1,
+                          textShadow: "0 1px 3px rgba(0,0,0,0.3)",
                         }}
                       >
                         {getDiscountDisplay()}
