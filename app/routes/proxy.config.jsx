@@ -180,6 +180,7 @@ export const loader = async ({ request }) => {
             plaqueText: downsell.plaqueText,
             plaqueTextColor: downsell.plaqueTextColor,
             plaqueBackgroundColor: downsell.plaqueBackgroundColor,
+            plaqueGradientEndColor: downsell.plaqueGradientEndColor,
             plaqueDiscountColor: downsell.plaqueDiscountColor,
             plaqueSize: downsell.plaqueSize,
             ctaText: downsell.ctaText,
