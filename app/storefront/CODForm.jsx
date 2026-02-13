@@ -137,40 +137,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   }, [otpCountdown]);
 
   // Customer lookup on phone blur
+  // Customer lookup disabled - security issue (exposes address for any phone number)
   const handlePhoneBlur = async () => {
-    const phone = formData.phone;
-    const digitsAfterCode = phone?.slice(country.phoneCode.length) || '';
-    // Only lookup if phone has valid length (10 digits for Pakistan)
-    if (digitsAfterCode.length < 10) return;
-
-    setIsLookingUpCustomer(true);
-    try {
-      const response = await fetch(`${appPath}proxy/customer-lookup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop: config.shopDomain, phone }),
-      });
-      const data = await response.json();
-      if (data.customer) {
-        // Auto-fill form fields with customer data (only fill empty fields)
-        setFormData(prev => ({
-          ...prev,
-          firstName: prev.firstName || data.customer.firstName || '',
-          lastname: prev.lastname || data.customer.lastName || '',
-          lastName: prev.lastName || data.customer.lastName || '',
-          email: prev.email || data.customer.email || '',
-          address: prev.address || data.customer.address || '',
-          address2: prev.address2 || data.customer.address2 || '',
-          city: prev.city || data.customer.city || '',
-          province: prev.province || data.customer.province || '',
-          postalCode: prev.postalCode || data.customer.postalCode || '',
-        }));
-      }
-    } catch (error) {
-      console.error('Customer lookup failed:', error);
-    } finally {
-      setIsLookingUpCustomer(false);
-    }
+    // No-op: customer lookup is disabled
   };
 
   // Send OTP to customer's phone
@@ -371,12 +340,19 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const pixelEventId = getEventId();
 
     // Get first and last name from form data
-    let derivedFirstName = formData.firstName || formData.firstname || '';
-    let derivedLastName = formData.lastName || formData.lastname || '';
+    // Form input uses lowercase keys (e.g. "firstname" from "first-name" field id)
+    let derivedFirstName = formData.firstname || formData.firstName || '';
+    let derivedLastName = formData.lastname || formData.lastName || '';
 
-    // If last name is empty, duplicate first name (Shopify requires both)
+    // If last name is empty, try to split first name into first and last
     if (!derivedLastName || derivedLastName.trim() === '') {
-      derivedLastName = derivedFirstName;
+      const nameParts = derivedFirstName.trim().split(/\s+/);
+      if (nameParts.length > 1) {
+        derivedFirstName = nameParts[0];
+        derivedLastName = nameParts.slice(1).join(' ');
+      } else {
+        derivedLastName = derivedFirstName;
+      }
     }
 
     // Transform cart items for submission
@@ -497,6 +473,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const checkoutParams = new URLSearchParams();
 
     // Parse full name into first/last name for checkout
+    // Form input uses lowercase keys (e.g. "firstname" from "first-name" field id)
     let firstName = formData.firstname || formData.firstName || '';
     let lastName = formData.lastname || formData.lastName || '';
 
@@ -509,6 +486,17 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       } else {
         firstName = nameParts[0];
         lastName = nameParts.slice(1).join(' ');
+      }
+    }
+
+    // If last name is still empty, try to split first name
+    if (!lastName || lastName.trim() === '') {
+      const nameParts = firstName.trim().split(/\s+/);
+      if (nameParts.length > 1) {
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ');
+      } else {
+        lastName = firstName;
       }
     }
     const phone = formData.phone || '';

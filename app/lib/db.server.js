@@ -819,7 +819,8 @@ export function getDefaultDownsell() {
     // Discount plaque
     plaqueText: "GET AN EXTRA DISCOUNT ON YOUR ORDER:",
     plaqueTextColor: "rgba(0,0,0,1)",
-    plaqueBackgroundColor: "linear-gradient(90deg, #ff6b6b, #ee5a5a)",
+    plaqueBackgroundColor: "#EF4444",
+    plaqueGradientEndColor: "#FF1493",
     plaqueDiscountColor: "rgba(255,255,255,1)",
     plaqueSize: 50,
     // CTA text
