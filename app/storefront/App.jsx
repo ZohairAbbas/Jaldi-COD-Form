@@ -150,6 +150,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     let lastKnownVariantId = currentProduct?.variantId?.split('/').pop() || null;
     let lastKnownQuantity = currentProduct?.quantity || 1;
     let isUpdating = false;
+    let lastKnownDisplayCurrency = currentProduct?.displayCurrencySymbol || null;
 
     // ===== PUMPER BUNDLES INTEGRATION =====
     // Helper to get Pumper Bundles selected bundle data
@@ -190,6 +191,91 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       };
     };
 
+    // Helper to get theme built-in quantity-breaks bundle data (e.g. Shrine theme)
+    const getQuantityBreaksData = () => {
+      const quantityBreaksEl = document.querySelector('quantity-breaks');
+      if (!quantityBreaksEl) return null;
+
+      // Find the selected radio input inside quantity-breaks
+      const selectedRadio = quantityBreaksEl.querySelector('input[name="quantity"]:checked');
+      if (!selectedRadio) return null;
+
+      const quantity = parseInt(selectedRadio.value);
+      if (isNaN(quantity) || quantity < 1) return null;
+
+      // Find the label associated with the selected radio
+      const label = quantityBreaksEl.querySelector(`label[for="${selectedRadio.id}"]`);
+      if (!label) return null;
+
+      // Helper: get the base-currency price and display price from an element
+      // If a currency converter (Bucks) has modified it, use bucks-init (original price)
+      // and return the displayed converted price separately
+      const getPrices = (el) => {
+        if (!el) return { base: null, display: null };
+        const bucksEl = el.closest('.buckscc-converted') || el.querySelector('.buckscc-converted');
+        if (bucksEl && bucksEl.getAttribute('bucks-init')) {
+          const base = parseFloat(bucksEl.getAttribute('bucks-init'));
+          // Get the displayed (converted) price from the text
+          const text = el.textContent.trim();
+          const match = text.match(/[\d,]+\.?\d*/);
+          const display = match ? normalizePrice(match[0]) : null;
+          return { base, display };
+        }
+        const text = el.textContent.trim();
+        const match = text.match(/[\d,]+\.?\d*/);
+        return { base: match ? normalizePrice(match[0]) : null, display: null };
+      };
+
+      // Get the displayed price (discounted total for this bundle option)
+      const priceEl = label.querySelector('.quantity-break__price span');
+      if (!priceEl) return null;
+
+      const priceParts = getPrices(priceEl);
+      if (!priceParts.base) return null;
+
+      // Get the compare/original price if available (visible when there's a discount)
+      const comparePriceEl = label.querySelector('.quantity-break__compare-price span');
+      let originalPrice = null;
+      let displayOriginalPrice = null;
+      if (comparePriceEl && !comparePriceEl.closest('.quantity-break__compare-price')?.classList.contains('hidden')) {
+        const compareParts = getPrices(comparePriceEl);
+        originalPrice = compareParts.base;
+        displayOriginalPrice = compareParts.display;
+      }
+
+      return {
+        quantity,
+        discountedPrice: priceParts.base,
+        displayDiscountedPrice: priceParts.display,
+        originalPrice: originalPrice,
+        displayOriginalPrice: displayOriginalPrice,
+        hasBundleDiscount: originalPrice !== null && originalPrice > priceParts.base,
+      };
+    };
+
+    // Helper to get displayed/converted price from the DOM (for currency converter extensions like Bucks)
+    const getDisplayedPriceData = () => {
+      // Use product-price parent to target the actual product price, not hidden/unrelated $0.00 elements
+      const convertedEl = document.querySelector('product-price .buckscc-converted[bucks-current]')
+        || document.querySelector('.price .buckscc-converted[bucks-current]');
+      if (convertedEl) {
+        const currentPrice = convertedEl.getAttribute('bucks-current') || '';
+        const currency = convertedEl.getAttribute('bucks-currency') || '';
+        const match = currentPrice.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+        if (match) {
+          const symbol = match[1] || match[3] || '';
+          const amount = normalizePrice(match[2]);
+          if (amount > 0) {
+            // Derive exchange rate from original price (bucks-init) to convert other items
+            const initPrice = parseFloat(convertedEl.getAttribute('bucks-init') || '0');
+            const exchangeRate = initPrice > 0 ? amount / initPrice : null;
+            return { currencySymbol: symbol, price: amount, currencyCode: currency, exchangeRate };
+          }
+        }
+      }
+      return null;
+    };
+
     // Helper to fetch variant data from Shopify's product JSON
     const fetchVariantData = async (variantId) => {
       try {
@@ -214,15 +300,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         // Variant is available
         setIsProductAvailable(true);
 
-        // Check for Pumper Bundles discount
+        // Check for bundle data: Pumper Bundles first, then theme quantity-breaks
         const pumperData = getPumperBundleData();
+        const quantityBreaksData = !pumperData ? getQuantityBreaksData() : null;
+        const bundleData = pumperData || quantityBreaksData;
 
-        // Use Pumper's quantity and price if available
-        let quantity = pumperData?.quantity || 1;
-        let price = pumperData?.discountedPrice || (variant.price / 100);
+        // Use bundle quantity and price if available
+        let quantity = bundleData?.quantity || 1;
+        let price = bundleData?.discountedPrice || (variant.price / 100);
 
-        // If no Pumper data, try to get quantity from product form
-        if (!pumperData) {
+        // If no bundle data, try to get quantity from product form
+        if (!bundleData) {
           const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
           if (quantityInput) {
             const inputQuantity = parseInt(quantityInput.value);
@@ -231,6 +319,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             }
           }
         }
+
+        // Check for currency converter displayed price (display only, never affects order price)
+        const displayedPriceData = getDisplayedPriceData();
 
         const productDataResult = {
           variantId: `gid://shopify/ProductVariant/${variant.id}`,
@@ -241,9 +332,20 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           image: variant.featured_image?.src || productData.featured_image || container.dataset.productImage,
         };
 
+        // Add displayed currency info if a converter is active (for display only)
+        if (displayedPriceData) {
+          // Use bundle's display price if available (currency converter modifies bundle DOM prices)
+          // Otherwise fall back to the general displayed price from the page
+          productDataResult.displayPrice = bundleData?.displayDiscountedPrice || displayedPriceData.price;
+          productDataResult.displayCurrencySymbol = displayedPriceData.currencySymbol;
+          productDataResult.displayCurrencyCode = displayedPriceData.currencyCode;
+          if (displayedPriceData.exchangeRate) productDataResult.displayExchangeRate = displayedPriceData.exchangeRate;
+          if (bundleData?.displayOriginalPrice) productDataResult.displayOriginalPrice = bundleData.displayOriginalPrice;
+        }
+
         // Add bundle discount info if applicable
-        if (pumperData?.hasBundleDiscount) {
-          productDataResult.originalPrice = pumperData.originalPrice;
+        if (bundleData?.hasBundleDiscount) {
+          productDataResult.originalPrice = bundleData.originalPrice;
           productDataResult.hasBundleDiscount = true;
         }
 
@@ -335,6 +437,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         const variant = productData.variants.find(v => v.id === parseInt(variantId));
         if (!variant || !variant.available) return false;
 
+        // Check for currency converter displayed price
+        const displayedPriceData = getDisplayedPriceData();
+
         const newProductData = {
           variantId: `gid://shopify/ProductVariant/${variant.id}`,
           title: productData.title,
@@ -343,6 +448,13 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           price: pumperData.discountedPrice,
           image: variant.featured_image?.src || productData.featured_image || container.dataset.productImage,
         };
+
+        if (displayedPriceData) {
+          newProductData.displayPrice = displayedPriceData.price;
+          newProductData.displayCurrencySymbol = displayedPriceData.currencySymbol;
+          newProductData.displayCurrencyCode = displayedPriceData.currencyCode;
+          if (displayedPriceData.exchangeRate) newProductData.displayExchangeRate = displayedPriceData.exchangeRate;
+        }
 
         if (pumperData.hasBundleDiscount) {
           newProductData.originalPrice = pumperData.originalPrice;
@@ -365,6 +477,78 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       }
     };
 
+    // Track last known quantity-breaks selection
+    let lastKnownQuantityBreaks = null;
+
+    // Helper to update product with theme quantity-breaks data
+    const updateWithQuantityBreaks = async () => {
+      const qbData = getQuantityBreaksData();
+      if (!qbData) return false;
+
+      // Create a key to detect changes
+      const qbKey = `${qbData.quantity}-${qbData.discountedPrice}`;
+      if (qbKey === lastKnownQuantityBreaks) return false;
+
+      lastKnownQuantityBreaks = qbKey;
+      lastKnownQuantity = qbData.quantity;
+
+      // Get current variant data and merge with quantity-breaks pricing
+      const variantId = getSelectedVariantId();
+      if (!variantId) return false;
+
+      try {
+        const pathParts = window.location.pathname.split('/');
+        const productIndex = pathParts.indexOf('products');
+        if (productIndex === -1 || !pathParts[productIndex + 1]) return false;
+
+        const productHandle = pathParts[productIndex + 1].split('?')[0];
+        const response = await fetch(`/products/${productHandle}.js`);
+        const productData = await response.json();
+
+        const variant = productData.variants.find(v => v.id === parseInt(variantId));
+        if (!variant || !variant.available) return false;
+
+        // Check for currency converter displayed price
+        const displayedPriceData = getDisplayedPriceData();
+
+        const newProductData = {
+          variantId: `gid://shopify/ProductVariant/${variant.id}`,
+          title: productData.title,
+          variant: variant.title !== 'Default Title' ? variant.title : null,
+          quantity: qbData.quantity,
+          price: qbData.discountedPrice,
+          image: variant.featured_image?.src || productData.featured_image || container.dataset.productImage,
+        };
+
+        if (displayedPriceData) {
+          newProductData.displayPrice = qbData.displayDiscountedPrice || displayedPriceData.price;
+          newProductData.displayCurrencySymbol = displayedPriceData.currencySymbol;
+          newProductData.displayCurrencyCode = displayedPriceData.currencyCode;
+          if (displayedPriceData.exchangeRate) newProductData.displayExchangeRate = displayedPriceData.exchangeRate;
+          if (qbData.displayOriginalPrice) newProductData.displayOriginalPrice = qbData.displayOriginalPrice;
+        }
+
+        if (qbData.hasBundleDiscount) {
+          newProductData.originalPrice = qbData.originalPrice;
+          newProductData.hasBundleDiscount = true;
+        }
+
+        setCurrentProduct(newProductData);
+        setCart(prevCart => {
+          const cartItems = prevCart.items.filter(item => {
+            const isCurrentProduct = item.variantId === currentProduct?.variantId;
+            return !isCurrentProduct && !item.isUpsell;
+          });
+          return { items: [newProductData, ...cartItems] };
+        });
+
+        return true;
+      } catch (error) {
+        console.error('Preventify: Failed to update with quantity-breaks data', error);
+        return false;
+      }
+    };
+
     // Poll for variant changes and quantity changes every 300ms
     // This is the most reliable method since Shopify themes update the input value programmatically
     const pollInterval = setInterval(async () => {
@@ -372,15 +556,20 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const pumperUpdated = await updateWithPumperBundle();
       if (pumperUpdated) return; // Skip other checks if Pumper updated
 
+      // Then check for theme quantity-breaks changes
+      const qbUpdated = await updateWithQuantityBreaks();
+      if (qbUpdated) return; // Skip other checks if quantity-breaks updated
+
       // Check for variant changes
       const currentVariantId = getSelectedVariantId();
       if (currentVariantId && currentVariantId !== lastKnownVariantId) {
         updateProductVariant(currentVariantId);
       }
 
-      // Check for quantity changes (only if no Pumper Bundles)
+      // Check for quantity changes (only if no Pumper Bundles or quantity-breaks)
       const hasPumperBundles = document.querySelector('.prvw_pair');
-      if (!hasPumperBundles) {
+      const hasQuantityBreaks = document.querySelector('quantity-breaks');
+      if (!hasPumperBundles && !hasQuantityBreaks) {
         const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
         if (quantityInput) {
           const currentQuantity = parseInt(quantityInput.value);
@@ -398,6 +587,62 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
               return { items };
             });
           }
+        }
+      }
+
+      // Check for currency converter updates (detects initial load and currency switches)
+      // Store as displayPrice — never overwrite price (used for order submission in original currency)
+      const displayedPriceData = getDisplayedPriceData();
+      if (displayedPriceData) {
+        const displayKey = `${displayedPriceData.currencyCode}-${displayedPriceData.price}`;
+        if (displayKey !== lastKnownDisplayCurrency) {
+          lastKnownDisplayCurrency = displayKey;
+          const rate = displayedPriceData.exchangeRate;
+
+          // Re-read quantity-breaks display prices for the new currency
+          const qbData = getQuantityBreaksData();
+
+          setCurrentProduct(prev => {
+            if (!prev) return prev;
+            const updated = {
+              ...prev,
+              displayCurrencySymbol: displayedPriceData.currencySymbol,
+              displayCurrencyCode: displayedPriceData.currencyCode,
+              displayExchangeRate: displayedPriceData.exchangeRate || prev.displayExchangeRate,
+            };
+            // Use bundle display price if available, otherwise convert base price
+            if (qbData?.displayDiscountedPrice) {
+              updated.displayPrice = qbData.displayDiscountedPrice;
+              if (qbData.displayOriginalPrice) updated.displayOriginalPrice = qbData.displayOriginalPrice;
+            } else if (rate && prev.price) {
+              updated.displayPrice = parseFloat((prev.price * rate).toFixed(2));
+              if (prev.originalPrice) updated.displayOriginalPrice = parseFloat((prev.originalPrice * rate).toFixed(2));
+            } else {
+              updated.displayPrice = displayedPriceData.price;
+            }
+            return updated;
+          });
+          // Update display prices for all items in cart and fullCart
+          const updateItemDisplay = (item) => {
+            const updatedItem = {
+              ...item,
+              displayCurrencySymbol: displayedPriceData.currencySymbol,
+              displayCurrencyCode: displayedPriceData.currencyCode,
+            };
+            if (rate) {
+              updatedItem.displayPrice = parseFloat((item.price * rate).toFixed(2));
+              if (item.originalPrice) {
+                updatedItem.displayOriginalPrice = parseFloat((item.originalPrice * rate).toFixed(2));
+              }
+            }
+            return updatedItem;
+          };
+          setCart(prevCart => ({
+            items: prevCart.items.map(updateItemDisplay)
+          }));
+          setFullCart(prevFullCart => ({
+            items: prevFullCart.items.map(updateItemDisplay)
+          }));
         }
       }
     }, 300);
@@ -455,6 +700,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         // Delay to allow Pumper to update the DOM
         setTimeout(() => {
           updateWithPumperBundle();
+        }, 150);
+      }
+
+      // Check for theme quantity-breaks clicks
+      const isQuantityBreaksClick = target.closest('quantity-breaks') ||
+                                     target.closest('.quantity-break') ||
+                                     target.closest('label[for^="quantity"]');
+      if (isQuantityBreaksClick) {
+        // Delay to allow theme JS to update the DOM
+        setTimeout(() => {
+          updateWithQuantityBreaks();
         }, 150);
       }
 
@@ -630,14 +886,57 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const response = await fetch('/cart.js');
       const cartData = await response.json();
 
-      const cartItems = cartData.items.map(item => ({
-        variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
-        title: item.product_title,
-        variant: item.variant_title,
-        quantity: item.quantity,
-        price: item.price / 100,
-        image: item.image || item.featured_image || null,
-      }));
+      // Check for currency converter to apply display prices to cart items
+      const convertedEl = document.querySelector('product-price .buckscc-converted[bucks-current]')
+        || document.querySelector('.price .buckscc-converted[bucks-current]');
+      let displayCurrencyInfo = null;
+      if (convertedEl) {
+        const currentPrice = convertedEl.getAttribute('bucks-current') || '';
+        const currency = convertedEl.getAttribute('bucks-currency') || '';
+        const priceMatch = currentPrice.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+        if (priceMatch) {
+          const symbol = priceMatch[1] || priceMatch[3] || '';
+          const convertedAmount = normalizePrice(priceMatch[2]);
+          const initPrice = parseFloat(convertedEl.getAttribute('bucks-init') || '0');
+          if (convertedAmount > 0 && initPrice > 0) {
+            displayCurrencyInfo = {
+              symbol,
+              currencyCode: currency,
+              exchangeRate: convertedAmount / initPrice,
+            };
+          }
+        }
+      }
+
+      const cartItems = cartData.items.map(item => {
+        // Use final_price (after line-level discounts) as the actual price
+        const finalPrice = item.final_price != null ? item.final_price / 100 : item.price / 100;
+        const originalBasePrice = item.price / 100;
+        const cartItem = {
+          variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
+          title: item.product_title,
+          variant: item.variant_title,
+          quantity: item.quantity,
+          price: finalPrice,
+          image: item.image || item.featured_image || null,
+        };
+        // Detect cart-level discounts (e.g. quantity-breaks bundles)
+        // Compare original price vs final_price to catch line-level discounts
+        if (originalBasePrice > finalPrice) {
+          cartItem.originalPrice = originalBasePrice;
+          cartItem.hasCartDiscount = true;
+        }
+        // Apply currency conversion for display
+        if (displayCurrencyInfo) {
+          cartItem.displayPrice = parseFloat((finalPrice * displayCurrencyInfo.exchangeRate).toFixed(2));
+          cartItem.displayCurrencySymbol = displayCurrencyInfo.symbol;
+          cartItem.displayCurrencyCode = displayCurrencyInfo.currencyCode;
+          if (cartItem.hasCartDiscount) {
+            cartItem.displayOriginalPrice = parseFloat((originalBasePrice * displayCurrencyInfo.exchangeRate).toFixed(2));
+          }
+        }
+        return cartItem;
+      });
 
       // Store full cart
       setFullCart({ items: cartItems });
@@ -876,6 +1175,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       isUpsell: true, // Mark as upsell item
     };
 
+    // Add display price if currency converter is active
+    const rate = currentProduct?.displayExchangeRate;
+    if (rate) {
+      upsellItem.displayPrice = parseFloat((finalPrice * rate).toFixed(2));
+      upsellItem.displayOriginalPrice = parseFloat((activeUpsell.product.price * rate).toFixed(2));
+      upsellItem.displayCurrencySymbol = currentProduct.displayCurrencySymbol;
+      upsellItem.displayCurrencyCode = currentProduct.displayCurrencyCode;
+    }
+
     setUpsellProduct(upsellItem);
     setUpsellHandled(true);
     setShowUpsellModal(false);
@@ -945,6 +1253,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     const cartWithUpsell = getCartWithUpsell();
     return cartWithUpsell.items.reduce((sum, item) => {
       const price = item.isUpsell && item.originalPrice ? item.originalPrice : item.price;
+      return sum + (price * item.quantity);
+    }, 0);
+  };
+
+  // Display cart total using converted prices (for downsell modal display)
+  const getDisplayCartTotal = () => {
+    const cartWithUpsell = getCartWithUpsell();
+    return cartWithUpsell.items.reduce((sum, item) => {
+      const price = item.displayPrice != null ? item.displayPrice : (item.isUpsell && item.originalPrice ? item.originalPrice : item.price);
       return sum + (price * item.quantity);
     }, 0);
   };
@@ -1193,7 +1510,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onAccept={handleUpsellAccept}
           onDecline={handleUpsellDecline}
           isRTL={config?.settings?.enableRTL}
-          currencySymbol={getCurrencySymbol(config?.shop?.country)}
+          currencySymbol={currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country)}
+          exchangeRate={currentProduct?.displayExchangeRate || null}
         />,
         document.body
       )}
@@ -1206,7 +1524,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onDecline={handlePostPurchaseDecline}
           isRTL={config?.settings?.enableRTL}
           isPostPurchase={true}
-          currencySymbol={getCurrencySymbol(config?.shop?.country)}
+          currencySymbol={currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country)}
+          exchangeRate={currentProduct?.displayExchangeRate || null}
         />,
         document.body
       )}
@@ -1215,11 +1534,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       {showDownsellModal && activeDownsell && createPortal(
         <DownsellModal
           downsellConfig={activeDownsell}
-          cartTotal={getCartTotal()}
+          cartTotal={getDisplayCartTotal()}
           onAccept={handleDownsellAccept}
           onDecline={handleDownsellDecline}
           isRTL={config?.settings?.enableRTL}
-          currencySymbol={getCurrencySymbol(config?.shop?.country)}
+          currencySymbol={currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country)}
         />,
         document.body
       )}

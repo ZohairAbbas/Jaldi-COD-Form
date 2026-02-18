@@ -40,6 +40,89 @@ function getPumperBundleData() {
   };
 }
 
+// Helper to get theme built-in quantity-breaks bundle data (e.g. Shrine theme)
+function getQuantityBreaksData() {
+  const quantityBreaksEl = document.querySelector('quantity-breaks');
+  if (!quantityBreaksEl) return null;
+
+  // Find the selected radio input inside quantity-breaks
+  const selectedRadio = quantityBreaksEl.querySelector('input[name="quantity"]:checked');
+  if (!selectedRadio) return null;
+
+  const quantity = parseInt(selectedRadio.value);
+  if (isNaN(quantity) || quantity < 1) return null;
+
+  // Find the label associated with the selected radio
+  const label = quantityBreaksEl.querySelector(`label[for="${selectedRadio.id}"]`);
+  if (!label) return null;
+
+  // Helper: get the base-currency price and display price from an element
+  // If a currency converter (Bucks) has modified it, use bucks-init (original price)
+  // and return the displayed converted price separately
+  const getPrices = (el) => {
+    if (!el) return { base: null, display: null };
+    const bucksEl = el.closest('.buckscc-converted') || el.querySelector('.buckscc-converted');
+    if (bucksEl && bucksEl.getAttribute('bucks-init')) {
+      const base = parseFloat(bucksEl.getAttribute('bucks-init'));
+      const text = el.textContent.trim();
+      const match = text.match(/[\d,]+\.?\d*/);
+      const display = match ? normalizePrice(match[0]) : null;
+      return { base, display };
+    }
+    const text = el.textContent.trim();
+    const match = text.match(/[\d,]+\.?\d*/);
+    return { base: match ? normalizePrice(match[0]) : null, display: null };
+  };
+
+  // Get the displayed price (discounted total for this bundle option)
+  const priceEl = label.querySelector('.quantity-break__price span');
+  if (!priceEl) return null;
+
+  const priceParts = getPrices(priceEl);
+  if (!priceParts.base) return null;
+
+  // Get the compare/original price if available (visible when there's a discount)
+  const comparePriceEl = label.querySelector('.quantity-break__compare-price span');
+  let originalPrice = null;
+  let displayOriginalPrice = null;
+  if (comparePriceEl && !comparePriceEl.closest('.quantity-break__compare-price')?.classList.contains('hidden')) {
+    const compareParts = getPrices(comparePriceEl);
+    originalPrice = compareParts.base;
+    displayOriginalPrice = compareParts.display;
+  }
+
+  return {
+    quantity,
+    discountedPrice: priceParts.base,
+    displayDiscountedPrice: priceParts.display,
+    originalPrice: originalPrice,
+    displayOriginalPrice: displayOriginalPrice,
+    hasBundleDiscount: originalPrice !== null && originalPrice > priceParts.base,
+  };
+}
+
+// Helper to get displayed/converted price from the DOM (for currency converter extensions like Bucks)
+function getDisplayedPriceData() {
+  // Look for currency converter elements (e.g. Bucks Currency Converter)
+  // Use product-price parent to target the actual product price, not hidden/unrelated $0.00 elements
+  const convertedEl = document.querySelector('product-price .buckscc-converted[bucks-current]')
+    || document.querySelector('.price .buckscc-converted[bucks-current]');
+  if (convertedEl) {
+    const currentPrice = convertedEl.getAttribute('bucks-current') || '';
+    const currency = convertedEl.getAttribute('bucks-currency') || '';
+    // Extract symbol and amount from the displayed price (e.g. "£2.69" -> symbol="£", amount=2.69)
+    const match = currentPrice.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+    if (match) {
+      const symbol = match[1] || match[3] || ''; // symbol can be prefix or suffix
+      const amount = normalizePrice(match[2]);
+      if (amount > 0) {
+        return { currencySymbol: symbol, price: amount, currencyCode: currency };
+      }
+    }
+  }
+  return null;
+}
+
 // Helper to extract product data from container
 function getProductData(container) {
   if (!container) return null;
@@ -58,15 +141,17 @@ function getProductData(container) {
   }
 
   if (productId && variantId) {
-    // Check for Pumper Bundles discount first
+    // Check for bundle data: Pumper Bundles first, then theme quantity-breaks
     const pumperData = getPumperBundleData();
+    const quantityBreaksData = !pumperData ? getQuantityBreaksData() : null;
+    const bundleData = pumperData || quantityBreaksData;
 
-    // Use Pumper's quantity and price if available
-    let quantity = pumperData?.quantity || 1;
-    let price = pumperData?.discountedPrice || normalizePrice(productPrice);
+    // Use bundle quantity and price if available
+    let quantity = bundleData?.quantity || 1;
+    let price = bundleData?.discountedPrice || normalizePrice(productPrice);
 
-    // If no Pumper data, try to get quantity from product form
-    if (!pumperData) {
+    // If no bundle data, try to get quantity from product form
+    if (!bundleData) {
       const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
       if (quantityInput) {
         const inputQuantity = parseInt(quantityInput.value);
@@ -75,6 +160,9 @@ function getProductData(container) {
         }
       }
     }
+
+    // Check for currency converter (e.g. Bucks) displayed price
+    const displayedPriceData = getDisplayedPriceData();
 
     const productData = {
       variantId: `gid://shopify/ProductVariant/${variantId}`,
@@ -85,9 +173,17 @@ function getProductData(container) {
       image: productImage,
     };
 
+    // Add displayed currency info if a converter is active (for display only, not order submission)
+    if (displayedPriceData) {
+      productData.displayPrice = bundleData?.displayDiscountedPrice || displayedPriceData.price;
+      productData.displayCurrencySymbol = displayedPriceData.currencySymbol;
+      productData.displayCurrencyCode = displayedPriceData.currencyCode;
+      if (bundleData?.displayOriginalPrice) productData.displayOriginalPrice = bundleData.displayOriginalPrice;
+    }
+
     // Add bundle discount info if applicable
-    if (pumperData?.hasBundleDiscount) {
-      productData.originalPrice = pumperData.originalPrice;
+    if (bundleData?.hasBundleDiscount) {
+      productData.originalPrice = bundleData.originalPrice;
       productData.hasBundleDiscount = true;
     }
 
@@ -417,13 +513,22 @@ function renderPopupAtDefault(shopDomain, productData) {
       || document.querySelector('.product-form')?.closest('section')
       || document.querySelector('form[action*="/cart/add"]')?.closest('section');
 
-    // Priority: after product-form-buttons > after shopify-product-form > append to product section
-    const targetContainer = productFormButtons || shopifyProductForm || productSection;
+    // Check for bundle/quantity-breaks sections that should appear before the COD button
+    const quantityBreaks = document.querySelector('quantity-breaks');
 
-    if (targetContainer) {
-      const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
+    const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
+
+    if (quantityBreaks) {
+      // Place after quantity-breaks so COD button appears between bundles and Add to Cart
       const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
-      targetContainer.after(button);
+      quantityBreaks.after(button);
+    } else if (productFormButtons) {
+      // Place before product-form-buttons (above ATC button)
+      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
+      productFormButtons.before(button);
+    } else if (shopifyProductForm || productSection) {
+      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
+      (shopifyProductForm || productSection).after(button);
     }
   } else if (pageType === 'cart') {
     // Find checkout button area - priority: after checkout button's parent (.cart__ctas) > after checkout button
@@ -462,13 +567,22 @@ function renderEmbeddedAtDefault(shopDomain, productData) {
       || document.querySelector('.product-form')?.closest('section')
       || document.querySelector('form[action*="/cart/add"]')?.closest('section');
 
-    // Priority: after product-form-buttons > after shopify-product-form > append to product section
-    const targetContainer = productFormButtons || shopifyProductForm || productSection;
+    // Check for bundle/quantity-breaks sections that should appear before the COD button
+    const quantityBreaks = document.querySelector('quantity-breaks');
 
-    if (targetContainer) {
-      const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
+    const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
+
+    if (quantityBreaks) {
+      // Place after quantity-breaks so embedded form appears between bundles and Add to Cart
       const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
-      targetContainer.after(form);
+      quantityBreaks.after(form);
+    } else if (productFormButtons) {
+      // Place before product-form-buttons (above ATC button)
+      const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
+      productFormButtons.before(form);
+    } else if (shopifyProductForm || productSection) {
+      const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
+      (shopifyProductForm || productSection).after(form);
     }
   } else if (pageType === 'cart') {
     // Find checkout button area - priority: after checkout button's parent (.cart__ctas) > after checkout button

@@ -7,6 +7,7 @@ export default function UpsellModal({
   isRTL = false,
   isPostPurchase = false,
   currencySymbol = 'Rs.',
+  exchangeRate = null,
 }) {
   if (!upsellConfig || !upsellConfig.product) {
     return null;
@@ -14,7 +15,10 @@ export default function UpsellModal({
 
   const { product, discount, customization } = upsellConfig;
 
-  // Calculate discounted price
+  // Convert price for display if exchange rate is available
+  const toDisplay = (price) => exchangeRate ? parseFloat((price * exchangeRate).toFixed(2)) : price;
+
+  // Calculate discounted price (in original currency)
   const getDiscountedPrice = () => {
     if (!product.price) return null;
     if (discount.type === "none" || !discount.value) return product.price;
@@ -138,7 +142,7 @@ export default function UpsellModal({
                   fontSize: "16px",
                 }}
               >
-                {formatPrice(product.price)}
+                {formatPrice(toDisplay(product.price))}
               </span>
               <span
                 style={{
@@ -147,7 +151,7 @@ export default function UpsellModal({
                   color: "#000000",
                 }}
               >
-                {formatPrice(discountedPrice)}
+                {formatPrice(toDisplay(discountedPrice))}
               </span>
               {/* Discount badge */}
               <div
@@ -165,7 +169,7 @@ export default function UpsellModal({
               >
                 {discount.type === "percentage"
                   ? `${discount.value}% OFF`
-                  : `Save ${currencySymbol}${discount.value}`}
+                  : `Save ${currencySymbol}${toDisplay(discount.value)}`}
               </div>
             </div>
           ) : (
@@ -176,7 +180,7 @@ export default function UpsellModal({
                 color: "#000000",
               }}
             >
-              {formatPrice(product.price)}
+              {formatPrice(toDisplay(product.price))}
             </span>
           )}
         </div>
