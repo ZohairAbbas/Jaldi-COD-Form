@@ -15,6 +15,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     ? (config.shop.supportedCountries || []).map(code => COUNTRIES[code]).filter(Boolean)
     : [country];
 
+  // Use displayed currency symbol from currency converter if available, otherwise fall back to country's symbol
+  const displayCurrency = cart.items?.find(item => item.displayCurrencySymbol);
+  const currencySymbol = displayCurrency?.displayCurrencySymbol || country.currencySymbol;
+
   // Check if RTL is enabled
   const isRTL = config.settings?.enableRTL || false;
 
@@ -686,11 +690,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   };
 
   // Calculate subtotal using original prices for upsell items and bundle items, regular price for others
-  // Note: For bundle items (Pumper Bundles), the price is already the total bundle price, not per-unit
+  // Note: For Pumper Bundle items, the price is already the total bundle price, not per-unit
+  // For cart discount items (quantity-breaks), prices are per-unit
   const subtotal = cart.items.reduce((sum, item) => {
     if (item.hasBundleDiscount && item.originalPrice) {
-      // Bundle price is already the total for all units, don't multiply by quantity
+      // Pumper Bundle price is already the total for all units, don't multiply by quantity
       return sum + item.originalPrice;
+    }
+    if (item.hasCartDiscount && item.originalPrice) {
+      // Cart discount items have per-unit prices, use original price × quantity
+      return sum + (item.originalPrice * item.quantity);
     }
     // Use original price if available (for upsells)
     const itemPrice = item.isUpsell && item.originalPrice ? item.originalPrice : item.price;
@@ -705,11 +714,15 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     return sum;
   }, 0);
 
-  // Calculate bundle discount (from Pumper Bundles or similar apps)
-  // Note: Bundle prices are already totals, not per-unit prices
+  // Calculate bundle discount (from Pumper Bundles, quantity-breaks, or similar)
+  // Note: Pumper Bundle prices are already totals, not per-unit prices
+  // Cart discount prices are per-unit, so multiply by quantity
   const bundleDiscount = cart.items.reduce((sum, item) => {
     if (item.hasBundleDiscount && item.originalPrice && item.originalPrice !== item.price) {
       return sum + (item.originalPrice - item.price);
+    }
+    if (item.hasCartDiscount && item.originalPrice && item.originalPrice !== item.price) {
+      return sum + ((item.originalPrice - item.price) * item.quantity);
     }
     return sum;
   }, 0);
@@ -805,6 +818,47 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   // Final total after discount + one-tick upsells - recovery discount + shipping
   const total = subtotal - bundleDiscount - upsellDiscount + oneTickTotal - recoveryDiscountAmount + shippingCost;
+
+  // Display calculations (for currency converter — display only, not used in order submission)
+  const hasDisplayPrice = cart.items.some(item => item.displayPrice != null);
+  const displaySubtotal = hasDisplayPrice
+    ? cart.items.reduce((sum, item) => {
+        // For upsell items, use displayOriginalPrice (converted original) since discount is shown separately
+        if (item.isUpsell && item.displayOriginalPrice != null) {
+          return sum + (item.displayOriginalPrice * item.quantity);
+        }
+        // For cart discount items, use displayOriginalPrice (per-unit) × quantity
+        if (item.hasCartDiscount && item.displayOriginalPrice != null) {
+          return sum + (item.displayOriginalPrice * item.quantity);
+        }
+        if (item.hasBundleDiscount && item.originalPrice) {
+          // Use displayOriginalPrice for the subtotal (discount is subtracted separately)
+          const displayOrig = item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice;
+          return sum + displayOrig;
+        }
+        const dp = item.displayPrice != null ? item.displayPrice : item.price;
+        return sum + (dp * item.quantity);
+      }, 0)
+    : subtotal;
+
+  // Display versions of discounts using exchange rate from bucks-init/bucks-current (stored on items)
+  // Prefer non-bundle, non-upsell cart items for accurate rate, fall back to any item with displayPrice
+  const displayExchangeRate = hasDisplayPrice
+    ? (() => {
+        const item = cart.items.find(i => i.displayPrice != null && i.price > 0 && !i.hasBundleDiscount && !i.hasCartDiscount && !i.isUpsell)
+          || cart.items.find(i => i.displayPrice != null && i.price > 0);
+        return item ? item.displayPrice / item.price : 1;
+      })()
+    : 1;
+  const displayUpsellDiscount = hasDisplayPrice ? parseFloat((upsellDiscount * displayExchangeRate).toFixed(2)) : upsellDiscount;
+  const displayBundleDiscount = hasDisplayPrice ? parseFloat((bundleDiscount * displayExchangeRate).toFixed(2)) : bundleDiscount;
+  const displayRecoveryDiscountAmount = hasDisplayPrice ? parseFloat((recoveryDiscountAmount * displayExchangeRate).toFixed(2)) : recoveryDiscountAmount;
+  const displayOneTickTotal = hasDisplayPrice ? parseFloat((oneTickTotal * displayExchangeRate).toFixed(2)) : oneTickTotal;
+  const displayShippingCost = hasDisplayPrice ? parseFloat((shippingCost * displayExchangeRate).toFixed(2)) : shippingCost;
+
+  const displayTotal = hasDisplayPrice
+    ? displaySubtotal - displayBundleDiscount - displayUpsellDiscount + displayOneTickTotal - displayRecoveryDiscountAmount + displayShippingCost
+    : total;
 
   return (
     <div style={formStyle}>
@@ -1023,14 +1077,28 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               color: '#9CA3AF',
                               textDecoration: 'line-through',
                             }}>
-                              {country.currencySymbol}{(item.originalPrice).toFixed(2)}
+                              {currencySymbol}{(item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice).toFixed(2)}
                             </div>
                             <div style={{ color: '#10b981' }}>
-                              {country.currencySymbol}{(item.price).toFixed(2)}
+                              {currencySymbol}{(item.displayPrice != null ? item.displayPrice : item.price).toFixed(2)}
+                            </div>
+                          </>
+                        ) : item.hasCartDiscount && item.originalPrice ? (
+                          <>
+                            <div style={{
+                              fontSize: '12px',
+                              fontWeight: '400',
+                              color: '#9CA3AF',
+                              textDecoration: 'line-through',
+                            }}>
+                              {currencySymbol}{((item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice) * item.quantity).toFixed(2)}
+                            </div>
+                            <div style={{ color: '#10b981' }}>
+                              {currencySymbol}{((item.displayPrice != null ? item.displayPrice : item.price) * item.quantity).toFixed(2)}
                             </div>
                           </>
                         ) : (
-                          <>{country.currencySymbol}{((item.isUpsell && item.originalPrice ? item.originalPrice : item.price) * item.quantity).toFixed(2)}</>
+                          <>{currencySymbol}{((item.isUpsell && item.displayOriginalPrice != null ? item.displayOriginalPrice : item.displayPrice != null ? item.displayPrice : (item.isUpsell && item.originalPrice ? item.originalPrice : item.price)) * item.quantity).toFixed(2)}</>
                         )}
                       </div>
 
@@ -1087,7 +1155,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     color: '#374151',
                   }}>
                     <span>Subtotal</span>
-                    <span style={{ color: '#111827', fontWeight: '600' }}>{country.currencySymbol}{subtotal.toFixed(2)}</span>
+                    <span style={{ color: '#111827', fontWeight: '600' }}>{currencySymbol}{displaySubtotal.toFixed(2)}</span>
                   </div>
                   {/* Show bundle discount line if there's a bundle discount from Pumper Bundles */}
                   {bundleDiscount > 0 && (
@@ -1100,7 +1168,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       color: '#374151',
                     }}>
                       <span>Bundle Discount</span>
-                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{country.currencySymbol}{bundleDiscount.toFixed(2)}</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayBundleDiscount.toFixed(2)}</span>
                     </div>
                   )}
                   {/* Show discount line if there's an upsell discount */}
@@ -1114,7 +1182,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       color: '#374151',
                     }}>
                       <span>Upsell Discount</span>
-                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{country.currencySymbol}{upsellDiscount.toFixed(2)}</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayUpsellDiscount.toFixed(2)}</span>
                     </div>
                   )}
                   {/* Show recovery discount line if there's a recovery discount from downsell */}
@@ -1131,7 +1199,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         <span style={{ fontSize: '12px' }}>⊘</span>
                         RECOVERY DISCOUNT
                       </span>
-                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{country.currencySymbol}{recoveryDiscountAmount.toFixed(2)}</span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayRecoveryDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
                   <div style={{
@@ -1147,7 +1215,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       color: shippingCost === 0 ? '#10B981' : '#111827',
                       fontWeight: '600'
                     }}>
-                      {shippingCost === 0 ? 'Free' : `${country.currencySymbol}${shippingCost.toFixed(2)}`}
+                      {shippingCost === 0 ? 'Free' : `${currencySymbol}${displayShippingCost.toFixed(2)}`}
                     </span>
                   </div>
                   <div style={{
@@ -1160,7 +1228,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     color: '#111827',
                   }}>
                     <span>Total</span>
-                    <span>{country.currencySymbol}{total.toFixed(2)}</span>
+                    <span>{currencySymbol}{displayTotal.toFixed(2)}</span>
                   </div>
                 </div>
               );
@@ -1223,7 +1291,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             fontWeight: '500',
                             color: rate.price === 0 ? '#10B981' : '#111827'
                           }}>
-                            {rate.price === 0 ? 'Free' : `${country.currencySymbol}${rate.price.toFixed(2)}`}
+                            {rate.price === 0 ? 'Free' : `${currencySymbol}${(hasDisplayPrice ? parseFloat((rate.price * displayExchangeRate).toFixed(2)) : rate.price).toFixed(2)}`}
                           </span>
                         </label>
                       ))}
@@ -1335,14 +1403,15 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         {/* One-Tick Upsells */}
         {oneTickUpsells.length > 0 && oneTickUpsells.map((upsell) => {
           const isSelected = selectedUpsells[upsell.id] || false;
-          const getCurrency = () => {
-            return getCurrencyCode(config.shop?.country);
-          };
 
-          // Replace placeholders in checkbox text
+          // Replace placeholders in checkbox text (use converted price if available)
+          const oneTickPrice = hasDisplayPrice && displayExchangeRate
+            ? parseFloat((upsell.upsellPrice * displayExchangeRate).toFixed(2))
+            : upsell.upsellPrice;
+          const oneTickCurrency = hasDisplayPrice ? currencySymbol : getCurrencyCode(config.shop?.country);
           const checkboxText = upsell.checkboxText
             .replace('{title}', upsell.upsellTitle || '')
-            .replace('{price}', `${getCurrency()} ${upsell.upsellPrice?.toFixed(2) || '0.00'}`);
+            .replace('{price}', `${oneTickCurrency} ${oneTickPrice?.toFixed(2) || '0.00'}`);
 
           return (
             <div
@@ -1440,7 +1509,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               <span>Processing...</span>
             </div>
           ) : (
-            `COMPLETE ORDER - ${country.currencySymbol}${total.toFixed(2)}`
+            `COMPLETE ORDER - ${currencySymbol}${displayTotal.toFixed(2)}`
           )}
         </button>
 
