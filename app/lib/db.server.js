@@ -1,5 +1,5 @@
 import prisma from "../db.server.js";
-import { CORE_FIELD_IDS } from "./constants.js";
+import { CORE_FIELD_IDS, COUNTRIES } from "./constants.js";
 
 /**
  * Get or create shop record with default settings and form config
@@ -1190,4 +1190,126 @@ export async function getDashboardStats(shopId) {
     revenue,
     conversionRate: parseFloat(conversionRate),
   };
+}
+
+// ============================================
+// BLOCKED USER / FRAUD PREVENTION FUNCTIONS
+// ============================================
+
+/**
+ * Normalize a phone number for blocking comparison.
+ * Strips non-digits, removes known country calling codes, and strips leading zeros.
+ */
+export function normalizePhoneForBlocking(phone) {
+  if (!phone) return '';
+
+  const trimmed = phone.trim();
+
+  // Only strip country code if the input explicitly has international prefix (+ or 00)
+  let digits = trimmed.replace(/\D/g, '');
+  const hasInternationalPrefix = trimmed.startsWith('+') || trimmed.startsWith('00');
+
+  if (hasInternationalPrefix) {
+    // Extract country calling codes from COUNTRIES constant
+    // Sort by length descending to avoid partial matches
+    const callingCodes = Object.values(COUNTRIES)
+      .map(c => c.phoneCode?.replace(/\D/g, ''))
+      .filter(Boolean);
+    const uniqueCodes = [...new Set(callingCodes)].sort((a, b) => b.length - a.length);
+
+    for (const code of uniqueCodes) {
+      if (digits.startsWith('00' + code)) {
+        digits = digits.substring(2 + code.length);
+        break;
+      }
+      if (digits.startsWith(code)) {
+        digits = digits.substring(code.length);
+        break;
+      }
+    }
+  }
+
+  // Strip leading zeros
+  digits = digits.replace(/^0+/, '');
+
+  return digits;
+}
+
+/**
+ * Get all blocked users for a shop
+ */
+export async function getBlockedUsers(shopId) {
+  return await prisma.blockedUser.findMany({
+    where: { shopId },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Sync blocked users list (replaces all entries of a given type)
+ */
+export async function syncBlockedUsers(shopId, type, values) {
+  // Delete all existing entries of this type
+  await prisma.blockedUser.deleteMany({
+    where: { shopId, type },
+  });
+
+  // Clean and normalize values
+  const cleanValues = values
+    .map(v => v.trim())
+    .filter(v => v.length > 0)
+    .map(v => type === 'phone' ? normalizePhoneForBlocking(v) : v.toLowerCase());
+
+  // Deduplicate
+  const unique = [...new Set(cleanValues)].filter(v => v.length > 0);
+
+  if (unique.length === 0) return [];
+
+  return await prisma.blockedUser.createMany({
+    data: unique.map(value => ({
+      shopId,
+      type,
+      value,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+/**
+ * Check if a user is blocked by email or phone
+ */
+export async function isUserBlocked(shopId, email, phone) {
+  const checks = [];
+
+  if (email && email.trim()) {
+    checks.push(
+      prisma.blockedUser.findFirst({
+        where: {
+          shopId,
+          type: 'email',
+          value: email.trim().toLowerCase(),
+        },
+      })
+    );
+  }
+
+  if (phone && phone.trim()) {
+    const normalizedPhone = normalizePhoneForBlocking(phone);
+    if (normalizedPhone) {
+      checks.push(
+        prisma.blockedUser.findFirst({
+          where: {
+            shopId,
+            type: 'phone',
+            value: normalizedPhone,
+          },
+        })
+      );
+    }
+  }
+
+  if (checks.length === 0) return false;
+
+  const results = await Promise.all(checks);
+  return results.some(r => r !== null);
 }
