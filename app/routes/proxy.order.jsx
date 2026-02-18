@@ -1,5 +1,5 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
-import { getShopByDomain, getUpsells, getEnabledPixels } from "../lib/db.server";
+import { getShopByDomain, getUpsells, getEnabledPixels, isUserBlocked } from "../lib/db.server";
 import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
 import { normalizePrice } from "../lib/constants";
 import prisma from "../db.server";
@@ -31,6 +31,20 @@ export const action = async ({ request }) => {
     const shop = await getShopByDomain(orderData.shop);
     if (!shop) {
       return Response.json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    // Check if user is blocked (fraud prevention)
+    if (shop.settings?.enableUserBlocking) {
+      const blocked = await isUserBlocked(shop.id, orderData.email, orderData.phone);
+      if (blocked) {
+        const message = shop.settings.blockedUserMessage
+          || "You are not allowed to place orders. Please contact support.";
+        return Response.json({
+          success: false,
+          error: message,
+          fieldErrors: {},
+        }, { status: 403 });
+      }
     }
 
     // Calculate totals from items if not provided

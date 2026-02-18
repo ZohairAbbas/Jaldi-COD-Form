@@ -3,13 +3,14 @@ import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getOrCreateShop, getPixelsByShop } from "../lib/db.server";
+import { getOrCreateShop, getPixelsByShop, getBlockedUsers } from "../lib/db.server";
 import { COUNTRY_OPTIONS } from "../lib/constants";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
   const pixels = await getPixelsByShop(shop.id);
+  const blockedUsers = await getBlockedUsers(shop.id);
 
   return {
     settings: shop.settings,
@@ -20,11 +21,12 @@ export const loader = async ({ request }) => {
       supportedCountries: shop.supportedCountries || [],
     },
     pixels,
+    blockedUsers,
   };
 };
 
 export default function Settings() {
-  const { settings: initialSettings, shop: initialShop, pixels: initialPixels } = useLoaderData();
+  const { settings: initialSettings, shop: initialShop, pixels: initialPixels, blockedUsers: initialBlockedUsers } = useLoaderData();
   const shopify = useAppBridge();
   const saveButtonRef = useRef(null);
 
@@ -60,6 +62,14 @@ export default function Settings() {
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const countrySearchRef = useRef(null);
 
+  // Fraud prevention state
+  const [blockedEmails, setBlockedEmails] = useState(
+    (initialBlockedUsers || []).filter(b => b.type === 'email').map(b => b.value).join('\n')
+  );
+  const [blockedPhones, setBlockedPhones] = useState(
+    (initialBlockedUsers || []).filter(b => b.type === 'phone').map(b => b.value).join('\n')
+  );
+
   const handleUpdate = (updates) => {
     setSettings((prev) => ({ ...prev, ...updates }));
   };
@@ -72,8 +82,8 @@ export default function Settings() {
     setIsSaving(true);
 
     try {
-      // Save both settings and shop data
-      const [settingsResponse, shopResponse] = await Promise.all([
+      // Save settings, shop data, and blocked users
+      const promises = [
         fetch("/api/settings", {
           method: "POST",
           headers: {
@@ -92,12 +102,27 @@ export default function Settings() {
             supportedCountries: shop.supportedCountries,
           }),
         }),
-      ]);
+      ];
 
-      const settingsData = await settingsResponse.json();
-      const shopData = await shopResponse.json();
+      // Save blocked users if feature is enabled
+      if (settings.enableUserBlocking) {
+        promises.push(
+          fetch("/api/blocked-users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              blockedEmails: blockedEmails.split('\n').filter(e => e.trim()),
+              blockedPhones: blockedPhones.split('\n').filter(p => p.trim()),
+            }),
+          })
+        );
+      }
 
-      if (settingsResponse.ok && settingsData.success && shopResponse.ok && shopData.success) {
+      const responses = await Promise.all(promises);
+      const results = await Promise.all(responses.map(r => r.json()));
+      const allOk = responses.every(r => r.ok) && results.every(r => r.success);
+
+      if (allOk) {
         shopify.toast.show("Settings saved successfully!");
       } else {
         throw new Error("Failed to save");
@@ -335,6 +360,30 @@ export default function Settings() {
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
             Pixels
+          </button>
+          <button
+            onClick={() => setActiveTab("fraud")}
+            style={{
+              padding: "10px 20px",
+              border: "none",
+              backgroundColor: activeTab === "fraud" ? "#FFFFFF" : "transparent",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500",
+              color: activeTab === "fraud" ? "#000000" : "#6b7280",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              transition: "all 0.2s ease",
+              boxShadow: activeTab === "fraud" ? "0 1px 3px rgba(0, 0, 0, 0.1)" : "none",
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            User Blocking
           </button>
         </div>
       </div>
@@ -979,6 +1028,120 @@ export default function Settings() {
           </s-box>
         </s-stack>
       </s-section>
+        </>
+      )}
+
+      {/* User Blocking Tab */}
+      {activeTab === "fraud" && (
+        <>
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <s-heading>User Blocking</s-heading>
+              <s-text variant="body-sm" tone="subdued">
+                Block specific emails and phone numbers from placing COD orders.
+                Blocked users will see a custom message instead of completing their order.
+              </s-text>
+
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={settings.enableUserBlocking || false}
+                  onChange={(e) => handleUpdate({ enableUserBlocking: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+                />
+                <div>
+                  <div style={{ fontWeight: "600", fontSize: "14px" }}>Enable User Blocking</div>
+                  <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "2px" }}>
+                    When enabled, orders from blocked emails and phone numbers will be rejected.
+                  </div>
+                </div>
+              </label>
+            </s-stack>
+          </s-section>
+
+          {settings.enableUserBlocking && (
+            <>
+              <s-section>
+                <s-stack direction="block" gap="base">
+                  <s-heading>Block Message</s-heading>
+                  <s-text variant="body-sm" tone="subdued">
+                    This message is shown to blocked users when they try to place an order.
+                  </s-text>
+                  <input
+                    type="text"
+                    value={settings.blockedUserMessage || "You are not allowed to place orders. Please contact support."}
+                    onChange={(e) => handleUpdate({ blockedUserMessage: e.target.value })}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "6px",
+                      border: "1px solid #ccc",
+                      fontSize: "14px",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </s-stack>
+              </s-section>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <s-section>
+                  <s-stack direction="block" gap="base">
+                    <s-heading>Emails to block</s-heading>
+                    <s-text variant="body-sm" tone="subdued">
+                      Enter email addresses to block, one per line.
+                    </s-text>
+                    <textarea
+                      value={blockedEmails}
+                      onChange={(e) => setBlockedEmails(e.target.value)}
+                      placeholder={"spam@example.com\nfraud@test.com"}
+                      rows={8}
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        borderRadius: "6px",
+                        border: "1px solid #ccc",
+                        fontSize: "14px",
+                        fontFamily: "monospace",
+                        resize: "vertical",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <s-text variant="body-sm" tone="subdued">
+                      {blockedEmails.split('\n').filter(e => e.trim()).length} email(s) blocked
+                    </s-text>
+                  </s-stack>
+                </s-section>
+
+                <s-section>
+                  <s-stack direction="block" gap="base">
+                    <s-heading>Phone numbers to block</s-heading>
+                    <s-text variant="body-sm" tone="subdued">
+                      Enter phone numbers to block, one per line. Enter without country code.
+                    </s-text>
+                    <textarea
+                      value={blockedPhones}
+                      onChange={(e) => setBlockedPhones(e.target.value)}
+                      placeholder={"03001234567\n03009876543"}
+                      rows={8}
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        borderRadius: "6px",
+                        border: "1px solid #ccc",
+                        fontSize: "14px",
+                        fontFamily: "monospace",
+                        resize: "vertical",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <s-text variant="body-sm" tone="subdued">
+                      {blockedPhones.split('\n').filter(p => p.trim()).length} phone number(s) blocked
+                    </s-text>
+                  </s-stack>
+                </s-section>
+              </div>
+            </>
+          )}
         </>
       )}
 

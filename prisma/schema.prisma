@@ -44,6 +44,27 @@ model Shop {
   settings           Settings?
   shippingRates      ShippingRate[]
   upsells            Upsell[]
+  subscription       Subscription?
+  blockedUsers       BlockedUser[]
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  shopId             String    @unique
+  mantleCustomerId   String?
+  planId             String?
+  planName           String?
+  status             String    @default("trialing")
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  trialEndsAt        DateTime?
+  usageCharges       Json      @default("[]")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  shop               Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([status])
 }
 
 model Settings {
@@ -74,6 +95,8 @@ model Settings {
   cardButtonTextColor  String   @default("#000000")
   cardButtonFontSize   Int      @default(14)
   enableOTP            Boolean  @default(false)
+  enableUserBlocking   Boolean  @default(false)
+  blockedUserMessage   String   @default("You are not allowed to place orders. Please contact support.")
   shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
@@ -416,4 +439,17 @@ model ShippingRate {
   @@index([shopId])
   @@index([shopId, enabled])
   @@index([priority])
+}
+
+model BlockedUser {
+  id        String   @id @default(cuid())
+  shopId    String
+  type      String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, type, value])
+  @@index([shopId, type])
 }

@@ -37,6 +37,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   });
 
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
 
@@ -307,6 +308,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
 
     setIsSubmitting(true);
+    setSubmitError('');
 
     // Add selected one-tick upsells to cart items
     const selectedOneTickItems = oneTickUpsells
@@ -441,7 +443,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           errorElement.focus();
         }
       } else {
-        alert('Failed to submit order: ' + error.message);
+        setSubmitError(error.message || 'Failed to submit order. Please try again.');
       }
     } finally {
       setIsSubmitting(false);
@@ -1483,6 +1485,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             </div>
           );
         })}
+
+        {submitError && (
+          <div style={{
+            padding: '12px 14px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            borderRadius: '6px',
+            color: '#991B1B',
+            fontSize: '13px',
+            lineHeight: '1.4',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            marginBottom: '12px',
+          }}>
+            <span style={{ fontSize: '16px', lineHeight: '1', flexShrink: 0, marginTop: '1px' }}>&#9888;</span>
+            <span>{submitError}</span>
+          </div>
+        )}
 
         <button
           type="submit"
