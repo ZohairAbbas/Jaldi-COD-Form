@@ -101,6 +101,48 @@ function getQuantityBreaksData() {
   };
 }
 
+// Helper to get Bundler app (Bundler - Product Bundles) data if available
+function getBundlerData() {
+  const bundlerEl = document.querySelector('.bndlr-quantity-break');
+  if (!bundlerEl) return null;
+
+  // Find the selected radio button
+  const selectedRadio = bundlerEl.querySelector('input[name="bundle_quantity"]:checked');
+  if (!selectedRadio) return null;
+
+  const quantity = parseInt(selectedRadio.value);
+  if (isNaN(quantity) || quantity < 1) return null;
+
+  // Find the parent radio container for the selected option
+  const radioContainer = selectedRadio.closest('.bndlr-radio-container');
+  if (!radioContainer) return null;
+
+  // Get discounted price from data-currentprice attribute (value is in cents)
+  const discountedPriceEl = radioContainer.querySelector('.bndlr-discounted-price[data-currentprice]');
+  if (!discountedPriceEl) return null;
+
+  const discountedPriceCents = parseInt(discountedPriceEl.dataset.currentprice);
+  if (isNaN(discountedPriceCents)) return null;
+  const discountedPrice = discountedPriceCents / 100;
+
+  // Get original price if available (only present when there's a discount)
+  const originalPriceEl = radioContainer.querySelector('.bndlr-original-price[data-currentprice]');
+  let originalPrice = null;
+  if (originalPriceEl) {
+    const originalPriceCents = parseInt(originalPriceEl.dataset.currentprice);
+    if (!isNaN(originalPriceCents)) {
+      originalPrice = originalPriceCents / 100;
+    }
+  }
+
+  return {
+    quantity,
+    discountedPrice,
+    originalPrice,
+    hasBundleDiscount: originalPrice !== null && originalPrice > discountedPrice,
+  };
+}
+
 // Helper to get displayed/converted price from the DOM (for currency converter extensions like Bucks)
 function getDisplayedPriceData() {
   // Look for currency converter elements (e.g. Bucks Currency Converter)
@@ -141,10 +183,11 @@ function getProductData(container) {
   }
 
   if (productId && variantId) {
-    // Check for bundle data: Pumper Bundles first, then theme quantity-breaks
+    // Check for bundle data: Pumper Bundles first, then Bundler app, then theme quantity-breaks
     const pumperData = getPumperBundleData();
-    const quantityBreaksData = !pumperData ? getQuantityBreaksData() : null;
-    const bundleData = pumperData || quantityBreaksData;
+    const bundlerData = !pumperData ? getBundlerData() : null;
+    const quantityBreaksData = !pumperData && !bundlerData ? getQuantityBreaksData() : null;
+    const bundleData = pumperData || bundlerData || quantityBreaksData;
 
     // Use bundle quantity and price if available
     let quantity = bundleData?.quantity || 1;

@@ -191,6 +191,44 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       };
     };
 
+    // Helper to get Bundler app (Bundler - Product Bundles) data
+    const getBundlerData = () => {
+      const bundlerEl = document.querySelector('.bndlr-quantity-break');
+      if (!bundlerEl) return null;
+
+      const selectedRadio = bundlerEl.querySelector('input[name="bundle_quantity"]:checked');
+      if (!selectedRadio) return null;
+
+      const quantity = parseInt(selectedRadio.value);
+      if (isNaN(quantity) || quantity < 1) return null;
+
+      const radioContainer = selectedRadio.closest('.bndlr-radio-container');
+      if (!radioContainer) return null;
+
+      const discountedPriceEl = radioContainer.querySelector('.bndlr-discounted-price[data-currentprice]');
+      if (!discountedPriceEl) return null;
+
+      const discountedPriceCents = parseInt(discountedPriceEl.dataset.currentprice);
+      if (isNaN(discountedPriceCents)) return null;
+      const discountedPrice = discountedPriceCents / 100;
+
+      const originalPriceEl = radioContainer.querySelector('.bndlr-original-price[data-currentprice]');
+      let originalPrice = null;
+      if (originalPriceEl) {
+        const originalPriceCents = parseInt(originalPriceEl.dataset.currentprice);
+        if (!isNaN(originalPriceCents)) {
+          originalPrice = originalPriceCents / 100;
+        }
+      }
+
+      return {
+        quantity,
+        discountedPrice,
+        originalPrice,
+        hasBundleDiscount: originalPrice !== null && originalPrice > discountedPrice,
+      };
+    };
+
     // Helper to get theme built-in quantity-breaks bundle data (e.g. Shrine theme)
     const getQuantityBreaksData = () => {
       const quantityBreaksEl = document.querySelector('quantity-breaks');
@@ -300,10 +338,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         // Variant is available
         setIsProductAvailable(true);
 
-        // Check for bundle data: Pumper Bundles first, then theme quantity-breaks
+        // Check for bundle data: Pumper Bundles first, then Bundler app, then theme quantity-breaks
         const pumperData = getPumperBundleData();
-        const quantityBreaksData = !pumperData ? getQuantityBreaksData() : null;
-        const bundleData = pumperData || quantityBreaksData;
+        const bundlerData = !pumperData ? getBundlerData() : null;
+        const quantityBreaksData = !pumperData && !bundlerData ? getQuantityBreaksData() : null;
+        const bundleData = pumperData || bundlerData || quantityBreaksData;
 
         // Use bundle quantity and price if available
         let quantity = bundleData?.quantity || 1;
@@ -477,6 +516,77 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       }
     };
 
+    // Track last known Bundler app selection
+    let lastKnownBundlerData = null;
+
+    // Helper to update product with Bundler app data
+    const updateWithBundlerData = async () => {
+      const bundlerData = getBundlerData();
+      if (!bundlerData) return false;
+
+      // Create a key to detect changes
+      const bundlerKey = `${bundlerData.quantity}-${bundlerData.discountedPrice}`;
+      if (bundlerKey === lastKnownBundlerData) return false;
+
+      lastKnownBundlerData = bundlerKey;
+      lastKnownQuantity = bundlerData.quantity;
+
+      // Get current variant data and merge with Bundler pricing
+      const variantId = getSelectedVariantId();
+      if (!variantId) return false;
+
+      try {
+        const pathParts = window.location.pathname.split('/');
+        const productIndex = pathParts.indexOf('products');
+        if (productIndex === -1 || !pathParts[productIndex + 1]) return false;
+
+        const productHandle = pathParts[productIndex + 1].split('?')[0];
+        const response = await fetch(`/products/${productHandle}.js`);
+        const productData = await response.json();
+
+        const variant = productData.variants.find(v => v.id === parseInt(variantId));
+        if (!variant || !variant.available) return false;
+
+        // Check for currency converter displayed price
+        const displayedPriceData = getDisplayedPriceData();
+
+        const newProductData = {
+          variantId: `gid://shopify/ProductVariant/${variant.id}`,
+          title: productData.title,
+          variant: variant.title !== 'Default Title' ? variant.title : null,
+          quantity: bundlerData.quantity,
+          price: bundlerData.discountedPrice,
+          image: variant.featured_image?.src || productData.featured_image || container.dataset.productImage,
+        };
+
+        if (displayedPriceData) {
+          newProductData.displayPrice = displayedPriceData.price;
+          newProductData.displayCurrencySymbol = displayedPriceData.currencySymbol;
+          newProductData.displayCurrencyCode = displayedPriceData.currencyCode;
+          if (displayedPriceData.exchangeRate) newProductData.displayExchangeRate = displayedPriceData.exchangeRate;
+        }
+
+        if (bundlerData.hasBundleDiscount) {
+          newProductData.originalPrice = bundlerData.originalPrice;
+          newProductData.hasBundleDiscount = true;
+        }
+
+        setCurrentProduct(newProductData);
+        setCart(prevCart => {
+          const cartItems = prevCart.items.filter(item => {
+            const isCurrentProduct = item.variantId === currentProduct?.variantId;
+            return !isCurrentProduct && !item.isUpsell;
+          });
+          return { items: [newProductData, ...cartItems] };
+        });
+
+        return true;
+      } catch (error) {
+        console.error('Preventify: Failed to update with Bundler data', error);
+        return false;
+      }
+    };
+
     // Track last known quantity-breaks selection
     let lastKnownQuantityBreaks = null;
 
@@ -556,6 +666,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const pumperUpdated = await updateWithPumperBundle();
       if (pumperUpdated) return; // Skip other checks if Pumper updated
 
+      // Then check for Bundler app changes
+      const bundlerUpdated = await updateWithBundlerData();
+      if (bundlerUpdated) return; // Skip other checks if Bundler updated
+
       // Then check for theme quantity-breaks changes
       const qbUpdated = await updateWithQuantityBreaks();
       if (qbUpdated) return; // Skip other checks if quantity-breaks updated
@@ -566,10 +680,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         updateProductVariant(currentVariantId);
       }
 
-      // Check for quantity changes (only if no Pumper Bundles or quantity-breaks)
+      // Check for quantity changes (only if no bundle apps are active)
       const hasPumperBundles = document.querySelector('.prvw_pair');
+      const hasBundlerApp = document.querySelector('.bndlr-quantity-break');
       const hasQuantityBreaks = document.querySelector('quantity-breaks');
-      if (!hasPumperBundles && !hasQuantityBreaks) {
+      if (!hasPumperBundles && !hasBundlerApp && !hasQuantityBreaks) {
         const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
         if (quantityInput) {
           const currentQuantity = parseInt(quantityInput.value);
@@ -700,6 +815,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         // Delay to allow Pumper to update the DOM
         setTimeout(() => {
           updateWithPumperBundle();
+        }, 150);
+      }
+
+      // Check for Bundler app clicks
+      const isBundlerClick = target.closest('.bndlr-quantity-break') ||
+                              target.closest('.bndlr-radio-container') ||
+                              target.closest('[class*="bndlr"]');
+      if (isBundlerClick) {
+        // Delay to allow Bundler to update the DOM
+        setTimeout(() => {
+          updateWithBundlerData();
         }, 150);
       }
 
