@@ -117,6 +117,7 @@ export const action = async ({ request }) => {
         shipping: shippingCost,
         total: calculatedTotal,
         recoveryDiscount: orderData.recoveryDiscount, // Pass recovery discount from downsell
+        userDiscount: orderData.userDiscount, // User-entered discount code
         shippingCost: shippingCost,
         shippingRateName: orderData.shippingRateName || 'Standard Shipping',
         utmData: utmAttribution, // UTM parameters for note_attributes

@@ -44,6 +44,10 @@ export const loader = async ({ request }) => {
         fields: JSON.parse(shopData.formConfig.fields),
         requiredFieldErrorText: shopData.formConfig.requiredFieldErrorText,
         invalidFieldErrorText: shopData.formConfig.invalidFieldErrorText,
+        submitButtonBgColor: shopData.formConfig.submitButtonBgColor,
+        submitButtonTextColor: shopData.formConfig.submitButtonTextColor,
+        submitButtonFontSize: shopData.formConfig.submitButtonFontSize,
+        submitButtonIcon: shopData.formConfig.submitButtonIcon,
       },
       settings: {
         formMode: shopData.settings.formMode,
@@ -236,6 +240,20 @@ export const loader = async ({ request }) => {
             testMode: p.testMode,
           })),
       },
+      // Bundle / Quantity Break configurations
+      bundles: (shopData.bundles || []).map(bundle => ({
+        id: bundle.id,
+        headerText: bundle.headerText,
+        hideHeaderLines: bundle.hideHeaderLines,
+        applyOn: bundle.applyOn,
+        productIds: typeof bundle.productIds === 'string' ? JSON.parse(bundle.productIds) : bundle.productIds,
+        collectionIds: typeof bundle.collectionIds === 'string' ? JSON.parse(bundle.collectionIds) : bundle.collectionIds,
+        allowVariantMix: bundle.allowVariantMix,
+        hideThemeVariants: bundle.hideThemeVariants,
+        volumeDiscount: bundle.volumeDiscount,
+        tiers: typeof bundle.tiers === 'string' ? JSON.parse(bundle.tiers) : bundle.tiers,
+        styling: typeof bundle.styling === 'string' ? JSON.parse(bundle.styling) : bundle.styling,
+      })),
       // Shipping rates for storefront
       shippingRates: shippingRates.map(rate => ({
         id: rate.id,

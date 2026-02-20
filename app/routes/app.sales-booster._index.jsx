@@ -17,6 +17,7 @@ export default function SalesBoosterLanding() {
   const configureTickButtonRef = useRef(null);
   const configureDownsellButtonRef = useRef(null);
   const watchDownsellDemoButtonRef = useRef(null);
+  const configureBundleButtonRef = useRef(null);
 
   const handleConfigureUpsells = useCallback(() => {
     navigate("/app/sales-booster/one-click");
@@ -28,6 +29,10 @@ export default function SalesBoosterLanding() {
 
   const handleConfigureDownsells = useCallback(() => {
     navigate("/app/sales-booster/downsell");
+  }, [navigate]);
+
+  const handleConfigureBundles = useCallback(() => {
+    navigate("/app/sales-booster/bundle");
   }, [navigate]);
 
   const handleWatchDemo = useCallback(() => {
@@ -47,6 +52,7 @@ export default function SalesBoosterLanding() {
     const configureTickBtn = configureTickButtonRef.current;
     const configureDownsellBtn = configureDownsellButtonRef.current;
     const downsellDemoBtn = watchDownsellDemoButtonRef.current;
+    const configureBundleBtn = configureBundleButtonRef.current;
 
     if (configureBtn) {
       configureBtn.addEventListener("click", handleConfigureUpsells);
@@ -62,6 +68,9 @@ export default function SalesBoosterLanding() {
     }
     if (downsellDemoBtn) {
       downsellDemoBtn.addEventListener("click", handleWatchDownsellDemo);
+    }
+    if (configureBundleBtn) {
+      configureBundleBtn.addEventListener("click", handleConfigureBundles);
     }
 
     return () => {
@@ -80,8 +89,11 @@ export default function SalesBoosterLanding() {
       if (downsellDemoBtn) {
         downsellDemoBtn.removeEventListener("click", handleWatchDownsellDemo);
       }
+      if (configureBundleBtn) {
+        configureBundleBtn.removeEventListener("click", handleConfigureBundles);
+      }
     };
-  }, [handleConfigureUpsells, handleWatchDemo, handleConfigureTickUpsells, handleConfigureDownsells, handleWatchDownsellDemo]);
+  }, [handleConfigureUpsells, handleWatchDemo, handleConfigureTickUpsells, handleConfigureDownsells, handleWatchDownsellDemo, handleConfigureBundles]);
 
   return (
     <s-page heading="Upsells & Downsells">
@@ -235,6 +247,56 @@ export default function SalesBoosterLanding() {
                 borderRadius: "12px"
               }}>
                 <span style={{ fontSize: "64px" }}>💸</span>
+              </div>
+            </div>
+          </s-stack>
+        </s-box>
+      </s-section>
+      {/* Bundle / Quantity Breaks Section */}
+      <s-section>
+        <s-box padding="loose" borderRadius="base">
+          <s-stack direction="block" gap="loose">
+            {/* Header with Icon */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+              <div style={{ flex: 1 }}>
+                <s-stack direction="block" gap="base">
+                  {/* Title with Icon */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "24px" }}>📦</span>
+                    <s-text variant="heading-lg">Bundle / Quantity Breaks</s-text>
+                  </div>
+
+                  {/* Description */}
+                  <s-text variant="body-md">
+                    Create quantity break offers to encourage buying more with tiered pricing.
+                    Examples: <strong>Buy 2 get 20% off, Buy 3 get 30% off</strong>
+                  </s-text>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                    <s-button
+                      ref={configureBundleButtonRef}
+                      variant="primary"
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        📦 Configure Bundles
+                      </span>
+                    </s-button>
+                  </div>
+                </s-stack>
+              </div>
+
+              {/* Illustration/Icon on the right */}
+              <div style={{
+                width: "120px",
+                height: "120px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f9fafb",
+                borderRadius: "12px"
+              }}>
+                <span style={{ fontSize: "64px" }}>📦</span>
               </div>
             </div>
           </s-stack>

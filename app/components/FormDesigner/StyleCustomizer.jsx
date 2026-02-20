@@ -160,6 +160,89 @@ export default function StyleCustomizer({ formConfig, onUpdate }) {
           style={{ width: "100%" }}
         />
       </s-stack>
+
+      {/* Divider */}
+      <div style={{ borderTop: "1px solid #E1E3E5", margin: "8px 0" }} />
+
+      <s-heading>Complete Order Button</s-heading>
+      <s-paragraph>Customize the submit button at the bottom of the form.</s-paragraph>
+
+      {/* Submit Button Background Color */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">Background Color</s-text>
+        <s-stack direction="inline" gap="small" align="center">
+          <input
+            type="color"
+            value={
+              (formConfig.submitButtonBgColor || "rgba(0,0,0,1)").startsWith("rgba")
+                ? "#000000"
+                : formConfig.submitButtonBgColor
+            }
+            onChange={(e) => handleChange("submitButtonBgColor", e.target.value)}
+            style={{ width: "50px", height: "35px" }}
+          />
+          <input
+            type="text"
+            value={formConfig.submitButtonBgColor || "rgba(0,0,0,1)"}
+            onChange={(e) => handleChange("submitButtonBgColor", e.target.value)}
+            style={{ ...inputStyle, flex: 1 }}
+            placeholder="rgba(0,0,0,1)"
+          />
+        </s-stack>
+      </s-stack>
+
+      {/* Submit Button Text Color */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">Text Color</s-text>
+        <s-stack direction="inline" gap="small" align="center">
+          <input
+            type="color"
+            value={
+              (formConfig.submitButtonTextColor || "rgba(255,255,255,1)").startsWith("rgba")
+                ? "#FFFFFF"
+                : formConfig.submitButtonTextColor
+            }
+            onChange={(e) => handleChange("submitButtonTextColor", e.target.value)}
+            style={{ width: "50px", height: "35px" }}
+          />
+          <input
+            type="text"
+            value={formConfig.submitButtonTextColor || "rgba(255,255,255,1)"}
+            onChange={(e) => handleChange("submitButtonTextColor", e.target.value)}
+            style={{ ...inputStyle, flex: 1 }}
+            placeholder="rgba(255,255,255,1)"
+          />
+        </s-stack>
+      </s-stack>
+
+      {/* Submit Button Font Size */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">Font Size: {formConfig.submitButtonFontSize || 14}px</s-text>
+        <input
+          type="range"
+          min="12"
+          max="24"
+          value={formConfig.submitButtonFontSize || 14}
+          onChange={(e) => handleChange("submitButtonFontSize", parseInt(e.target.value))}
+          style={{ width: "100%" }}
+        />
+      </s-stack>
+
+      {/* Submit Button Icon */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">Button Icon</s-text>
+        <select
+          value={formConfig.submitButtonIcon || "none"}
+          onChange={(e) => handleChange("submitButtonIcon", e.target.value)}
+          style={inputStyle}
+        >
+          <option value="none">No Icon</option>
+          <option value="cart">Shopping Cart</option>
+          <option value="truck">Delivery Truck</option>
+          <option value="package">Package</option>
+          <option value="cash">Cash</option>
+        </select>
+      </s-stack>
     </s-stack>
   );
 }

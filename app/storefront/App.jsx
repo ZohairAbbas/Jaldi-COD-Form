@@ -4,6 +4,7 @@ import CODForm from './CODForm';
 import BuyButton from './BuyButton';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
+import BundleWidget, { calculateTierPrice } from './BundleWidget';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
@@ -67,6 +68,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [activeDownsell, setActiveDownsell] = useState(null);
   const [downsellShownCount, setDownsellShownCount] = useState(0);
   const [recoveryDiscount, setRecoveryDiscount] = useState(null);
+
+  // Bundle / Quantity Break state
+  const [activeBundleConfig, setActiveBundleConfig] = useState(null);
+  const [selectedBundleTier, setSelectedBundleTier] = useState(null);
+  const [bundleBasePrice, setBundleBasePrice] = useState(null); // Original single-unit price, never mutated
 
   // Multi-country detection state
   const [detectedCountry, setDetectedCountry] = useState(null);
@@ -662,6 +668,16 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     // Poll for variant changes and quantity changes every 300ms
     // This is the most reliable method since Shopify themes update the input value programmatically
     const pollInterval = setInterval(async () => {
+      // Skip 3rd-party bundle detection when our internal bundle widget is active
+      if (activeBundleConfig) {
+        // Only check for variant changes, not external bundle apps
+        const currentVariantId = getSelectedVariantId();
+        if (currentVariantId && currentVariantId !== lastKnownVariantId) {
+          updateProductVariant(currentVariantId);
+        }
+        return;
+      }
+
       // First check for Pumper Bundle changes (takes priority)
       const pumperUpdated = await updateWithPumperBundle();
       if (pumperUpdated) return; // Skip other checks if Pumper updated
@@ -915,6 +931,43 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       // Use app path from Liquid template (most reliable), fallback to config response
       const resolvedAppPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
       setAppPath(resolvedAppPath);
+
+      // Find matching bundle for current product page
+      if (data.bundles && data.bundles.length > 0) {
+        const pathname = window.location.pathname;
+        if (pathname.includes('/products/')) {
+          // Get current product numeric ID from embed container
+          const container = document.querySelector('[data-preventify-app-embed]');
+          const currentProductId = container?.dataset?.productId;
+          // Collection IDs from Liquid data attribute (if available)
+          const productCollections = container?.dataset?.productCollections;
+          const collectionIds = productCollections ? productCollections.split(',').map(id => id.trim()).filter(Boolean) : [];
+
+          const matchedBundle = data.bundles.find(bundle => {
+            if (bundle.applyOn === 'all') return true;
+            if (bundle.applyOn === 'specific' && currentProductId) {
+              return (bundle.productIds || []).some(pid => {
+                const numericPid = String(pid).replace(/\D/g, '');
+                return numericPid === String(currentProductId);
+              });
+            }
+            if (bundle.applyOn === 'collections' && collectionIds.length > 0) {
+              return (bundle.collectionIds || []).some(cid => {
+                const numericCid = String(cid).replace(/\D/g, '');
+                return collectionIds.some(pcid => pcid === numericCid);
+              });
+            }
+            return false;
+          });
+
+          if (matchedBundle) {
+            setActiveBundleConfig(matchedBundle);
+            // Track bundle impression
+            const resolvedPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
+            fetch(`${resolvedPath}proxy/bundle-stats?bundleId=${matchedBundle.id}&stat=impression`, { method: 'POST' }).catch(() => {});
+          }
+        }
+      }
 
       // Capture UTM params regardless of pixel config
       captureUtmParams();
@@ -1244,6 +1297,52 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     return prePurchaseUpsells.find(u => u.enabled && u.product?.id) || null;
   };
 
+  // Handle bundle tier selection
+  const handleBundleTierSelect = (tier) => {
+    setSelectedBundleTier(tier);
+
+    if (!currentProduct) return;
+
+    // Capture the original single-unit price on first tier selection,
+    // so subsequent selections never use an already-discounted price.
+    const unitPrice = bundleBasePrice ?? currentProduct.price;
+    if (bundleBasePrice === null) {
+      setBundleBasePrice(unitPrice);
+    }
+
+    const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
+
+    setCurrentProduct(prev => ({
+      ...prev,
+      quantity: tier.quantity,
+      price: hasDiscount ? discountedPrice : fullPrice,
+      originalPrice: hasDiscount ? fullPrice : undefined,
+      hasBundleDiscount: hasDiscount,
+    }));
+
+    // Update cart items to reflect bundle selection
+    setCart(prevCart => {
+      const updatedItems = prevCart.items.map(item => {
+        if (item.variantId === currentProduct.variantId) {
+          return {
+            ...item,
+            quantity: tier.quantity,
+            price: hasDiscount ? discountedPrice : fullPrice,
+            originalPrice: hasDiscount ? fullPrice : undefined,
+            hasBundleDiscount: hasDiscount,
+          };
+        }
+        return item;
+      });
+      return { items: updatedItems };
+    });
+
+    // Track accept stat
+    if (activeBundleConfig && appPath) {
+      fetch(`${appPath}proxy/bundle-stats?bundleId=${activeBundleConfig.id}&stat=accept`, { method: 'POST' }).catch(() => {});
+    }
+  };
+
   // Handle button click - check for upsell first
   const handleBuyButtonClick = () => {
     // Track button click
@@ -1378,6 +1477,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const getCartTotal = () => {
     const cartWithUpsell = getCartWithUpsell();
     return cartWithUpsell.items.reduce((sum, item) => {
+      if (item.hasBundleDiscount && item.originalPrice) {
+        // Bundle price is already the total for all units, don't multiply by quantity
+        return sum + item.originalPrice;
+      }
       const price = item.isUpsell && item.originalPrice ? item.originalPrice : item.price;
       return sum + (price * item.quantity);
     }, 0);
@@ -1387,6 +1490,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const getDisplayCartTotal = () => {
     const cartWithUpsell = getCartWithUpsell();
     return cartWithUpsell.items.reduce((sum, item) => {
+      if (item.hasBundleDiscount && item.originalPrice) {
+        // Bundle price is already the total for all units, don't multiply by quantity
+        const displayOrig = item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice;
+        return sum + displayOrig;
+      }
       const price = item.displayPrice != null ? item.displayPrice : (item.isUpsell && item.originalPrice ? item.originalPrice : item.price);
       return sum + (price * item.quantity);
     }, 0);
@@ -1624,6 +1732,18 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   return (
     <>
+      {/* Bundle / Quantity Break Widget */}
+      {activeBundleConfig && currentPageType === 'product' && currentProduct && (
+        <BundleWidget
+          bundleConfig={activeBundleConfig}
+          productPrice={bundleBasePrice ?? currentProduct?.price ?? 0}
+          currencySymbol={currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country)}
+          onTierSelect={handleBundleTierSelect}
+          selectedTierId={selectedBundleTier?.id}
+          isRTL={config?.settings?.enableRTL}
+        />
+      )}
+
       <BuyButton
         config={config}
         onClick={handleBuyButtonClick}

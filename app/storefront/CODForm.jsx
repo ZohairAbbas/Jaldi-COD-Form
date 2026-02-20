@@ -39,6 +39,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false); // To track submitting state in async callbacks
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
 
   // OTP verification state
@@ -61,6 +62,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       .filter(u => u.preselectUpsell)
       .reduce((acc, u) => ({ ...acc, [u.id]: true }), {});
   });
+
+  // Discount code state
+  const [discountCodeInput, setDiscountCodeInput] = useState('');
+  const [isValidatingDiscount, setIsValidatingDiscount] = useState(false);
+  const [discountError, setDiscountError] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
 
   // Shipping rate state
   const [selectedShippingRate, setSelectedShippingRate] = useState(null);
@@ -203,6 +210,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             }
           } finally {
             setIsSubmitting(false);
+            isSubmittingRef.current = false; // Reset submitting ref after OTP flow completes
           }
         }
       } else {
@@ -268,10 +276,61 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }));
   };
 
+  const handleApplyDiscount = async () => {
+    const code = discountCodeInput.trim();
+    if (!code) return;
+
+    setIsValidatingDiscount(true);
+    setDiscountError('');
+
+    try {
+      const response = await fetch(`${appPath}proxy/validate-discount`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop: config.shopDomain,
+          code,
+          subtotal,
+          itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.valid) {
+        setAppliedDiscount({
+          code: result.code,
+          title: result.title,
+          discountType: result.discountType,
+          discountValue: result.discountValue,
+          discountAmount: result.discountAmount,
+        });
+        setDiscountError('');
+      } else {
+        setDiscountError(result.error || 'Invalid discount code');
+        setAppliedDiscount(null);
+      }
+    } catch (error) {
+      setDiscountError('Failed to validate discount code');
+      setAppliedDiscount(null);
+    } finally {
+      setIsValidatingDiscount(false);
+    }
+  };
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscount(null);
+    setDiscountCodeInput('');
+    setDiscountError('');
+  };
+
   const validate = () => {
     const newErrors = {};
 
     visibleFields.forEach(field => {
+      // Discount code field is handled by its own Apply flow, skip standard validation
+      if (field.id === 'discount-code') return;
+
       if (field.required) {
         const value = field.id.startsWith('custom-')
           ? formData.customFields[field.id]
@@ -303,7 +362,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Synchronous guard - prevent multiple rapid submissions
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+
     if (!validate()) {
+      isSubmittingRef.current = false; //reset if validation fails
       return;
     }
 
@@ -416,6 +480,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         amount: recoveryDiscount.amount, // Use the amount calculated when downsell was accepted
         downsellId: recoveryDiscount.downsellId,
       } : null,
+      // User-entered discount code (if validated and applied)
+      userDiscount: appliedDiscount ? {
+        code: appliedDiscount.code,
+        discountType: appliedDiscount.discountType,
+        discountValue: appliedDiscount.discountValue,
+        amount: userDiscountAmount,
+      } : null,
       // Pixel tracking data for server-side CAPI
       pixelEventId,
       pixelAttribution: attributionData,
@@ -447,6 +518,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       }
     } finally {
       setIsSubmitting(false);
+      isSubmittingRef.current = false; // Reset submitting ref after submission completes
     }
   };
 
@@ -614,6 +686,111 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       return null;
     };
 
+    // Special rendering for discount-code field
+    if (field.id === 'discount-code') {
+      return (
+        <div key={field.id} style={{ marginBottom: '16px' }}>
+          <label style={labelStyle}>
+            {field.label}
+          </label>
+
+          {/* Input + Apply button row */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={discountCodeInput}
+              onChange={(e) => {
+                setDiscountCodeInput(e.target.value.toUpperCase());
+                if (discountError) setDiscountError('');
+              }}
+              placeholder={field.placeholder || 'Discount Code'}
+              disabled={!!appliedDiscount || isValidatingDiscount}
+              style={{
+                ...inputStyle,
+                flex: 1,
+                padding: '10px 12px',
+                opacity: appliedDiscount ? 0.6 : 1,
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleApplyDiscount();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleApplyDiscount}
+              disabled={!discountCodeInput.trim() || !!appliedDiscount || isValidatingDiscount}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#111827',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: '700',
+                cursor: (!discountCodeInput.trim() || !!appliedDiscount || isValidatingDiscount)
+                  ? 'not-allowed' : 'pointer',
+                opacity: (!discountCodeInput.trim() || !!appliedDiscount || isValidatingDiscount)
+                  ? 0.5 : 1,
+                whiteSpace: 'nowrap',
+                minWidth: '80px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isValidatingDiscount ? (
+                <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
+              ) : 'Apply'}
+            </button>
+          </div>
+
+          {/* Error message */}
+          {discountError && (
+            <div style={errorStyle}>{discountError}</div>
+          )}
+
+          {/* Applied discount tag/chip */}
+          {appliedDiscount && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginTop: '8px',
+              padding: '4px 10px',
+              backgroundColor: '#F0FDF4',
+              border: '1px solid #BBF7D0',
+              borderRadius: '16px',
+              fontSize: '13px',
+              color: '#166534',
+              fontWeight: '500',
+            }}>
+              <span>&#x25C7;</span>
+              <span>{appliedDiscount.code}</span>
+              <button
+                type="button"
+                onClick={handleRemoveDiscount}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#166534',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  padding: '0 2px',
+                  lineHeight: '1',
+                }}
+              >
+                &times;
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     switch (field.type) {
       case 'text':
         return (
@@ -745,6 +922,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         : Math.min(recoveryDiscount.value, subtotal))
     : 0;
 
+  // Calculate user-entered discount code amount (reactive to subtotal changes)
+  const userDiscountAmount = appliedDiscount
+    ? (appliedDiscount.discountType === 'percentage'
+        ? subtotal * (appliedDiscount.discountValue / 100)
+        : Math.min(appliedDiscount.discountValue, subtotal))
+    : 0;
+
   // Calculate cart weight and quantity for shipping conditions
   const cartWeight = cart.items.reduce((sum, item) => sum + ((item.weight || 0) * item.quantity), 0);
   const totalQuantity = cart.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -818,8 +1002,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   // Calculate shipping cost
   const shippingCost = selectedShippingRate?.price || 0;
 
-  // Final total after discount + one-tick upsells - recovery discount + shipping
-  const total = subtotal - bundleDiscount - upsellDiscount + oneTickTotal - recoveryDiscountAmount + shippingCost;
+  // Final total after discount + one-tick upsells - recovery discount - user discount + shipping
+  const total = subtotal - bundleDiscount - upsellDiscount + oneTickTotal - recoveryDiscountAmount - userDiscountAmount + shippingCost;
 
   // Display calculations (for currency converter — display only, not used in order submission)
   const hasDisplayPrice = cart.items.some(item => item.displayPrice != null);
@@ -855,11 +1039,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const displayUpsellDiscount = hasDisplayPrice ? parseFloat((upsellDiscount * displayExchangeRate).toFixed(2)) : upsellDiscount;
   const displayBundleDiscount = hasDisplayPrice ? parseFloat((bundleDiscount * displayExchangeRate).toFixed(2)) : bundleDiscount;
   const displayRecoveryDiscountAmount = hasDisplayPrice ? parseFloat((recoveryDiscountAmount * displayExchangeRate).toFixed(2)) : recoveryDiscountAmount;
+  const displayUserDiscountAmount = hasDisplayPrice ? parseFloat((userDiscountAmount * displayExchangeRate).toFixed(2)) : userDiscountAmount;
   const displayOneTickTotal = hasDisplayPrice ? parseFloat((oneTickTotal * displayExchangeRate).toFixed(2)) : oneTickTotal;
   const displayShippingCost = hasDisplayPrice ? parseFloat((shippingCost * displayExchangeRate).toFixed(2)) : shippingCost;
 
   const displayTotal = hasDisplayPrice
-    ? displaySubtotal - displayBundleDiscount - displayUpsellDiscount + displayOneTickTotal - displayRecoveryDiscountAmount + displayShippingCost
+    ? displaySubtotal - displayBundleDiscount - displayUpsellDiscount + displayOneTickTotal - displayRecoveryDiscountAmount - displayUserDiscountAmount + displayShippingCost
     : total;
 
   return (
@@ -1204,6 +1389,23 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayRecoveryDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
+                  {/* Show user discount code line if a discount code is applied */}
+                  {appliedDiscount && userDiscountAmount > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '10px',
+                      fontSize: '15px',
+                      fontWeight: '500',
+                      color: '#374151',
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px' }}>&#x25C7;</span>
+                        {appliedDiscount.code}
+                      </span>
+                      <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayUserDiscountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -1511,17 +1713,21 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           style={{
             width: '100%',
             padding: '14px 20px',
-            backgroundColor: '#000000',
-            color: '#FFFFFF',
+            backgroundColor: config.formConfig?.submitButtonBgColor || '#000000',
+            color: config.formConfig?.submitButtonTextColor || '#FFFFFF',
             border: 'none',
             borderRadius: '4px',
-            fontSize: '14px',
+            fontSize: `${config.formConfig?.submitButtonFontSize || 14}px`,
             fontWeight: '600',
             cursor: isSubmitting ? 'not-allowed' : 'pointer',
             opacity: isSubmitting ? 0.7 : 1,
             transition: 'opacity 0.2s',
             letterSpacing: '0.5px',
             textTransform: 'uppercase',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
           }}
         >
           {isSubmitting ? (
@@ -1530,7 +1736,58 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               <span>Processing...</span>
             </div>
           ) : (
-            `COMPLETE ORDER - ${currencySymbol}${displayTotal.toFixed(2)}`
+            <>
+              {config.formConfig?.submitButtonIcon && config.formConfig.submitButtonIcon !== 'none' && (() => {
+                const iconProps = {
+                  width: '20',
+                  height: '20',
+                  viewBox: '0 0 24 24',
+                  fill: 'none',
+                  stroke: 'currentColor',
+                  strokeWidth: '2',
+                  strokeLinecap: 'round',
+                  strokeLinejoin: 'round',
+                };
+                switch (config.formConfig.submitButtonIcon) {
+                  case 'cart':
+                    return (
+                      <svg {...iconProps}>
+                        <circle cx="9" cy="21" r="1" />
+                        <circle cx="20" cy="21" r="1" />
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                      </svg>
+                    );
+                  case 'truck':
+                    return (
+                      <svg {...iconProps}>
+                        <path d="M1 3h15v13H1z" />
+                        <path d="M16 8h4l3 3v5h-7V8z" />
+                        <circle cx="5.5" cy="18.5" r="2.5" />
+                        <circle cx="18.5" cy="18.5" r="2.5" />
+                      </svg>
+                    );
+                  case 'package':
+                    return (
+                      <svg {...iconProps}>
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                        <line x1="12" y1="22.08" x2="12" y2="12" />
+                      </svg>
+                    );
+                  case 'cash':
+                    return (
+                      <svg {...iconProps}>
+                        <rect x="2" y="7" width="20" height="10" rx="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <path d="M18 12h.01M6 12h.01" />
+                      </svg>
+                    );
+                  default:
+                    return null;
+                }
+              })()}
+              {`COMPLETE ORDER - ${currencySymbol}${displayTotal.toFixed(2)}`}
+            </>
           )}
         </button>
 
