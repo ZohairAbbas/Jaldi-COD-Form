@@ -313,16 +313,71 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
         style={{
           width: "100%",
           padding: "12px",
-          backgroundColor: "#000",
-          color: "#fff",
+          backgroundColor: formConfig.submitButtonBgColor || "#000",
+          color: formConfig.submitButtonTextColor || "#fff",
           border: "none",
           borderRadius: "4px",
-          fontSize: "16px",
+          fontSize: `${formConfig.submitButtonFontSize || 14}px`,
           fontWeight: "600",
           cursor: "not-allowed",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "8px",
+          letterSpacing: "0.5px",
+          textTransform: "uppercase",
         }}
         disabled
       >
+        {formConfig.submitButtonIcon && formConfig.submitButtonIcon !== 'none' && (() => {
+          const iconProps = {
+            width: "20",
+            height: "20",
+            viewBox: "0 0 24 24",
+            fill: "none",
+            stroke: "currentColor",
+            strokeWidth: "2",
+            strokeLinecap: "round",
+            strokeLinejoin: "round",
+          };
+          switch (formConfig.submitButtonIcon) {
+            case 'cart':
+              return (
+                <svg {...iconProps}>
+                  <circle cx="9" cy="21" r="1" />
+                  <circle cx="20" cy="21" r="1" />
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                </svg>
+              );
+            case 'truck':
+              return (
+                <svg {...iconProps}>
+                  <path d="M1 3h15v13H1z" />
+                  <path d="M16 8h4l3 3v5h-7V8z" />
+                  <circle cx="5.5" cy="18.5" r="2.5" />
+                  <circle cx="18.5" cy="18.5" r="2.5" />
+                </svg>
+              );
+            case 'package':
+              return (
+                <svg {...iconProps}>
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+              );
+            case 'cash':
+              return (
+                <svg {...iconProps}>
+                  <rect x="2" y="7" width="20" height="10" rx="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <path d="M18 12h.01M6 12h.01" />
+                </svg>
+              );
+            default:
+              return null;
+          }
+        })()}
         COMPLETE ORDER - {currencySymbol} 19.99
       </button>
 

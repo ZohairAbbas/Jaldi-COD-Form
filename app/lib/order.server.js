@@ -13,7 +13,7 @@ const COUNTRY_NAME_TO_CODE = {
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {} } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {} } = orderData;
 
   // Clean phone number (remove all non-digit characters except +)
   const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
@@ -108,6 +108,9 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     // Calculate recovery discount amount (from downsell)
     const recoveryDiscountAmount = recoveryDiscount?.amount || 0;
 
+    // User-entered discount code amount
+    const userDiscountAmount = userDiscount?.amount || 0;
+
     // Get currency symbol based on country
     const countryCode = COUNTRY_NAME_TO_CODE[shippingAddress.country] || 'PAK';
     const currencySymbol = getCurrencySymbol(countryCode);
@@ -123,7 +126,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     if (recoveryDiscountAmount > 0) {
       orderNote += `\nRecovery Discount: -${currencySymbol}${recoveryDiscountAmount.toFixed(2)}`;
     }
-    if (oneTickDiscount > 0 || recoveryDiscountAmount > 0) {
+    if (userDiscountAmount > 0 && userDiscount?.code) {
+      orderNote += `\nDiscount Code: ${userDiscount.code} -${currencySymbol}${userDiscountAmount.toFixed(2)}`;
+    }
+    if (oneTickDiscount > 0 || recoveryDiscountAmount > 0 || userDiscountAmount > 0) {
       orderNote += `\nActual Total: ${currencySymbol}${total.toFixed(2)}`;
     }
 
@@ -162,6 +168,13 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
           name: "_recovery_discount",
           value: recoveryDiscountAmount.toString()
         }] : []),
+        ...(userDiscountAmount > 0 && userDiscount?.code ? [{
+          name: "_user_discount_code",
+          value: userDiscount.code,
+        }, {
+          name: "_user_discount_amount",
+          value: userDiscountAmount.toString(),
+        }] : []),
         // Add custom fields to note_attributes
         ...(orderData.customFields && Object.keys(orderData.customFields).length > 0
           ? Object.entries(orderData.customFields).map(([fieldId, fieldValue]) => {
@@ -191,24 +204,34 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       ],
     };
 
-    // Build discount code - combine all discounts into a single code
-    const totalDiscount = bundleDiscount + oneTickDiscount + recoveryDiscountAmount;
-    if (totalDiscount > 0) {
-      // Build a descriptive code name
-      const discountParts = [];
-      if (bundleDiscount > 0) discountParts.push("BUNDLE");
-      if (oneTickDiscount > 0) discountParts.push("1-TICK");
-      if (recoveryDiscountAmount > 0) discountParts.push("RECOVERY");
+    // Build discount codes array
+    // IMPORTANT: Shopify REST API only supports ONE discount code per order.
+    // If both user discount and synthetic discounts exist, combine them into a single entry.
+    const syntheticDiscount = bundleDiscount + oneTickDiscount + recoveryDiscountAmount;
+    const totalDiscountAmount = syntheticDiscount + userDiscountAmount;
 
-      // Get currency symbol based on country
-      const countryCode = COUNTRY_NAME_TO_CODE[address.country] || 'PAK';
-      const currencySymbol = getCurrencySymbol(countryCode);
-      const discountCodeName = `CUSTOM DISCOUNT (${discountParts.join(", ")}: ${currencySymbol}${totalDiscount.toFixed(2)})`;
+    if (totalDiscountAmount > 0) {
+      const codeCountryCode = COUNTRY_NAME_TO_CODE[address.country] || 'PAK';
+      const codeCurrencySymbol = getCurrencySymbol(codeCountryCode);
+
+      // Build descriptive code name that includes all discount sources
+      const discountParts = [];
+      if (userDiscountAmount > 0 && userDiscount?.code) {
+        discountParts.push(`${userDiscount.code}: ${codeCurrencySymbol}${userDiscountAmount.toFixed(2)}`);
+      }
+      if (bundleDiscount > 0) discountParts.push(`BUNDLE: ${codeCurrencySymbol}${bundleDiscount.toFixed(2)}`);
+      if (oneTickDiscount > 0) discountParts.push(`1-TICK: ${codeCurrencySymbol}${oneTickDiscount.toFixed(2)}`);
+      if (recoveryDiscountAmount > 0) discountParts.push(`RECOVERY: ${codeCurrencySymbol}${recoveryDiscountAmount.toFixed(2)}`);
+
+      // Use the user's discount code name if it's the only discount, otherwise create a combined name
+      const codeName = discountParts.length === 1 && userDiscountAmount > 0 && userDiscount?.code
+        ? userDiscount.code
+        : `DISCOUNT (${discountParts.join(", ")})`;
 
       restOrder.discount_codes = [{
-        code: discountCodeName,
-        amount: totalDiscount.toString(),
-        type: "fixed_amount"
+        code: codeName,
+        amount: totalDiscountAmount.toString(),
+        type: "fixed_amount",
       }];
     }
 

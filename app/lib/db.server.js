@@ -347,6 +347,10 @@ export async function getShopByDomain(shopifyDomain) {
         where: { enabled: true },
         orderBy: { priority: "asc" },
       },
+      bundles: {
+        where: { enabled: true, status: "published" },
+        orderBy: { priority: "asc" },
+      },
     },
   });
 }
@@ -846,6 +850,223 @@ export function getDefaultDownsell() {
     declineButtonBorderWidth: 1,
     declineButtonBorderColor: "rgba(0,0,0,1)",
     declineButtonShadow: 0,
+  };
+}
+
+// ============================================
+// BUNDLE / QUANTITY BREAK FUNCTIONS
+// ============================================
+
+/**
+ * Get all bundles for a shop
+ */
+export async function getBundles(shopId) {
+  return await prisma.bundle.findMany({
+    where: { shopId },
+    orderBy: { priority: "asc" },
+  });
+}
+
+/**
+ * Get a single bundle by ID
+ */
+export async function getBundleById(id) {
+  return await prisma.bundle.findUnique({
+    where: { id },
+  });
+}
+
+/**
+ * Get enabled bundles for a shop (for storefront)
+ */
+export async function getEnabledBundles(shopId) {
+  return await prisma.bundle.findMany({
+    where: {
+      shopId,
+      enabled: true,
+      status: "published",
+    },
+    orderBy: { priority: "asc" },
+  });
+}
+
+/**
+ * Create a new bundle
+ */
+export async function createBundle(shopId, bundleData) {
+  const maxPriority = await prisma.bundle.aggregate({
+    where: { shopId },
+    _max: { priority: true },
+  });
+
+  const priority = (maxPriority._max.priority || 0) + 1;
+
+  return await prisma.bundle.create({
+    data: {
+      shopId,
+      priority,
+      ...bundleData,
+    },
+  });
+}
+
+/**
+ * Update a bundle
+ */
+export async function updateBundle(id, bundleData) {
+  return await prisma.bundle.update({
+    where: { id },
+    data: bundleData,
+  });
+}
+
+/**
+ * Delete a bundle
+ */
+export async function deleteBundle(id) {
+  return await prisma.bundle.delete({
+    where: { id },
+  });
+}
+
+/**
+ * Duplicate a bundle
+ */
+export async function duplicateBundle(id) {
+  const source = await prisma.bundle.findUnique({ where: { id } });
+  if (!source) throw new Error("Bundle not found");
+
+  const maxPriority = await prisma.bundle.aggregate({
+    where: { shopId: source.shopId },
+    _max: { priority: true },
+  });
+
+  const { id: _id, createdAt: _ca, updatedAt: _ua, impressions: _imp, accepts: _acc, ...data } = source;
+
+  return await prisma.bundle.create({
+    data: {
+      ...data,
+      name: `${source.name} (Copy)`,
+      priority: (maxPriority._max.priority || 0) + 1,
+      status: "draft",
+      enabled: false,
+      impressions: 0,
+      accepts: 0,
+    },
+  });
+}
+
+/**
+ * Update bundle status (published / draft / inactive)
+ */
+export async function updateBundleStatus(id, status) {
+  return await prisma.bundle.update({
+    where: { id },
+    data: {
+      status,
+      enabled: status === "published",
+    },
+  });
+}
+
+/**
+ * Increment bundle stats (impressions, accepts)
+ */
+export async function incrementBundleStat(bundleId, stat) {
+  const validStats = ["impressions", "accepts"];
+  if (!validStats.includes(stat)) {
+    throw new Error(`Invalid stat: ${stat}. Must be one of: ${validStats.join(", ")}`);
+  }
+
+  return await prisma.bundle.update({
+    where: { id: bundleId },
+    data: {
+      [stat]: { increment: 1 },
+    },
+  });
+}
+
+/**
+ * Get default bundle data with 3 sample tiers
+ */
+export function getDefaultBundle() {
+  return {
+    name: "My Bundle Offer",
+    enabled: false,
+    status: "draft",
+    headerText: "Buy More Save More",
+    hideHeaderLines: false,
+    applyOn: "all",
+    productIds: [],
+    productTitles: [],
+    collectionIds: [],
+    collectionTitles: [],
+    allowVariantMix: false,
+    hideThemeVariants: false,
+    volumeDiscount: false,
+    tiers: [
+      {
+        id: "tier-1",
+        order: 0,
+        discountType: "none",
+        discountValue: 0,
+        quantity: 1,
+        priceRounding: false,
+        priceRoundingValue: 0.99,
+        titleText: "1 Pair",
+        badgeText: "",
+        subtitle: "",
+        showSubtitle: false,
+        showBadge: false,
+        showMostPopular: false,
+      },
+      {
+        id: "tier-2",
+        order: 1,
+        discountType: "percentage",
+        discountValue: 20,
+        quantity: 2,
+        priceRounding: false,
+        priceRoundingValue: 0.99,
+        titleText: "2 Pair",
+        badgeText: "20% OFF",
+        subtitle: "",
+        showSubtitle: false,
+        showBadge: true,
+        showMostPopular: true,
+      },
+      {
+        id: "tier-3",
+        order: 2,
+        discountType: "percentage",
+        discountValue: 30,
+        quantity: 3,
+        priceRounding: false,
+        priceRoundingValue: 0.99,
+        titleText: "3 Pair",
+        badgeText: "30% OFF",
+        subtitle: "",
+        showSubtitle: false,
+        showBadge: true,
+        showMostPopular: false,
+      },
+    ],
+    styling: {
+      layout: "vertical",
+      cornerRoundness: 12,
+      breathingSpace: 12,
+      colorPalette: "default",
+      colors: {
+        headerText: { color: "#000000", fontSize: 16 },
+        tierTitle: { color: "#000000", fontSize: 14 },
+        badge: { bgColor: "#000000", textColor: "#ffffff", fontSize: 12 },
+        price: { color: "#000000", fontSize: 16 },
+        strikethroughPrice: { color: "#999999", fontSize: 14 },
+        mostPopularTag: { bgColor: "#ff0000", textColor: "#ffffff", fontSize: 11 },
+        selectedTier: { borderColor: "#000000", bgColor: "#f5f5f5" },
+        unselectedTier: { borderColor: "#e0e0e0", bgColor: "#ffffff" },
+      },
+    },
   };
 }
 
