@@ -691,7 +691,13 @@ export default function Settings() {
             <input
               type="checkbox"
               checked={settings.enableCartPermalink || false}
-              onChange={(e) => handleUpdate({ enableCartPermalink: e.target.checked })}
+              onChange={(e) => {
+                const updates = { enableCartPermalink: e.target.checked };
+                if (!e.target.checked) {
+                  updates.hideCompleteOrderButton = false;
+                }
+                handleUpdate(updates);
+              }}
               style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
             />
             <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
@@ -703,12 +709,62 @@ export default function Settings() {
           </label>
 
           {settings.enableCartPermalink && (
-            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-              <s-text variant="body-sm">
-                ℹ️ Customers who choose "Pay with Card" will be redirected to Shopify's standard checkout. Their name, phone, and address will be pre-filled. Orders completed through card payment will be tracked separately in your database.
+            <>
+              <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                <s-text variant="body-sm">
+                  ℹ️ Customers who choose "Pay with Card" will be redirected to Shopify's standard checkout. Their name, phone, and address will be pre-filled. Orders completed through card payment will be tracked separately in your database.
+                </s-text>
+              </s-box>
+
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={settings.hideCompleteOrderButton || false}
+                  onChange={(e) => handleUpdate({ hideCompleteOrderButton: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+                />
+                <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                  <s-text variant="heading-sm">Hide Complete Order (COD) button</s-text>
+                  <s-text variant="body-sm" tone="subdued">
+                    When enabled, only the "Pay with Card" button will be shown. The COD "Complete Order" button will be hidden.
+                  </s-text>
+                </s-stack>
+              </label>
+            </>
+          )}
+
+          {!settings.enableCartPermalink && settings.hideCompleteOrderButton && (
+            <s-box padding="base" borderWidth="base" borderRadius="base" background="critical-subdued">
+              <s-text variant="body-sm" tone="critical">
+                ⚠️ "Hide Complete Order button" is enabled but "Pay with Card" is disabled. The COD button will remain visible until Pay with Card is enabled.
               </s-text>
             </s-box>
           )}
+        </s-stack>
+      </s-section>
+
+      {/* Discount on Bundles Setting */}
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>Discount Codes on Bundles</s-heading>
+          <s-paragraph>
+            Control whether customers can apply discount codes when they have bundle items in their cart.
+          </s-paragraph>
+
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.allowDiscountOnBundles !== false}
+              onChange={(e) => handleUpdate({ allowDiscountOnBundles: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+              <s-text variant="heading-sm">Allow discount codes on bundle orders</s-text>
+              <s-text variant="body-sm" tone="subdued">
+                When disabled, customers will not be able to apply discount codes if they have a bundle selected or bundle items in their cart. The recovery (downsell) discount will still work.
+              </s-text>
+            </s-stack>
+          </label>
         </s-stack>
       </s-section>
 

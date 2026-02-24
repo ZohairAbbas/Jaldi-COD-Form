@@ -71,10 +71,12 @@ export const loader = async ({ request }) => {
         buttonIcon: shopData.settings.buttonIcon,
         // Pay with Card settings
         enableCartPermalink: shopData.settings.enableCartPermalink,
+        hideCompleteOrderButton: shopData.settings.hideCompleteOrderButton,
         cardButtonText: shopData.settings.cardButtonText,
         cardButtonBgColor: shopData.settings.cardButtonBgColor,
         cardButtonTextColor: shopData.settings.cardButtonTextColor,
         cardButtonFontSize: shopData.settings.cardButtonFontSize,
+        allowDiscountOnBundles: shopData.settings.allowDiscountOnBundles,
         // OTP verification
         enableOTP: shopData.settings.enableOTP,
       },

@@ -36,6 +36,7 @@ export default function BundleWidget({
   onTierSelect,
   selectedTierId,
   isRTL,
+  exchangeRate = null,
 }) {
   const styling = bundleConfig.styling || {};
   const colors = styling.colors || {};
@@ -96,6 +97,10 @@ export default function BundleWidget({
           const isSelected = selectedTierId === tier.id;
           const tierColors = isSelected ? colors.selectedTier : colors.unselectedTier;
           const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(productPrice, tier);
+
+          // Convert prices for display if exchange rate is available
+          const displayDiscountedPrice = exchangeRate ? discountedPrice * exchangeRate : discountedPrice;
+          const displayFullPrice = exchangeRate ? fullPrice * exchangeRate : fullPrice;
 
           return (
             <div
@@ -210,7 +215,7 @@ export default function BundleWidget({
                       fontWeight: '700',
                     }}
                   >
-                    {currencySymbol}{discountedPrice.toFixed(2)}
+                    {currencySymbol}{displayDiscountedPrice.toFixed(2)}
                   </div>
                   {hasDiscount && (
                     <div
@@ -220,7 +225,7 @@ export default function BundleWidget({
                         textDecoration: 'line-through',
                       }}
                     >
-                      {currencySymbol}{fullPrice.toFixed(2)}
+                      {currencySymbol}{displayFullPrice.toFixed(2)}
                     </div>
                   )}
                 </div>
