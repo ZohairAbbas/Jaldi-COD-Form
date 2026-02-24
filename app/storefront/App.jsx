@@ -1312,12 +1312,21 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
     const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
 
+    // Calculate display prices if exchange rate is available
+    const rate = currentProduct.displayExchangeRate;
+    const displayDiscountedPrice = rate ? parseFloat((discountedPrice * rate).toFixed(2)) : null;
+    const displayFullPrice = rate ? parseFloat((fullPrice * rate).toFixed(2)) : null;
+
     setCurrentProduct(prev => ({
       ...prev,
       quantity: tier.quantity,
       price: hasDiscount ? discountedPrice : fullPrice,
       originalPrice: hasDiscount ? fullPrice : undefined,
       hasBundleDiscount: hasDiscount,
+      ...(displayDiscountedPrice && {
+        displayPrice: displayDiscountedPrice,
+        displayOriginalPrice: hasDiscount ? displayFullPrice : undefined,
+      }),
     }));
 
     // Update cart items to reflect bundle selection
@@ -1330,6 +1339,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             price: hasDiscount ? discountedPrice : fullPrice,
             originalPrice: hasDiscount ? fullPrice : undefined,
             hasBundleDiscount: hasDiscount,
+            ...(displayDiscountedPrice && {
+              displayPrice: displayDiscountedPrice,
+              displayOriginalPrice: hasDiscount ? displayFullPrice : undefined,
+            }),
           };
         }
         return item;
@@ -1473,29 +1486,29 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }) || null;
   };
 
-  // Calculate cart total for downsell discount calculation
+  // Calculate effective cart total for downsell discount calculation
+  // Uses prices AFTER bundle and upsell discounts (not raw subtotal)
   const getCartTotal = () => {
     const cartWithUpsell = getCartWithUpsell();
     return cartWithUpsell.items.reduce((sum, item) => {
-      if (item.hasBundleDiscount && item.originalPrice) {
+      if (item.hasBundleDiscount) {
         // Bundle price is already the total for all units, don't multiply by quantity
-        return sum + item.originalPrice;
+        return sum + item.price;
       }
-      const price = item.isUpsell && item.originalPrice ? item.originalPrice : item.price;
-      return sum + (price * item.quantity);
+      return sum + (item.price * item.quantity);
     }, 0);
   };
 
   // Display cart total using converted prices (for downsell modal display)
+  // Uses prices AFTER bundle and upsell discounts
   const getDisplayCartTotal = () => {
     const cartWithUpsell = getCartWithUpsell();
     return cartWithUpsell.items.reduce((sum, item) => {
-      if (item.hasBundleDiscount && item.originalPrice) {
-        // Bundle price is already the total for all units, don't multiply by quantity
-        const displayOrig = item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice;
-        return sum + displayOrig;
+      if (item.hasBundleDiscount) {
+        const dp = item.displayPrice != null ? item.displayPrice : item.price;
+        return sum + dp;
       }
-      const price = item.displayPrice != null ? item.displayPrice : (item.isUpsell && item.originalPrice ? item.originalPrice : item.price);
+      const price = item.displayPrice != null ? item.displayPrice : item.price;
       return sum + (price * item.quantity);
     }, 0);
   };
@@ -1741,6 +1754,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onTierSelect={handleBundleTierSelect}
           selectedTierId={selectedBundleTier?.id}
           isRTL={config?.settings?.enableRTL}
+          exchangeRate={currentProduct?.displayExchangeRate || null}
         />
       )}
 

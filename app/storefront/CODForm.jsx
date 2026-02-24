@@ -276,9 +276,19 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }));
   };
 
+  // Check if cart has any bundle items (for blocking discount codes on bundles)
+  const hasBundleInCart = cart.items.some(item => item.hasBundleDiscount || item.hasCartDiscount);
+  const discountBlockedByBundle = hasBundleInCart && config.settings?.allowDiscountOnBundles === false;
+
   const handleApplyDiscount = async () => {
     const code = discountCodeInput.trim();
     if (!code) return;
+
+    // Block discount codes on bundles if setting is disabled
+    if (discountBlockedByBundle) {
+      setDiscountError('Discount is not allowed on bundles');
+      return;
+    }
 
     setIsValidatingDiscount(true);
     setDiscountError('');
@@ -522,93 +532,121 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
-  // Handle Pay with Card - redirects to Shopify checkout via cart permalink
-  const handlePayWithCard = () => {
+  // Handle Pay with Card - creates a draft order with all discounts and redirects to Shopify checkout
+  const handlePayWithCard = async () => {
     if (!validate()) {
       return;
     }
 
     setIsRedirectingToCheckout(true);
+    setSubmitError('');
 
-    // Build cart items string: variant_id:quantity,variant_id:quantity
-    const cartItemsString = cart.items
-      .filter(item => item.variantId) // Only include items with variant IDs
-      .map(item => {
-        const variantId = item.variantId.includes('/')
-          ? item.variantId.split('/').pop()
-          : item.variantId;
-        return `${variantId}:${item.quantity}`;
-      })
-      .join(',');
+    try {
+      // Parse full name into first/last name
+      let firstName = formData.firstname || formData.firstName || '';
+      let lastName = formData.lastname || formData.lastName || '';
 
-    if (!cartItemsString) {
-      alert('No valid items to checkout');
+      const fullNameValue = formData.fullName || formData.fullname || '';
+      if (fullNameValue.trim()) {
+        const nameParts = fullNameValue.trim().split(/\s+/);
+        if (nameParts.length === 1) {
+          firstName = nameParts[0];
+          lastName = nameParts[0];
+        } else {
+          firstName = nameParts[0];
+          lastName = nameParts.slice(1).join(' ');
+        }
+      }
+
+      if (!lastName || lastName.trim() === '') {
+        const nameParts = firstName.trim().split(/\s+/);
+        if (nameParts.length > 1) {
+          firstName = nameParts[0];
+          lastName = nameParts.slice(1).join(' ');
+        } else {
+          lastName = firstName;
+        }
+      }
+
+      // Transform cart items (same logic as COD order submission for bundles)
+      const transformedItems = cart.items.map(item => {
+        if (item.hasBundleDiscount && item.originalPrice) {
+          const perUnitOriginalPrice = item.originalPrice / item.quantity;
+          const bundleDiscountAmount = item.originalPrice - item.price;
+          return {
+            ...item,
+            price: perUnitOriginalPrice,
+            bundleDiscount: bundleDiscountAmount,
+          };
+        }
+        return item;
+      });
+
+      // Include one-tick upsells
+      const oneTickUpsells = config.upsells?.oneTick || [];
+      const selectedOneTickItems = oneTickUpsells
+        .filter(u => selectedUpsells[u.id] && u.product)
+        .map(u => ({
+          variantId: u.product.variantId,
+          title: u.product.title,
+          quantity: 1,
+          price: u.upsellPrice || 0,
+          productPrice: u.product.price,
+          isOneTickUpsell: true,
+        }));
+
+      const allItems = [...transformedItems, ...selectedOneTickItems];
+
+      const response = await fetch(`${appPath}proxy/draft-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop: config.shopDomain,
+          items: allItems,
+          customerInfo: {
+            firstName,
+            lastName,
+            email: formData.email || '',
+            phone: formData.phone || '',
+          },
+          address: {
+            address: formData.address || '',
+            address2: formData.address2 || '',
+            city: formData.city || '',
+            province: formData.province || '',
+            postalCode: formData.postalcode || formData.postalCode || '',
+            country: country.name || 'Pakistan',
+          },
+          recoveryDiscount: recoveryDiscount ? {
+            type: recoveryDiscount.type,
+            value: recoveryDiscount.value,
+            amount: recoveryDiscountAmount, // Use locally computed amount (matches what's displayed)
+            downsellId: recoveryDiscount.downsellId,
+          } : null,
+          userDiscount: appliedDiscount ? {
+            code: appliedDiscount.code,
+            discountType: appliedDiscount.discountType,
+            discountValue: appliedDiscount.discountValue,
+            amount: userDiscountAmount,
+          } : null,
+          shippingCost: shippingCost,
+          shippingRateName: selectedShippingRate?.name,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.invoiceUrl) {
+        window.location.href = result.invoiceUrl;
+      } else {
+        setSubmitError(result.error || 'Failed to create checkout. Please try again.');
+        setIsRedirectingToCheckout(false);
+      }
+    } catch (error) {
+      console.error('Pay with Card error:', error);
+      setSubmitError('Something went wrong. Please try again.');
       setIsRedirectingToCheckout(false);
-      return;
     }
-
-    // Build checkout query parameters for pre-filling customer info
-    const checkoutParams = new URLSearchParams();
-
-    // Parse full name into first/last name for checkout
-    // Form input uses lowercase keys (e.g. "firstname" from "first-name" field id)
-    let firstName = formData.firstname || formData.firstName || '';
-    let lastName = formData.lastname || formData.lastName || '';
-
-    const fullNameValue = formData.fullName || formData.fullname || '';
-    if (fullNameValue.trim()) {
-      const nameParts = fullNameValue.trim().split(/\s+/);
-      if (nameParts.length === 1) {
-        firstName = nameParts[0];
-        lastName = nameParts[0];
-      } else {
-        firstName = nameParts[0];
-        lastName = nameParts.slice(1).join(' ');
-      }
-    }
-
-    // If last name is still empty, try to split first name
-    if (!lastName || lastName.trim() === '') {
-      const nameParts = firstName.trim().split(/\s+/);
-      if (nameParts.length > 1) {
-        firstName = nameParts[0];
-        lastName = nameParts.slice(1).join(' ');
-      } else {
-        lastName = firstName;
-      }
-    }
-    const phone = formData.phone || '';
-    const address1 = formData.address || '';
-    const address2 = formData.address2 || '';
-    const city = formData.city || '';
-    const province = formData.province || '';
-    const postalCode = formData.postalcode || formData.postalCode || '';
-
-    // Customer email
-    if (formData.email) {
-      checkoutParams.set('checkout[email]', formData.email);
-    }
-
-    // Shipping address
-    checkoutParams.set('checkout[shipping_address][first_name]', firstName);
-    checkoutParams.set('checkout[shipping_address][last_name]', lastName);
-    checkoutParams.set('checkout[shipping_address][phone]', phone);
-    checkoutParams.set('checkout[shipping_address][address1]', address1);
-    checkoutParams.set('checkout[shipping_address][address2]', address2);
-    checkoutParams.set('checkout[shipping_address][city]', city);
-    checkoutParams.set('checkout[shipping_address][province]', province);
-    checkoutParams.set('checkout[shipping_address][country]', country.name || 'Pakistan');
-    checkoutParams.set('checkout[shipping_address][zip]', postalCode);
-
-    // Add cart attributes to identify this order came from our app
-    checkoutParams.set('attributes[_preventify_source]', 'card_checkout');
-    checkoutParams.set('attributes[_preventify_shop]', config.shopDomain || '');
-
-    // Build the cart permalink URL
-    const cartPermalinkUrl = `/cart/${cartItemsString}?${checkoutParams.toString()}`;
-
-    // Redirect to cart permalink (which will redirect to checkout)
-    window.location.href = cartPermalinkUrl;
   };
 
   // Icon components - position changes based on RTL
@@ -688,6 +726,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     // Special rendering for discount-code field
     if (field.id === 'discount-code') {
+      const isDiscountDisabled = discountBlockedByBundle || !!appliedDiscount || isValidatingDiscount;
+
       return (
         <div key={field.id} style={{ marginBottom: '16px' }}>
           <label style={labelStyle}>
@@ -703,13 +743,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 setDiscountCodeInput(e.target.value.toUpperCase());
                 if (discountError) setDiscountError('');
               }}
-              placeholder={field.placeholder || 'Discount Code'}
-              disabled={!!appliedDiscount || isValidatingDiscount}
+              placeholder={discountBlockedByBundle ? 'Discount is not allowed on bundles' : (field.placeholder || 'Discount Code')}
+              disabled={isDiscountDisabled}
               style={{
                 ...inputStyle,
                 flex: 1,
                 padding: '10px 12px',
-                opacity: appliedDiscount ? 0.6 : 1,
+                opacity: isDiscountDisabled ? 0.6 : 1,
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -721,7 +761,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             <button
               type="button"
               onClick={handleApplyDiscount}
-              disabled={!discountCodeInput.trim() || !!appliedDiscount || isValidatingDiscount}
+              disabled={!discountCodeInput.trim() || isDiscountDisabled}
               style={{
                 padding: '10px 20px',
                 backgroundColor: '#111827',
@@ -730,9 +770,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 borderRadius: '4px',
                 fontSize: '14px',
                 fontWeight: '700',
-                cursor: (!discountCodeInput.trim() || !!appliedDiscount || isValidatingDiscount)
+                cursor: (!discountCodeInput.trim() || isDiscountDisabled)
                   ? 'not-allowed' : 'pointer',
-                opacity: (!discountCodeInput.trim() || !!appliedDiscount || isValidatingDiscount)
+                opacity: (!discountCodeInput.trim() || isDiscountDisabled)
                   ? 0.5 : 1,
                 whiteSpace: 'nowrap',
                 minWidth: '80px',
@@ -915,18 +955,22 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     return sum;
   }, 0);
 
+  // Effective subtotal after bundle and upsell discounts
+  // Recovery and user discounts are applied on this base, not on the raw subtotal
+  const effectiveSubtotal = subtotal - bundleDiscount - upsellDiscount;
+
   // Calculate recovery discount amount (from downsell)
   const recoveryDiscountAmount = recoveryDiscount
     ? (recoveryDiscount.type === 'percentage'
-        ? subtotal * (recoveryDiscount.value / 100)
-        : Math.min(recoveryDiscount.value, subtotal))
+        ? effectiveSubtotal * (recoveryDiscount.value / 100)
+        : Math.min(recoveryDiscount.value, effectiveSubtotal))
     : 0;
 
   // Calculate user-entered discount code amount (reactive to subtotal changes)
   const userDiscountAmount = appliedDiscount
     ? (appliedDiscount.discountType === 'percentage'
-        ? subtotal * (appliedDiscount.discountValue / 100)
-        : Math.min(appliedDiscount.discountValue, subtotal))
+        ? effectiveSubtotal * (appliedDiscount.discountValue / 100)
+        : Math.min(appliedDiscount.discountValue, effectiveSubtotal))
     : 0;
 
   // Calculate cart weight and quantity for shipping conditions
@@ -1707,89 +1751,92 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          style={{
-            width: '100%',
-            padding: '14px 20px',
-            backgroundColor: config.formConfig?.submitButtonBgColor || '#000000',
-            color: config.formConfig?.submitButtonTextColor || '#FFFFFF',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: `${config.formConfig?.submitButtonFontSize || 14}px`,
-            fontWeight: '600',
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-            opacity: isSubmitting ? 0.7 : 1,
-            transition: 'opacity 0.2s',
-            letterSpacing: '0.5px',
-            textTransform: 'uppercase',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-          }}
-        >
-          {isSubmitting ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <div className="jaldi-loading"></div>
-              <span>Processing...</span>
-            </div>
-          ) : (
-            <>
-              {config.formConfig?.submitButtonIcon && config.formConfig.submitButtonIcon !== 'none' && (() => {
-                const iconProps = {
-                  width: '20',
-                  height: '20',
-                  viewBox: '0 0 24 24',
-                  fill: 'none',
-                  stroke: 'currentColor',
-                  strokeWidth: '2',
-                  strokeLinecap: 'round',
-                  strokeLinejoin: 'round',
-                };
-                switch (config.formConfig.submitButtonIcon) {
-                  case 'cart':
-                    return (
-                      <svg {...iconProps}>
-                        <circle cx="9" cy="21" r="1" />
-                        <circle cx="20" cy="21" r="1" />
-                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                      </svg>
-                    );
-                  case 'truck':
-                    return (
-                      <svg {...iconProps}>
-                        <path d="M1 3h15v13H1z" />
-                        <path d="M16 8h4l3 3v5h-7V8z" />
-                        <circle cx="5.5" cy="18.5" r="2.5" />
-                        <circle cx="18.5" cy="18.5" r="2.5" />
-                      </svg>
-                    );
-                  case 'package':
-                    return (
-                      <svg {...iconProps}>
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                        <line x1="12" y1="22.08" x2="12" y2="12" />
-                      </svg>
-                    );
-                  case 'cash':
-                    return (
-                      <svg {...iconProps}>
-                        <rect x="2" y="7" width="20" height="10" rx="2" />
-                        <circle cx="12" cy="12" r="2" />
-                        <path d="M18 12h.01M6 12h.01" />
-                      </svg>
-                    );
-                  default:
-                    return null;
-                }
-              })()}
-              {`COMPLETE ORDER - ${currencySymbol}${displayTotal.toFixed(2)}`}
-            </>
-          )}
-        </button>
+        {/* Complete Order (COD) button - hidden when hideCompleteOrderButton is enabled AND Pay with Card is active */}
+        {!(config.settings?.enableCartPermalink && config.settings?.hideCompleteOrderButton) && (
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            style={{
+              width: '100%',
+              padding: '14px 20px',
+              backgroundColor: config.formConfig?.submitButtonBgColor || '#000000',
+              color: config.formConfig?.submitButtonTextColor || '#FFFFFF',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: `${config.formConfig?.submitButtonFontSize || 14}px`,
+              fontWeight: '600',
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              opacity: isSubmitting ? 0.7 : 1,
+              transition: 'opacity 0.2s',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            {isSubmitting ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <div className="jaldi-loading"></div>
+                <span>Processing...</span>
+              </div>
+            ) : (
+              <>
+                {config.formConfig?.submitButtonIcon && config.formConfig.submitButtonIcon !== 'none' && (() => {
+                  const iconProps = {
+                    width: '20',
+                    height: '20',
+                    viewBox: '0 0 24 24',
+                    fill: 'none',
+                    stroke: 'currentColor',
+                    strokeWidth: '2',
+                    strokeLinecap: 'round',
+                    strokeLinejoin: 'round',
+                  };
+                  switch (config.formConfig.submitButtonIcon) {
+                    case 'cart':
+                      return (
+                        <svg {...iconProps}>
+                          <circle cx="9" cy="21" r="1" />
+                          <circle cx="20" cy="21" r="1" />
+                          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                        </svg>
+                      );
+                    case 'truck':
+                      return (
+                        <svg {...iconProps}>
+                          <path d="M1 3h15v13H1z" />
+                          <path d="M16 8h4l3 3v5h-7V8z" />
+                          <circle cx="5.5" cy="18.5" r="2.5" />
+                          <circle cx="18.5" cy="18.5" r="2.5" />
+                        </svg>
+                      );
+                    case 'package':
+                      return (
+                        <svg {...iconProps}>
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                          <line x1="12" y1="22.08" x2="12" y2="12" />
+                        </svg>
+                      );
+                    case 'cash':
+                      return (
+                        <svg {...iconProps}>
+                          <rect x="2" y="7" width="20" height="10" rx="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <path d="M18 12h.01M6 12h.01" />
+                        </svg>
+                      );
+                    default:
+                      return null;
+                  }
+                })()}
+                {`COMPLETE ORDER - ${currencySymbol}${displayTotal.toFixed(2)}`}
+              </>
+            )}
+          </button>
+        )}
 
         {/* Pay with Card Button - Only show if enabled */}
         {config.settings?.enableCartPermalink && (
@@ -1800,7 +1847,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             style={{
               width: '100%',
               padding: '14px 20px',
-              marginTop: '12px',
+              marginTop: config.settings?.hideCompleteOrderButton ? '0' : '12px',
               backgroundColor: config.settings?.cardButtonBgColor || '#FFFFFF',
               color: config.settings?.cardButtonTextColor || '#000000',
               border: '2px solid #000000',
