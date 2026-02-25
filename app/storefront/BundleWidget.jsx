@@ -45,6 +45,10 @@ export default function BundleWidget({
   const radius = styling.cornerRoundness || 12;
   const space = styling.breathingSpace || 12;
 
+  // Use preselected tier as fallback if nothing is manually selected
+  const preselectedTier = tiers.find(t => t.preselectTier);
+  const effectiveSelectedId = selectedTierId != null ? selectedTierId : (preselectedTier ? preselectedTier.id : null);
+
   if (!tiers.length) return null;
 
   return (
@@ -63,7 +67,9 @@ export default function BundleWidget({
             marginBottom: `${space}px`,
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '8px',
+            width: '100%',
           }}
         >
           {!bundleConfig.hideHeaderLines && (
@@ -91,10 +97,11 @@ export default function BundleWidget({
           display: 'flex',
           flexDirection: isHorizontal ? 'row' : 'column',
           gap: `${space}px`,
+          marginTop: isHorizontal && tiers.some(t => t.showMostPopular) ? '35px' : '0',
         }}
       >
         {tiers.map((tier) => {
-          const isSelected = selectedTierId === tier.id;
+          const isSelected = effectiveSelectedId === tier.id;
           const tierColors = isSelected ? colors.selectedTier : colors.unselectedTier;
           const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(productPrice, tier);
 
@@ -112,6 +119,7 @@ export default function BundleWidget({
                 borderRadius: `${radius}px`,
                 backgroundColor: tierColors?.bgColor || '#fff',
                 padding: `${space}px`,
+                paddingTop: isHorizontal && tier.showMostPopular ? `${space + 14}px` : `${space}px`,
                 cursor: 'pointer',
                 position: 'relative',
                 transition: 'all 0.2s',
@@ -123,113 +131,235 @@ export default function BundleWidget({
                 <div
                   style={{
                     position: 'absolute',
-                    top: '-10px',
-                    right: isRTL ? 'auto' : '10px',
-                    left: isRTL ? '10px' : 'auto',
+                    ...(isHorizontal
+                      ? {
+                          top: '-1px',
+                          left: '50%',
+                          transform: 'translate(-50%, -100%)',
+                          borderRadius: `${Math.min(radius, 8)}px ${Math.min(radius, 8)}px 0 0`,
+                          padding: '4px 14px',
+                        }
+                      : {
+                          top: '-10px',
+                          right: isRTL ? 'auto' : '10px',
+                          left: isRTL ? '10px' : 'auto',
+                          borderRadius: '4px',
+                          padding: '2px 8px',
+                        }),
                     backgroundColor: colors.mostPopularTag?.bgColor || '#ff0000',
                     color: colors.mostPopularTag?.textColor || '#fff',
                     fontSize: `${colors.mostPopularTag?.fontSize || 11}px`,
-                    padding: '2px 8px',
-                    borderRadius: '4px',
                     fontWeight: '600',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   Most Popular
                 </div>
               )}
 
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                }}
-              >
-                {/* Radio circle */}
+              {isHorizontal ? (
+                /* Horizontal layout: vertically stacked card content */
                 <div
                   style={{
-                    width: '18px',
-                    height: '18px',
-                    borderRadius: '50%',
-                    border: `2px solid ${isSelected ? (colors.selectedTier?.borderColor || '#000') : '#ccc'}`,
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
+                    gap: '8px',
+                    textAlign: 'center',
                   }}
                 >
-                  {isSelected && (
-                    <div
-                      style={{
-                        width: '10px',
-                        height: '10px',
-                        borderRadius: '50%',
-                        backgroundColor: colors.selectedTier?.borderColor || '#000',
-                      }}
-                    />
-                  )}
-                </div>
-
-                {/* Tier content */}
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span
-                      style={{
-                        color: colors.tierTitle?.color || '#000',
-                        fontSize: `${colors.tierTitle?.fontSize || 14}px`,
-                        fontWeight: '600',
-                      }}
-                    >
-                      {tier.titleText}
-                    </span>
-
-                    {tier.showBadge && tier.badgeText && (
+                  {/* Radio circle */}
+                  <div
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      minWidth: '20px',
+                      minHeight: '20px',
+                      borderRadius: '50%',
+                      border: `2px solid ${isSelected ? (colors.selectedTier?.borderColor || '#000') : '#ccc'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxSizing: 'border-box',
+                      position: 'relative',
+                    }}
+                  >
+                    {isSelected && (
                       <span
                         style={{
-                          backgroundColor: colors.badge?.bgColor || '#000',
-                          color: colors.badge?.textColor || '#fff',
-                          fontSize: `${colors.badge?.fontSize || 12}px`,
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          fontWeight: '500',
+                          display: 'block',
+                          width: '10px',
+                          height: '10px',
+                          minWidth: '10px',
+                          minHeight: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: colors.selectedTier?.borderColor || '#000',
                         }}
-                      >
-                        {tier.badgeText}
-                      </span>
+                      />
                     )}
                   </div>
 
+                  {/* Title */}
+                  <span
+                    style={{
+                      color: colors.tierTitle?.color || '#000',
+                      fontSize: `${colors.tierTitle?.fontSize || 14}px`,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {tier.titleText}
+                  </span>
+
+                  {/* Badge */}
+                  {tier.showBadge && tier.badgeText && (
+                    <span
+                      style={{
+                        backgroundColor: colors.badge?.bgColor || '#000',
+                        color: colors.badge?.textColor || '#fff',
+                        fontSize: `${colors.badge?.fontSize || 12}px`,
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontWeight: '500',
+                      }}
+                    >
+                      {tier.badgeText}
+                    </span>
+                  )}
+
+                  {/* Subtitle */}
                   {tier.showSubtitle && tier.subtitle && (
-                    <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                    <div style={{ fontSize: '12px', color: '#666' }}>
                       {tier.subtitle}
                     </div>
                   )}
-                </div>
 
-                {/* Price */}
-                <div style={{ textAlign: isRTL ? 'left' : 'right', flexShrink: 0 }}>
-                  <div
-                    style={{
-                      color: colors.price?.color || '#000',
-                      fontSize: `${colors.price?.fontSize || 16}px`,
-                      fontWeight: '700',
-                    }}
-                  >
-                    {currencySymbol}{displayDiscountedPrice.toFixed(2)}
-                  </div>
-                  {hasDiscount && (
+                  {/* Price */}
+                  <div>
                     <div
                       style={{
-                        color: colors.strikethroughPrice?.color || '#999',
-                        fontSize: `${colors.strikethroughPrice?.fontSize || 14}px`,
-                        textDecoration: 'line-through',
+                        color: colors.price?.color || '#000',
+                        fontSize: `${colors.price?.fontSize || 16}px`,
+                        fontWeight: '700',
                       }}
                     >
-                      {currencySymbol}{displayFullPrice.toFixed(2)}
+                      {currencySymbol}{displayDiscountedPrice.toFixed(2)}
                     </div>
-                  )}
+                    {hasDiscount && (
+                      <div
+                        style={{
+                          color: colors.strikethroughPrice?.color || '#999',
+                          fontSize: `${colors.strikethroughPrice?.fontSize || 14}px`,
+                          textDecoration: 'line-through',
+                        }}
+                      >
+                        {currencySymbol}{displayFullPrice.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Vertical layout: horizontal row content */
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                  }}
+                >
+                  {/* Radio circle */}
+                  <div
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      minWidth: '20px',
+                      minHeight: '20px',
+                      borderRadius: '50%',
+                      border: `2px solid ${isSelected ? (colors.selectedTier?.borderColor || '#000') : '#ccc'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxSizing: 'border-box',
+                      position: 'relative',
+                    }}
+                  >
+                    {isSelected && (
+                      <span
+                        style={{
+                          display: 'block',
+                          width: '10px',
+                          height: '10px',
+                          minWidth: '10px',
+                          minHeight: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: colors.selectedTier?.borderColor || '#000',
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Tier content */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          color: colors.tierTitle?.color || '#000',
+                          fontSize: `${colors.tierTitle?.fontSize || 14}px`,
+                          fontWeight: '600',
+                        }}
+                      >
+                        {tier.titleText}
+                      </span>
+
+                      {tier.showBadge && tier.badgeText && (
+                        <span
+                          style={{
+                            backgroundColor: colors.badge?.bgColor || '#000',
+                            color: colors.badge?.textColor || '#fff',
+                            fontSize: `${colors.badge?.fontSize || 12}px`,
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontWeight: '500',
+                          }}
+                        >
+                          {tier.badgeText}
+                        </span>
+                      )}
+                    </div>
+
+                    {tier.showSubtitle && tier.subtitle && (
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                        {tier.subtitle}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Price */}
+                  <div style={{ textAlign: isRTL ? 'left' : 'right', flexShrink: 0 }}>
+                    <div
+                      style={{
+                        color: colors.price?.color || '#000',
+                        fontSize: `${colors.price?.fontSize || 16}px`,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {currencySymbol}{displayDiscountedPrice.toFixed(2)}
+                    </div>
+                    {hasDiscount && (
+                      <div
+                        style={{
+                          color: colors.strikethroughPrice?.color || '#999',
+                          fontSize: `${colors.strikethroughPrice?.fontSize || 14}px`,
+                          textDecoration: 'line-through',
+                        }}
+                      >
+                        {currencySymbol}{displayFullPrice.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
