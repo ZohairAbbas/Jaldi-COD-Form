@@ -13,7 +13,7 @@ const COUNTRY_NAME_TO_CODE = {
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {} } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode } = orderData;
 
   // Clean phone number (remove all non-digit characters except +)
   const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
@@ -112,7 +112,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     const userDiscountAmount = userDiscount?.amount || 0;
 
     // Get currency symbol based on country
-    const countryCode = COUNTRY_NAME_TO_CODE[shippingAddress.country] || 'PAK';
+    const countryCode = passedCountryCode || COUNTRY_NAME_TO_CODE[shippingAddress.country] || 'PAK';
     const currencySymbol = getCurrencySymbol(countryCode);
 
     // Build order note with all discounts and shipping
@@ -211,7 +211,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     const totalDiscountAmount = syntheticDiscount + userDiscountAmount;
 
     if (totalDiscountAmount > 0) {
-      const codeCountryCode = COUNTRY_NAME_TO_CODE[address.country] || 'PAK';
+      const codeCountryCode = passedCountryCode || COUNTRY_NAME_TO_CODE[address.country] || 'PAK';
       const codeCurrencySymbol = getCurrencySymbol(codeCountryCode);
 
       // Build descriptive code name that includes all discount sources

@@ -274,7 +274,6 @@ export const COUNTRIES = {
   TUV: { code: 'TUV', name: 'Tuvalu', phoneCode: '+688', currencyCode: 'AUD', currencySymbol: '$', provinces: [] },
   UGA: { code: 'UGA', name: 'Uganda', phoneCode: '+256', currencyCode: 'UGX', currencySymbol: 'Sh', provinces: [] },
   UKR: { code: 'UKR', name: 'Ukraine', phoneCode: '+380', currencyCode: 'UAH', currencySymbol: '₴', provinces: [] },
-  ARE: { code: 'ARE', name: 'United Arab Emirates', phoneCode: '+971', currencyCode: 'AED', currencySymbol: 'Dhs.', provinces: [] },
   GBR: { code: 'GBR', name: 'United Kingdom', phoneCode: '+44', currencyCode: 'GBP', currencySymbol: '£', provinces: [] },
   USA: { code: 'USA', name: 'United States', phoneCode: '+1', currencyCode: 'USD', currencySymbol: '$', provinces: [] },
   URY: { code: 'URY', name: 'Uruguay', phoneCode: '+598', currencyCode: 'UYU', currencySymbol: '$', provinces: [] },

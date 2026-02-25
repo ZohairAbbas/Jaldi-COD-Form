@@ -97,6 +97,7 @@ export const action = async ({ request }) => {
       total: totals.total,
       customFields: orderData.customFields || {},
       fieldLabels: fieldLabels,
+      countryCode: orderData.countryCode,
     }, shopData.shopifyDomain);
 
     if (shopifyOrderResult.success) {

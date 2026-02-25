@@ -121,6 +121,7 @@ export const action = async ({ request }) => {
         shippingCost: shippingCost,
         shippingRateName: orderData.shippingRateName || 'Standard Shipping',
         utmData: utmAttribution, // UTM parameters for note_attributes
+        countryCode: orderData.countryCode, // Country code for currency symbol lookup
       },
       shop.shopifyDomain // Pass shop domain for REST API call
     );

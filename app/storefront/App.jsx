@@ -962,6 +962,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
           if (matchedBundle) {
             setActiveBundleConfig(matchedBundle);
+            // Auto-select the preselected tier if one exists
+            const preselectedTier = (matchedBundle.tiers || []).find(t => t.preselectTier);
+            if (preselectedTier) {
+              setSelectedBundleTier(preselectedTier);
+            }
             // Track bundle impression
             const resolvedPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
             fetch(`${resolvedPath}proxy/bundle-stats?bundleId=${matchedBundle.id}&stat=impression`, { method: 'POST' }).catch(() => {});
@@ -1355,6 +1360,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       fetch(`${appPath}proxy/bundle-stats?bundleId=${activeBundleConfig.id}&stat=accept`, { method: 'POST' }).catch(() => {});
     }
   };
+
+  // Apply preselected bundle tier pricing once the product is available.
+  // The config-load code sets selectedBundleTier but can't update pricing
+  // because currentProduct may not be loaded yet at that point.
+  useEffect(() => {
+    if (selectedBundleTier && currentProduct && bundleBasePrice === null && activeBundleConfig) {
+      handleBundleTierSelect(selectedBundleTier);
+    }
+  }, [selectedBundleTier, currentProduct, bundleBasePrice, activeBundleConfig]);
 
   // Handle button click - check for upsell first
   const handleBuyButtonClick = () => {
