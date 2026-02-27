@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
 import { getCurrencyCode, COUNTRIES } from '../lib/constants';
 
-export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/' }) {
+export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
   // Manual country selection state (for user override)
   const [selectedCountry, setSelectedCountry] = useState(null);
 
@@ -372,6 +372,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Block submission if variant mix has out-of-stock items
+    if (variantMixOosError) return;
+
     // Synchronous guard - prevent multiple rapid submissions
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
@@ -534,6 +537,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   // Handle Pay with Card - creates a draft order with all discounts and redirects to Shopify checkout
   const handlePayWithCard = async () => {
+    if (variantMixOosError) return;
     if (!validate()) {
       return;
     }
@@ -1751,11 +1755,24 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           </div>
         )}
 
+        {/* Out of stock warning for variant mix */}
+        {variantMixOosError && (
+          <div style={{
+            textAlign: 'center',
+            color: '#DC2626',
+            fontSize: '13px',
+            fontWeight: '500',
+            marginBottom: '8px',
+          }}>
+            Please remove out of stock item(s) from your bundle selection
+          </div>
+        )}
+
         {/* Complete Order (COD) button - hidden when hideCompleteOrderButton is enabled AND Pay with Card is active */}
         {!(config.settings?.enableCartPermalink && config.settings?.hideCompleteOrderButton) && (
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || variantMixOosError}
             style={{
               width: '100%',
               padding: '14px 20px',
@@ -1765,8 +1782,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               borderRadius: '4px',
               fontSize: `${config.formConfig?.submitButtonFontSize || 14}px`,
               fontWeight: '600',
-              cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              opacity: isSubmitting ? 0.7 : 1,
+              cursor: (isSubmitting || variantMixOosError) ? 'not-allowed' : 'pointer',
+              opacity: (isSubmitting || variantMixOosError) ? 0.7 : 1,
               transition: 'opacity 0.2s',
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
@@ -1843,7 +1860,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           <button
             type="button"
             onClick={handlePayWithCard}
-            disabled={isRedirectingToCheckout || isSubmitting}
+            disabled={isRedirectingToCheckout || isSubmitting || variantMixOosError}
             style={{
               width: '100%',
               padding: '14px 20px',
@@ -1854,8 +1871,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               borderRadius: '4px',
               fontSize: `${config.settings?.cardButtonFontSize || 14}px`,
               fontWeight: '600',
-              cursor: (isRedirectingToCheckout || isSubmitting) ? 'not-allowed' : 'pointer',
-              opacity: (isRedirectingToCheckout || isSubmitting) ? 0.7 : 1,
+              cursor: (isRedirectingToCheckout || isSubmitting || variantMixOosError) ? 'not-allowed' : 'pointer',
+              opacity: (isRedirectingToCheckout || isSubmitting || variantMixOosError) ? 0.7 : 1,
               transition: 'all 0.2s',
               letterSpacing: '0.5px',
               textTransform: 'uppercase',

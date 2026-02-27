@@ -37,6 +37,12 @@ export default function BundleWidget({
   selectedTierId,
   isRTL,
   exchangeRate = null,
+  inventoryQuantity = null,
+  productVariants = null,
+  variantMixSelections = null,
+  onVariantMixChange = null,
+  variantMixOosError = false,
+  inventoryMap = null,
 }) {
   const styling = bundleConfig.styling || {};
   const colors = styling.colors || {};
@@ -108,6 +114,10 @@ export default function BundleWidget({
           // Convert prices for display if exchange rate is available
           const displayDiscountedPrice = exchangeRate ? discountedPrice * exchangeRate : discountedPrice;
           const displayFullPrice = exchangeRate ? fullPrice * exchangeRate : fullPrice;
+
+          // Check if this tier exceeds available stock
+          const isLowStock = inventoryQuantity != null && tier.quantity > inventoryQuantity;
+          const stockMessage = isLowStock ? `Only ${inventoryQuantity} item${inventoryQuantity !== 1 ? 's' : ''} left in stock!` : null;
 
           return (
             <div
@@ -257,6 +267,13 @@ export default function BundleWidget({
                       </div>
                     )}
                   </div>
+
+                  {/* Low stock warning */}
+                  {stockMessage && (
+                    <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: '500' }}>
+                      {stockMessage}
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* Vertical layout: horizontal row content */
@@ -333,6 +350,13 @@ export default function BundleWidget({
                         {tier.subtitle}
                       </div>
                     )}
+
+                    {/* Low stock warning - hidden when variant mix handles per-slot warnings */}
+                    {stockMessage && !(bundleConfig.allowVariantMix && variantMixSelections) && (
+                      <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: '500', marginTop: '2px' }}>
+                        {stockMessage}
+                      </div>
+                    )}
                   </div>
 
                   {/* Price */}
@@ -358,6 +382,95 @@ export default function BundleWidget({
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Variant Mix Selectors - shown below selected tier in vertical layout */}
+              {isSelected && !isHorizontal && bundleConfig.allowVariantMix && variantMixSelections && productVariants && (
+                <div style={{
+                  marginTop: `${space}px`,
+                  borderTop: '1px solid #e5e7eb',
+                  paddingTop: `${space}px`,
+                }}>
+                  {productVariants.options && productVariants.options.length > 0 && (
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                      {productVariants.options.map(o => o.name).join(' / ')}
+                    </div>
+                  )}
+                  {(() => {
+                    // Pre-compute which slots are "excess" by processing top-to-bottom.
+                    // First N slots within stock are valid; only slots beyond available stock are flagged.
+                    const usedCounts = {};
+                    const slotErrors = variantMixSelections.map((vid) => {
+                      const variantData = productVariants.variants.find(v => v.id === parseInt(vid));
+                      if (variantData && !variantData.available) return true;
+                      const inv = inventoryMap?.[vid];
+                      usedCounts[vid] = (usedCounts[vid] || 0) + 1;
+                      if (inv && inv.policy !== 'continue' && usedCounts[vid] > inv.quantity) return true;
+                      return false;
+                    });
+                    return (<>
+                      {variantMixSelections.map((selectedVid, slotIndex) => {
+                        const hasSlotError = slotErrors[slotIndex];
+                        return (
+                          <div key={slotIndex} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginBottom: slotIndex < variantMixSelections.length - 1 ? '8px' : 0,
+                          }}>
+                            <span style={{
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              color: hasSlotError ? '#DC2626' : '#6B7280',
+                              minWidth: '20px',
+                            }}>
+                              {slotIndex + 1}.
+                            </span>
+                            <select
+                              value={selectedVid}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                onVariantMixChange(slotIndex, e.target.value);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                flex: 1,
+                                padding: '6px 10px',
+                                borderRadius: '6px',
+                                border: `1.5px solid ${hasSlotError ? '#EF4444' : '#D1D5DB'}`,
+                                backgroundColor: hasSlotError ? '#FEF2F2' : '#fff',
+                                fontSize: '13px',
+                                color: '#111827',
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {productVariants.variants.map(v => {
+                                const vInv = inventoryMap?.[String(v.id)];
+                                const vOos = !v.available || (vInv && vInv.policy !== 'continue' && vInv.quantity <= 0);
+                                return (
+                                  <option key={v.id} value={String(v.id)} disabled={vOos}>
+                                    {v.title}{vOos ? ' (Sold Out)' : ''}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        );
+                      })}
+                      {variantMixOosError && (
+                        <div style={{
+                          marginTop: '8px',
+                          color: '#DC2626',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                        }}>
+                          Highlighted item(s) are out of stock!
+                        </div>
+                      )}
+                    </>);
+                  })()}
                 </div>
               )}
             </div>

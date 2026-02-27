@@ -165,6 +165,14 @@ function getDisplayedPriceData() {
   return null;
 }
 
+// Helper to extract inventory quantity from container
+function getInventoryQuantity(container) {
+  if (!container?.dataset?.inventoryQuantity) return null;
+  const raw = container.dataset.inventoryQuantity;
+  const parsed = parseInt(raw);
+  return !isNaN(parsed) ? parsed : null;
+}
+
 // Helper to extract product data from container
 function getProductData(container) {
   if (!container) return null;
@@ -434,7 +442,7 @@ function createPopupButton(container, shopDomain, productData, pageType) {
   }
 
   const root = createRoot(buttonContainer);
-  root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} />);
+  root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} initialInventoryQuantity={getInventoryQuantity(container)} />);
 
   return buttonContainer;
 }
@@ -454,7 +462,7 @@ function createEmbeddedForm(container, shopDomain, productData) {
   }
 
   const root = createRoot(formContainer);
-  root.render(<JaldiCODFormApp mode="embedded" shopDomain={shopDomain} currentProduct={productData} />);
+  root.render(<JaldiCODFormApp mode="embedded" shopDomain={shopDomain} currentProduct={productData} initialInventoryQuantity={getInventoryQuantity(container)} />);
 
   return formContainer;
 }
@@ -526,7 +534,7 @@ function renderPopupOnProductCards(shopDomain) {
 
       // Render React component
       const root = createRoot(buttonContainer);
-      root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} />);
+      root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} initialInventoryQuantity={null} />);
 
       // Place button where Add to Cart was
       if (quickAddContainer) {
@@ -662,7 +670,7 @@ async function initializePreventify() {
     const shopDomain = hasManualPopupBlock.dataset.shop;
     const productData = getProductData(hasManualPopupBlock);
     const root = createRoot(hasManualPopupBlock);
-    root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} />);
+    root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} initialInventoryQuantity={getInventoryQuantity(hasManualPopupBlock)} />);
     return; // Don't render default
   }
 
@@ -670,7 +678,7 @@ async function initializePreventify() {
     const shopDomain = hasManualEmbeddedBlock.dataset.shop;
     const productData = getProductData(hasManualEmbeddedBlock);
     const root = createRoot(hasManualEmbeddedBlock);
-    root.render(<JaldiCODFormApp mode="embedded" shopDomain={shopDomain} currentProduct={productData} />);
+    root.render(<JaldiCODFormApp mode="embedded" shopDomain={shopDomain} currentProduct={productData} initialInventoryQuantity={getInventoryQuantity(hasManualEmbeddedBlock)} />);
     return; // Don't render default
   }
 
@@ -756,7 +764,7 @@ function renderPopupInCartDrawer(shopDomain) {
     buttonContainer.style.marginTop = '10px';
 
     const root = createRoot(buttonContainer);
-    root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={null} isCartDrawer={true} />);
+    root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={null} isCartDrawer={true} initialInventoryQuantity={null} />);
 
     drawerCtas.after(buttonContainer);
     return true;
