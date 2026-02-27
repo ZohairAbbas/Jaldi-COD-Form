@@ -41,7 +41,7 @@ const defaultConfig = {
   },
 };
 
-export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: initialProduct, isCartDrawer = false }) {
+export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: initialProduct, isCartDrawer = false, initialInventoryQuantity = null }) {
   const [config, setConfig] = useState(defaultConfig);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(initialProduct);
@@ -73,6 +73,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [activeBundleConfig, setActiveBundleConfig] = useState(null);
   const [selectedBundleTier, setSelectedBundleTier] = useState(null);
   const [bundleBasePrice, setBundleBasePrice] = useState(null); // Original single-unit price, never mutated
+  const [inventoryQuantity, setInventoryQuantity] = useState(initialInventoryQuantity); // null = unknown/unlimited, number = tracked stock
+  const [productVariants, setProductVariants] = useState(null); // Cached product variants for variant mix dropdowns
+  const [variantMixSelections, setVariantMixSelections] = useState(null); // Array of variant IDs per bundle slot
+  const [variantMixOosError, setVariantMixOosError] = useState(false); // True if any slot has OOS variant
 
   // Multi-country detection state
   const [detectedCountry, setDetectedCountry] = useState(null);
@@ -332,6 +336,23 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         const response = await fetch(`/products/${productHandle}.js`);
         const productData = await response.json();
 
+        // Cache full product variant data for variant mix dropdowns
+        if (productData.variants && productData.options) {
+          setProductVariants({
+            options: productData.options,
+            variants: productData.variants.map(v => ({
+              id: v.id,
+              title: v.title,
+              option1: v.option1,
+              option2: v.option2,
+              option3: v.option3,
+              available: v.available,
+              price: v.price / 100,
+              image: v.featured_image?.src || null,
+            })),
+          });
+        }
+
         const variant = productData.variants.find(v => v.id === parseInt(variantId));
         if (!variant) return null;
 
@@ -343,6 +364,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
         // Variant is available
         setIsProductAvailable(true);
+
+        // Track inventory quantity for stock validation (bundles, etc.)
+        // Use PREVENTIFY_VARIANT_INVENTORY map rendered by Liquid (contains all variants)
+        const inventoryMap = window.PREVENTIFY_VARIANT_INVENTORY;
+        if (inventoryMap && inventoryMap[variantId]) {
+          setInventoryQuantity(inventoryMap[variantId].quantity);
+        } else {
+          setInventoryQuantity(null);
+        }
 
         // Check for bundle data: Pumper Bundles first, then Bundler app, then theme quantity-breaks
         const pumperData = getPumperBundleData();
@@ -446,6 +476,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           });
           return { items: [newProductData, ...cartItems] };
         });
+
       }
 
       isUpdating = false;
@@ -1165,6 +1196,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Update cart based on product selection
   useEffect(() => {
     if (mode === 'popup' && currentProduct) {
+      // When variant mix bundle is active, cart is managed by buildVariantMixCartItems
+      // with split items per variant — don't overwrite it with the single currentProduct
+      if (currentProduct.isVariantMixBundle) return;
+
       // When allowCartItems is DISABLED, always include both cart and current product
       if (!config?.settings?.allowCartItems) {
         setCart({ items: [currentProduct, ...fullCart.items] });
@@ -1302,6 +1337,109 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     return prePurchaseUpsells.find(u => u.enabled && u.product?.id) || null;
   };
 
+  // Build split cart items for variant mix bundles
+  const buildVariantMixCartItems = (tier, unitPrice, totalQuantity, selections) => {
+    if (!selections || !productVariants) return;
+
+    const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
+    const totalBundleDiscount = hasDiscount ? fullPrice - discountedPrice : 0;
+    const perUnitDiscount = hasDiscount ? totalBundleDiscount / totalQuantity : 0;
+    const rate = currentProduct.displayExchangeRate;
+
+    // Group selections by variant ID
+    const grouped = {};
+    selections.forEach(variantIdStr => {
+      grouped[variantIdStr] = (grouped[variantIdStr] || 0) + 1;
+    });
+
+    const splitItems = Object.entries(grouped).map(([variantIdStr, qty]) => {
+      const variantData = productVariants.variants.find(v => v.id === parseInt(variantIdStr));
+      const itemOriginalTotal = unitPrice * qty;
+      const itemDiscountedTotal = (unitPrice - perUnitDiscount) * qty;
+
+      const item = {
+        variantId: `gid://shopify/ProductVariant/${variantIdStr}`,
+        title: currentProduct.title,
+        variant: variantData?.title !== 'Default Title' ? variantData?.title : null,
+        quantity: qty,
+        price: hasDiscount ? itemDiscountedTotal : itemOriginalTotal,
+        originalPrice: hasDiscount ? itemOriginalTotal : undefined,
+        hasBundleDiscount: hasDiscount,
+        bundleGroupId: `bundle-${activeBundleConfig.id}`,
+        image: variantData?.image || currentProduct.image,
+      };
+
+      if (rate) {
+        item.displayPrice = parseFloat((item.price * rate).toFixed(2));
+        if (hasDiscount) {
+          item.displayOriginalPrice = parseFloat((itemOriginalTotal * rate).toFixed(2));
+        }
+        item.displayCurrencySymbol = currentProduct.displayCurrencySymbol;
+        item.displayCurrencyCode = currentProduct.displayCurrencyCode;
+        item.displayExchangeRate = rate;
+      }
+
+      return item;
+    });
+
+    // Update currentProduct to reflect total bundle pricing
+    setCurrentProduct(prev => ({
+      ...prev,
+      quantity: totalQuantity,
+      price: discountedPrice,
+      originalPrice: hasDiscount ? fullPrice : undefined,
+      hasBundleDiscount: hasDiscount,
+      isVariantMixBundle: true,
+    }));
+
+    // Replace cart items: remove old bundle/current product items, add split items
+    setCart(prevCart => {
+      const nonBundleItems = prevCart.items.filter(item =>
+        !item.bundleGroupId && item.variantId !== currentProduct.variantId
+      );
+      return { items: [...splitItems, ...nonBundleItems] };
+    });
+  };
+
+  // Handle variant mix dropdown change
+  const handleVariantMixChange = (slotIndex, newVariantId) => {
+    if (!variantMixSelections || !selectedBundleTier) return;
+
+    const newSelections = [...variantMixSelections];
+    newSelections[slotIndex] = newVariantId;
+    setVariantMixSelections(newSelections);
+
+    // Validate inventory for each variant
+    const invMap = window.PREVENTIFY_VARIANT_INVENTORY || {};
+    let hasOosError = false;
+
+    // Count how many of each variant are selected
+    const variantCounts = {};
+    newSelections.forEach(vid => {
+      variantCounts[vid] = (variantCounts[vid] || 0) + 1;
+    });
+
+    // Check each variant's inventory
+    for (const [vid, count] of Object.entries(variantCounts)) {
+      const variantData = productVariants?.variants.find(v => v.id === parseInt(vid));
+      if (variantData && !variantData.available) {
+        hasOosError = true;
+        break;
+      }
+      const inv = invMap[vid];
+      if (inv && inv.policy !== 'continue' && inv.quantity < count) {
+        hasOosError = true;
+        break;
+      }
+    }
+
+    setVariantMixOosError(hasOosError);
+
+    // Rebuild cart items with new selections
+    const unitPrice = bundleBasePrice ?? currentProduct.price;
+    buildVariantMixCartItems(selectedBundleTier, unitPrice, newSelections.length, newSelections);
+  };
+
   // Handle bundle tier selection
   const handleBundleTierSelect = (tier) => {
     setSelectedBundleTier(tier);
@@ -1315,45 +1453,91 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       setBundleBasePrice(unitPrice);
     }
 
-    const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
+    // Check if stock is sufficient for the requested tier quantity.
+    // If not, cap to available stock and use single-unit pricing (no bundle discount).
+    const isStockLimited = inventoryQuantity != null && tier.quantity > inventoryQuantity;
+    const effectiveQuantity = isStockLimited ? Math.max(1, inventoryQuantity) : tier.quantity;
 
-    // Calculate display prices if exchange rate is available
-    const rate = currentProduct.displayExchangeRate;
-    const displayDiscountedPrice = rate ? parseFloat((discountedPrice * rate).toFixed(2)) : null;
-    const displayFullPrice = rate ? parseFloat((fullPrice * rate).toFixed(2)) : null;
+    // Determine if variant mix is enabled for this tier
+    const isVertical = activeBundleConfig?.styling?.layout !== 'horizontal';
+    const enableVariantMix = activeBundleConfig?.allowVariantMix && isVertical && productVariants;
 
-    setCurrentProduct(prev => ({
-      ...prev,
-      quantity: tier.quantity,
-      price: hasDiscount ? discountedPrice : fullPrice,
-      originalPrice: hasDiscount ? fullPrice : undefined,
-      hasBundleDiscount: hasDiscount,
-      ...(displayDiscountedPrice && {
-        displayPrice: displayDiscountedPrice,
-        displayOriginalPrice: hasDiscount ? displayFullPrice : undefined,
-      }),
-    }));
+    if (enableVariantMix) {
+      // Always use full tier quantity for variant mix — per-slot OOS validation handles stock limits
+      const currentVariantNumericId = currentProduct.variantId.split('/').pop();
+      const selections = Array(tier.quantity).fill(currentVariantNumericId);
+      setVariantMixSelections(selections);
 
-    // Update cart items to reflect bundle selection
-    setCart(prevCart => {
-      const updatedItems = prevCart.items.map(item => {
-        if (item.variantId === currentProduct.variantId) {
-          return {
-            ...item,
-            quantity: tier.quantity,
-            price: hasDiscount ? discountedPrice : fullPrice,
-            originalPrice: hasDiscount ? fullPrice : undefined,
-            hasBundleDiscount: hasDiscount,
-            ...(displayDiscountedPrice && {
-              displayPrice: displayDiscountedPrice,
-              displayOriginalPrice: hasDiscount ? displayFullPrice : undefined,
-            }),
-          };
-        }
-        return item;
+      // Run initial OOS validation (e.g., 2-pair tier but only 1 in stock of current variant)
+      const invMap = window.PREVENTIFY_VARIANT_INVENTORY || {};
+      let hasOosError = false;
+      const inv = invMap[currentVariantNumericId];
+      const variantData = productVariants.variants.find(v => v.id === parseInt(currentVariantNumericId));
+      if (variantData && !variantData.available) {
+        hasOosError = true;
+      } else if (inv && inv.policy !== 'continue' && inv.quantity < tier.quantity) {
+        hasOosError = true;
+      }
+      setVariantMixOosError(hasOosError);
+
+      // Build split cart items
+      buildVariantMixCartItems(tier, unitPrice, tier.quantity, selections);
+    } else {
+      // Standard single-item path
+      setVariantMixSelections(null);
+      setVariantMixOosError(false);
+
+      let effectivePrice, effectiveOriginalPrice, effectiveHasDiscount;
+      if (isStockLimited) {
+        effectivePrice = unitPrice * effectiveQuantity;
+        effectiveOriginalPrice = undefined;
+        effectiveHasDiscount = false;
+      } else {
+        const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
+        effectivePrice = hasDiscount ? discountedPrice : fullPrice;
+        effectiveOriginalPrice = hasDiscount ? fullPrice : undefined;
+        effectiveHasDiscount = hasDiscount;
+      }
+
+      const rate = currentProduct.displayExchangeRate;
+      const displayEffectivePrice = rate ? parseFloat((effectivePrice * rate).toFixed(2)) : null;
+      const displayOriginal = rate && effectiveOriginalPrice ? parseFloat((effectiveOriginalPrice * rate).toFixed(2)) : undefined;
+
+      setCurrentProduct(prev => ({
+        ...prev,
+        quantity: effectiveQuantity,
+        price: effectivePrice,
+        originalPrice: effectiveOriginalPrice,
+        hasBundleDiscount: effectiveHasDiscount,
+        isVariantMixBundle: false,
+        ...(displayEffectivePrice && {
+          displayPrice: displayEffectivePrice,
+          displayOriginalPrice: displayOriginal,
+        }),
+      }));
+
+      setCart(prevCart => {
+        // Remove any old variant mix split items
+        const filteredItems = prevCart.items.filter(item => !item.bundleGroupId);
+        const updatedItems = filteredItems.map(item => {
+          if (item.variantId === currentProduct.variantId) {
+            return {
+              ...item,
+              quantity: effectiveQuantity,
+              price: effectivePrice,
+              originalPrice: effectiveOriginalPrice,
+              hasBundleDiscount: effectiveHasDiscount,
+              ...(displayEffectivePrice && {
+                displayPrice: displayEffectivePrice,
+                displayOriginalPrice: displayOriginal,
+              }),
+            };
+          }
+          return item;
+        });
+        return { items: updatedItems };
       });
-      return { items: updatedItems };
-    });
+    }
 
     // Track accept stat
     if (activeBundleConfig && appPath) {
@@ -1364,11 +1548,40 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Apply preselected bundle tier pricing once the product is available.
   // The config-load code sets selectedBundleTier but can't update pricing
   // because currentProduct may not be loaded yet at that point.
+  // Also re-fires when productVariants loads so variant mix dropdowns appear on initial load.
   useEffect(() => {
-    if (selectedBundleTier && currentProduct && bundleBasePrice === null && activeBundleConfig) {
+    if (!selectedBundleTier || !currentProduct || !activeBundleConfig) return;
+
+    // First-time pricing: bundleBasePrice not yet set
+    if (bundleBasePrice === null) {
       handleBundleTierSelect(selectedBundleTier);
+      return;
     }
-  }, [selectedBundleTier, currentProduct, bundleBasePrice, activeBundleConfig]);
+
+    // Variant mix re-init: productVariants just became available but dropdowns not yet shown
+    if (productVariants && !variantMixSelections) {
+      const isVertical = activeBundleConfig.styling?.layout !== 'horizontal';
+      if (activeBundleConfig.allowVariantMix && isVertical) {
+        handleBundleTierSelect(selectedBundleTier);
+      }
+    }
+  }, [selectedBundleTier, currentProduct, bundleBasePrice, activeBundleConfig, productVariants]);
+
+  // Re-apply selected bundle tier when variant changes.
+  // When the variant changes, currentProduct gets a new variantId but bundleBasePrice
+  // still holds the old variant's price. Reset it so the above useEffect re-fires.
+  const currentVariantIdRef = React.useRef(currentProduct?.variantId);
+  useEffect(() => {
+    if (currentProduct?.variantId && currentProduct.variantId !== currentVariantIdRef.current) {
+      currentVariantIdRef.current = currentProduct.variantId;
+      if (selectedBundleTier && activeBundleConfig && bundleBasePrice !== null) {
+        setBundleBasePrice(null);
+        setVariantMixSelections(null);
+        setVariantMixOosError(false);
+        setCurrentProduct(prev => prev ? { ...prev, isVariantMixBundle: false } : prev);
+      }
+    }
+  }, [currentProduct?.variantId, selectedBundleTier, activeBundleConfig, bundleBasePrice]);
 
   // Handle button click - check for upsell first
   const handleBuyButtonClick = () => {
@@ -1680,6 +1893,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           mode="embedded"
           detectedCountry={detectedCountry}
           appPath={appPath}
+          variantMixOosError={variantMixOosError}
         />
       </div>
     );
@@ -1751,6 +1965,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             fullCartItemCount={fullCart.items.length}
             recoveryDiscount={recoveryDiscount}
             detectedCountry={detectedCountry}
+            variantMixOosError={variantMixOosError}
           />
         )}
       </div>
@@ -1769,6 +1984,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           selectedTierId={selectedBundleTier?.id}
           isRTL={config?.settings?.enableRTL}
           exchangeRate={currentProduct?.displayExchangeRate || null}
+          inventoryQuantity={inventoryQuantity}
+          productVariants={activeBundleConfig?.allowVariantMix ? productVariants : null}
+          variantMixSelections={variantMixSelections}
+          onVariantMixChange={handleVariantMixChange}
+          variantMixOosError={variantMixOosError}
+          inventoryMap={typeof window !== 'undefined' ? window.PREVENTIFY_VARIANT_INVENTORY : null}
         />
       )}
 

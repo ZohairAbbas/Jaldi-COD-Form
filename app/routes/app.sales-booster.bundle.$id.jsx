@@ -589,8 +589,9 @@ export default function BundleEditor() {
                       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                         <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
                           <input type="checkbox" checked={bundle.allowVariantMix} onChange={(e) => updateField("allowVariantMix", e.target.checked)} />
-                          Let customers choose different variants for each item
+                          Let customers choose different variants for each item (applicable only for Vertical layout)
                         </label>
+                        {/* Hidden until implemented
                         <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
                           <input type="checkbox" checked={bundle.hideThemeVariants} onChange={(e) => updateField("hideThemeVariants", e.target.checked)} />
                           Hide Theme Variants
@@ -599,6 +600,7 @@ export default function BundleEditor() {
                           <input type="checkbox" checked={bundle.volumeDiscount} onChange={(e) => updateField("volumeDiscount", e.target.checked)} />
                           Volume Discount (Extend Max Discount to All Quantities)
                         </label>
+                        */}
                       </div>
                     </div>
                   </s-stack>
