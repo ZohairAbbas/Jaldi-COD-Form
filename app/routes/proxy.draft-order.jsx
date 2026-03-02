@@ -228,14 +228,10 @@ export const action = async ({ request }) => {
       }
     `;
 
-    console.log("[Draft Order] Input:", JSON.stringify(draftOrderInput, null, 2));
-
     const response = await admin.graphql(mutation, {
       variables: { input: draftOrderInput },
     });
     const result = await response.json();
-
-    console.log("[Draft Order] Response:", JSON.stringify(result, null, 2));
 
     if (result.errors) {
       console.error("GraphQL errors creating draft order:", result.errors);

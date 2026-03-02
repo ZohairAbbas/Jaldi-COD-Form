@@ -1004,6 +1004,7 @@ export function getDefaultBundle() {
     allowVariantMix: false,
     hideThemeVariants: false,
     volumeDiscount: false,
+    showStockWarning: true,
     tiers: [
       {
         id: "tier-1",

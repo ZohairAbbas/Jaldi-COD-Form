@@ -115,9 +115,9 @@ export default function BundleWidget({
           const displayDiscountedPrice = exchangeRate ? discountedPrice * exchangeRate : discountedPrice;
           const displayFullPrice = exchangeRate ? fullPrice * exchangeRate : fullPrice;
 
-          // Check if this tier exceeds available stock
+          // Check if this tier exceeds available stock (gated by showStockWarning setting)
           const isLowStock = inventoryQuantity != null && tier.quantity > inventoryQuantity;
-          const stockMessage = isLowStock ? `Only ${inventoryQuantity} item${inventoryQuantity !== 1 ? 's' : ''} left in stock!` : null;
+          const stockMessage = isLowStock && bundleConfig.showStockWarning !== false ? `Only ${inventoryQuantity} item${inventoryQuantity !== 1 ? 's' : ''} left in stock!` : null;
 
           return (
             <div
