@@ -208,9 +208,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             } else {
               alert('Failed to submit order: ' + error.message);
             }
-          } finally {
+            // Only reset on error — on success, the page navigates away so the guard
+            // must stay locked to prevent duplicate submissions during redirect.
             setIsSubmitting(false);
-            isSubmittingRef.current = false; // Reset submitting ref after OTP flow completes
+            isSubmittingRef.current = false;
           }
         }
       } else {
@@ -529,9 +530,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       } else {
         setSubmitError(error.message || 'Failed to submit order. Please try again.');
       }
-    } finally {
+      // Only reset on error — on success, the page navigates away so the guard
+      // must stay locked to prevent duplicate submissions during redirect.
       setIsSubmitting(false);
-      isSubmittingRef.current = false; // Reset submitting ref after submission completes
+      isSubmittingRef.current = false;
     }
   };
 

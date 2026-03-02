@@ -482,8 +482,9 @@ model Bundle {
 
   // Basic Setup
   allowVariantMix   Boolean  @default(false)
-  hideThemeVariants Boolean  @default(false)
-  volumeDiscount    Boolean  @default(false)
+  hideThemeVariants  Boolean  @default(false)
+  volumeDiscount     Boolean  @default(false)
+  showStockWarning   Boolean  @default(true)
 
   // Tiers (JSON array)
   tiers             Json     @default("[]")

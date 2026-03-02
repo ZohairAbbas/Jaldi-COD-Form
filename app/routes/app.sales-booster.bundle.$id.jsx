@@ -591,6 +591,10 @@ export default function BundleEditor() {
                           <input type="checkbox" checked={bundle.allowVariantMix} onChange={(e) => updateField("allowVariantMix", e.target.checked)} />
                           Let customers choose different variants for each item (applicable only for Vertical layout)
                         </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+                          <input type="checkbox" checked={bundle.showStockWarning !== false} onChange={(e) => updateField("showStockWarning", e.target.checked)} />
+                          Show remaining stock warning on tiers
+                        </label>
                         {/* Hidden until implemented
                         <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
                           <input type="checkbox" checked={bundle.hideThemeVariants} onChange={(e) => updateField("hideThemeVariants", e.target.checked)} />

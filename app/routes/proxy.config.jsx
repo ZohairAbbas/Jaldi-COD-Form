@@ -253,6 +253,7 @@ export const loader = async ({ request }) => {
         allowVariantMix: bundle.allowVariantMix,
         hideThemeVariants: bundle.hideThemeVariants,
         volumeDiscount: bundle.volumeDiscount,
+        showStockWarning: bundle.showStockWarning,
         tiers: typeof bundle.tiers === 'string' ? JSON.parse(bundle.tiers) : bundle.tiers,
         styling: typeof bundle.styling === 'string' ? JSON.parse(bundle.styling) : bundle.styling,
       })),
