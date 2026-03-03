@@ -236,6 +236,10 @@ function getProductData(container) {
     if (bundleData?.hasBundleDiscount) {
       productData.originalPrice = bundleData.originalPrice;
       productData.hasBundleDiscount = true;
+      // Store the actual Shopify variant price (what Shopify charges per unit).
+      // Apps like Pumper modify the variant price to their discounted price,
+      // so draft orders must calculate discount against this, not compare_at.
+      productData.variantShopifyPrice = normalizePrice(productPrice);
     }
 
     return productData;

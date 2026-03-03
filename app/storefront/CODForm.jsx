@@ -574,15 +574,21 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         }
       }
 
-      // Transform cart items (same logic as COD order submission for bundles)
+      // Transform cart items for draft order.
+      // The draft order line item uses the variant's actual Shopify price (not compare_at).
+      // Apps like Pumper modify the variant price, so we must calculate the discount
+      // as: (variantShopifyPrice × quantity) - bundleTotalPrice.
+      // If variantShopifyPrice is not available, fall back to originalPrice / quantity.
       const transformedItems = cart.items.map(item => {
         if (item.hasBundleDiscount && item.originalPrice) {
-          const perUnitOriginalPrice = item.originalPrice / item.quantity;
-          const bundleDiscountAmount = item.originalPrice - item.price;
+          // Use actual Shopify variant price if available, otherwise fall back to compare_at-based original
+          const perUnitVariantPrice = item.variantShopifyPrice || (item.originalPrice / item.quantity);
+          const shopifyTotal = perUnitVariantPrice * item.quantity;
+          const bundleDiscountAmount = shopifyTotal - item.price;
           return {
             ...item,
-            price: perUnitOriginalPrice,
-            bundleDiscount: bundleDiscountAmount,
+            price: perUnitVariantPrice,
+            bundleDiscount: bundleDiscountAmount > 0 ? bundleDiscountAmount : 0,
           };
         }
         return item;
