@@ -539,6 +539,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         if (pumperData.hasBundleDiscount) {
           newProductData.originalPrice = pumperData.originalPrice;
           newProductData.hasBundleDiscount = true;
+          newProductData.variantShopifyPrice = variant.price / 100;
         }
 
         setCurrentProduct(newProductData);
@@ -610,6 +611,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         if (bundlerData.hasBundleDiscount) {
           newProductData.originalPrice = bundlerData.originalPrice;
           newProductData.hasBundleDiscount = true;
+          newProductData.variantShopifyPrice = variant.price / 100;
         }
 
         setCurrentProduct(newProductData);
