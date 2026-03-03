@@ -422,6 +422,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         if (bundleData?.hasBundleDiscount) {
           productDataResult.originalPrice = bundleData.originalPrice;
           productDataResult.hasBundleDiscount = true;
+          // Store the actual Shopify variant price (what Shopify charges per unit).
+          // Apps like Pumper modify the variant price to their discounted price,
+          // so draft orders must calculate discount against this, not compare_at.
+          productDataResult.variantShopifyPrice = variant.price / 100;
         }
 
         return productDataResult;
