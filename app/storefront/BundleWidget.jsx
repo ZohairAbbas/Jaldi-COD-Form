@@ -116,8 +116,11 @@ export default function BundleWidget({
           const displayFullPrice = exchangeRate ? fullPrice * exchangeRate : fullPrice;
 
           // Check if this tier exceeds available stock (gated by showStockWarning setting)
+          // inventoryQuantity is null for untracked variants (no warning needed)
           const isLowStock = inventoryQuantity != null && tier.quantity > inventoryQuantity;
-          const stockMessage = isLowStock && bundleConfig.showStockWarning !== false ? `Only ${inventoryQuantity} item${inventoryQuantity !== 1 ? 's' : ''} left in stock!` : null;
+          const stockMessage = isLowStock && bundleConfig.showStockWarning !== false
+            ? (inventoryQuantity <= 0 ? 'Out of stock!' : `Only ${inventoryQuantity} item${inventoryQuantity !== 1 ? 's' : ''} left in stock!`)
+            : null;
 
           return (
             <div
@@ -405,8 +408,11 @@ export default function BundleWidget({
                       const variantData = productVariants.variants.find(v => v.id === parseInt(vid));
                       if (variantData && !variantData.available) return true;
                       const inv = inventoryMap?.[vid];
+                      // Skip inventory enforcement for untracked variants (stale data)
+                      if (!inv || !inv.tracked) return false;
                       usedCounts[vid] = (usedCounts[vid] || 0) + 1;
-                      if (inv && inv.policy !== 'continue' && usedCounts[vid] > inv.quantity) return true;
+                      const clampedQty = Math.max(0, inv.quantity);
+                      if (inv.policy !== 'continue' && usedCounts[vid] > clampedQty) return true;
                       return false;
                     });
                     return (<>
@@ -448,7 +454,8 @@ export default function BundleWidget({
                             >
                               {productVariants.variants.map(v => {
                                 const vInv = inventoryMap?.[String(v.id)];
-                                const vOos = !v.available || (vInv && vInv.policy !== 'continue' && vInv.quantity <= 0);
+                                // Only enforce inventory for tracked variants; untracked have stale data
+                                const vOos = !v.available || (vInv && vInv.tracked && vInv.policy !== 'continue' && vInv.quantity <= 0);
                                 return (
                                   <option key={v.id} value={String(v.id)} disabled={vOos}>
                                     {v.title}{vOos ? ' (Sold Out)' : ''}

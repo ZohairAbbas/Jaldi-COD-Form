@@ -367,9 +367,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
         // Track inventory quantity for stock validation (bundles, etc.)
         // Use PREVENTIFY_VARIANT_INVENTORY map rendered by Liquid (contains all variants)
+        // Only set inventory when variant is actively tracked by Shopify AND policy is "deny";
+        // untracked variants have stale data, and "continue" policy means overselling is allowed.
         const inventoryMap = window.PREVENTIFY_VARIANT_INVENTORY;
-        if (inventoryMap && inventoryMap[variantId]) {
-          setInventoryQuantity(inventoryMap[variantId].quantity);
+        const variantInv = inventoryMap?.[variantId];
+        if (variantInv && variantInv.tracked && variantInv.policy !== 'continue') {
+          setInventoryQuantity(Math.max(0, variantInv.quantity));
         } else {
           setInventoryQuantity(null);
         }
@@ -1425,7 +1428,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       variantCounts[vid] = (variantCounts[vid] || 0) + 1;
     });
 
-    // Check each variant's inventory
+    // Check each variant's inventory (only for tracked variants)
     for (const [vid, count] of Object.entries(variantCounts)) {
       const variantData = productVariants?.variants.find(v => v.id === parseInt(vid));
       if (variantData && !variantData.available) {
@@ -1433,7 +1436,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         break;
       }
       const inv = invMap[vid];
-      if (inv && inv.policy !== 'continue' && inv.quantity < count) {
+      // Skip inventory enforcement for untracked variants (stale data)
+      if (!inv || !inv.tracked) continue;
+      const clampedQty = Math.max(0, inv.quantity);
+      if (inv.policy !== 'continue' && clampedQty < count) {
         hasOosError = true;
         break;
       }
@@ -1475,13 +1481,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       setVariantMixSelections(selections);
 
       // Run initial OOS validation (e.g., 2-pair tier but only 1 in stock of current variant)
+      // Skip inventory enforcement for untracked variants (stale data)
       const invMap = window.PREVENTIFY_VARIANT_INVENTORY || {};
       let hasOosError = false;
       const inv = invMap[currentVariantNumericId];
       const variantData = productVariants.variants.find(v => v.id === parseInt(currentVariantNumericId));
       if (variantData && !variantData.available) {
         hasOosError = true;
-      } else if (inv && inv.policy !== 'continue' && inv.quantity < tier.quantity) {
+      } else if (inv && inv.tracked && inv.policy !== 'continue' && Math.max(0, inv.quantity) < tier.quantity) {
         hasOosError = true;
       }
       setVariantMixOosError(hasOosError);

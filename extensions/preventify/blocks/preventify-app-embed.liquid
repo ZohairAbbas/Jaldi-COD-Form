@@ -32,7 +32,7 @@
   {% if template.name == 'product' %}
   window.PREVENTIFY_VARIANT_INVENTORY = {
     {% for variant in product.variants %}
-      "{{ variant.id }}": { "quantity": {{ variant.inventory_quantity | default: 0 }}, "policy": "{{ variant.inventory_policy }}" }{% unless forloop.last %},{% endunless %}
+      "{{ variant.id }}": { "quantity": {{ variant.inventory_quantity | default: 0 }}, "policy": "{{ variant.inventory_policy }}", "tracked": {% if variant.inventory_management == 'shopify' %}true{% else %}false{% endif %} }{% unless forloop.last %},{% endunless %}
     {% endfor %}
   };
   {% endif %}

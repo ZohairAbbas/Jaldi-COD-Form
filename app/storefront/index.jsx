@@ -166,11 +166,21 @@ function getDisplayedPriceData() {
 }
 
 // Helper to extract inventory quantity from container
+// Returns null for untracked variants (stale data) and "continue" policy (overselling allowed)
 function getInventoryQuantity(container) {
   if (!container?.dataset?.inventoryQuantity) return null;
+  const variantId = container.dataset.variantId;
+  // Check PREVENTIFY_VARIANT_INVENTORY for tracking status and policy
+  const invMap = window.PREVENTIFY_VARIANT_INVENTORY;
+  if (invMap && variantId) {
+    const inv = invMap[variantId];
+    // Only enforce stock limits for tracked variants with "deny" policy
+    if (!inv || !inv.tracked || inv.policy === 'continue') return null;
+    return Math.max(0, inv.quantity);
+  }
   const raw = container.dataset.inventoryQuantity;
   const parsed = parseInt(raw);
-  return !isNaN(parsed) ? parsed : null;
+  return !isNaN(parsed) ? Math.max(0, parsed) : null;
 }
 
 // Helper to extract product data from container
