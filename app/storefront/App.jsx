@@ -926,8 +926,19 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       quantityInput.addEventListener('input', handleQuantityChange);
     }
 
-    // Initial check
-    setTimeout(() => updateProductVariant(), 500);
+    // Initial check — always fetch variant data to populate productVariants cache
+    // (needed for variant mix dropdowns). Can't skip via lastKnownVariantId guard
+    // because on remount the variant ID is unchanged but productVariants state was lost.
+    setTimeout(async () => {
+      const variantId = getSelectedVariantId();
+      if (variantId) {
+        const data = await fetchVariantData(variantId);
+        if (data) {
+          lastKnownVariantId = variantId;
+          setCurrentProduct(data);
+        }
+      }
+    }, 500);
 
     return () => {
       clearInterval(pollInterval);
@@ -1208,6 +1219,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       // When variant mix bundle is active, cart is managed by buildVariantMixCartItems
       // with split items per variant — don't overwrite it with the single currentProduct
       if (currentProduct.isVariantMixBundle) return;
+
+      // When variant mix is about to initialize (productVariants just loaded but
+      // variantMixSelections not yet set), skip to avoid overwriting the cart that
+      // the preselect useEffect is about to populate with split items.
+      if (activeBundleConfig?.allowVariantMix && productVariants && selectedBundleTier
+          && activeBundleConfig?.styling?.layout !== 'horizontal' && !variantMixSelections) {
+        return;
+      }
 
       // When allowCartItems is DISABLED, always include both cart and current product
       if (!config?.settings?.allowCartItems) {
@@ -1558,27 +1577,37 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }
   };
 
-  // Apply preselected bundle tier pricing once the product is available.
-  // The config-load code sets selectedBundleTier but can't update pricing
-  // because currentProduct may not be loaded yet at that point.
-  // Also re-fires when productVariants loads so variant mix dropdowns appear on initial load.
+  // Apply preselected bundle tier pricing and variant mix initialization.
+  // Watches all required deps including productVariants so it re-fires
+  // when variant data becomes available (important after component remount).
   useEffect(() => {
     if (!selectedBundleTier || !currentProduct || !activeBundleConfig) return;
 
-    // First-time pricing: bundleBasePrice not yet set
-    if (bundleBasePrice === null) {
-      handleBundleTierSelect(selectedBundleTier);
+    // Determine if this bundle expects variant mix
+    const wantsVariantMix = activeBundleConfig.allowVariantMix
+      && activeBundleConfig.styling?.layout !== 'horizontal';
+
+    // If variant mix is wanted but productVariants not loaded yet, only cache
+    // the base price — don't call handleBundleTierSelect yet (which would take
+    // the standard single-item path). Wait for productVariants to arrive.
+    if (wantsVariantMix && !productVariants) {
+      if (bundleBasePrice === null) {
+        setBundleBasePrice(currentProduct.price);
+      }
       return;
     }
 
-    // Variant mix re-init: productVariants just became available but dropdowns not yet shown
-    if (productVariants && !variantMixSelections) {
-      const isVertical = activeBundleConfig.styling?.layout !== 'horizontal';
-      if (activeBundleConfig.allowVariantMix && isVertical) {
-        handleBundleTierSelect(selectedBundleTier);
-      }
+    // Either variant mix is not wanted, or productVariants IS loaded.
+    // If bundleBasePrice is null (first init or post-variant-change reset),
+    // OR if variant mix is wanted but selections haven't been initialized yet,
+    // run the full tier selection.
+    const needsPricing = bundleBasePrice === null;
+    const needsVariantMixInit = wantsVariantMix && !variantMixSelections;
+
+    if (needsPricing || needsVariantMixInit) {
+      handleBundleTierSelect(selectedBundleTier);
     }
-  }, [selectedBundleTier, currentProduct, bundleBasePrice, activeBundleConfig, productVariants]);
+  }, [selectedBundleTier, currentProduct, bundleBasePrice, activeBundleConfig, productVariants, variantMixSelections]);
 
   // Re-apply selected bundle tier when variant changes.
   // When the variant changes, currentProduct gets a new variantId but bundleBasePrice
