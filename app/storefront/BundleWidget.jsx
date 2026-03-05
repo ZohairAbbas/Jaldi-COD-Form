@@ -79,7 +79,7 @@ export default function BundleWidget({
           }}
         >
           {!bundleConfig.hideHeaderLines && (
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#a2a5a9' }}>&nbsp;</div>
           )}
           <span
             style={{
@@ -92,7 +92,7 @@ export default function BundleWidget({
             {bundleConfig.headerText}
           </span>
           {!bundleConfig.hideHeaderLines && (
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#a2a5a9' }}>&nbsp;</div>
           )}
         </div>
       )}
