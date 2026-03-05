@@ -1520,12 +1520,25 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       setVariantMixOosError(false);
 
       let effectivePrice, effectiveOriginalPrice, effectiveHasDiscount;
+      const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
       if (isStockLimited) {
-        effectivePrice = unitPrice * effectiveQuantity;
-        effectiveOriginalPrice = undefined;
-        effectiveHasDiscount = false;
+        // Stock is less than tier quantity — find the best matching tier for the clamped quantity.
+        // e.g. stock=1, selected 3-pair → use the 1-pair tier's pricing (which may have its own discount).
+        const tiers = activeBundleConfig?.tiers || [];
+        const matchingTier = tiers.find(t => t.quantity === effectiveQuantity);
+        if (matchingTier) {
+          const matched = calculateTierPrice(unitPrice, matchingTier);
+          effectivePrice = matched.hasDiscount ? matched.discountedPrice : matched.fullPrice;
+          effectiveOriginalPrice = matched.hasDiscount ? matched.fullPrice : undefined;
+          effectiveHasDiscount = matched.hasDiscount;
+        } else {
+          // No exact tier match — derive per-unit discounted price from selected tier
+          const perUnitDiscounted = hasDiscount ? discountedPrice / tier.quantity : unitPrice;
+          effectivePrice = perUnitDiscounted * effectiveQuantity;
+          effectiveOriginalPrice = hasDiscount ? unitPrice * effectiveQuantity : undefined;
+          effectiveHasDiscount = hasDiscount;
+        }
       } else {
-        const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
         effectivePrice = hasDiscount ? discountedPrice : fullPrice;
         effectiveOriginalPrice = hasDiscount ? fullPrice : undefined;
         effectiveHasDiscount = hasDiscount;
