@@ -32,6 +32,7 @@ export function calculateTierPrice(productPrice, tier) {
 export default function BundleWidget({
   bundleConfig,
   productPrice,
+  compareAtPrice = null,
   currencySymbol,
   onTierSelect,
   selectedTierId,
@@ -111,9 +112,13 @@ export default function BundleWidget({
           const tierColors = isSelected ? colors.selectedTier : colors.unselectedTier;
           const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(productPrice, tier);
 
+          // When compare_at_price exists, use it for strikethrough instead of original price
+          const strikethroughPrice = compareAtPrice ? compareAtPrice * tier.quantity : fullPrice;
+          const showStrikethrough = compareAtPrice ? discountedPrice < strikethroughPrice : hasDiscount;
+
           // Convert prices for display if exchange rate is available
           const displayDiscountedPrice = exchangeRate ? discountedPrice * exchangeRate : discountedPrice;
-          const displayFullPrice = exchangeRate ? fullPrice * exchangeRate : fullPrice;
+          const displayFullPrice = exchangeRate ? strikethroughPrice * exchangeRate : strikethroughPrice;
 
           // Check if this tier exceeds available stock (gated by showStockWarning setting)
           // inventoryQuantity is null for untracked variants (no warning needed)
@@ -258,7 +263,7 @@ export default function BundleWidget({
                     >
                       {currencySymbol}{displayDiscountedPrice.toFixed(2)}
                     </div>
-                    {hasDiscount && (
+                    {showStrikethrough && (
                       <div
                         style={{
                           color: colors.strikethroughPrice?.color || '#999',
@@ -373,7 +378,7 @@ export default function BundleWidget({
                     >
                       {currencySymbol}{displayDiscountedPrice.toFixed(2)}
                     </div>
-                    {hasDiscount && (
+                    {showStrikethrough && (
                       <div
                         style={{
                           color: colors.strikethroughPrice?.color || '#999',

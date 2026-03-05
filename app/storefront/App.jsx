@@ -73,6 +73,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [activeBundleConfig, setActiveBundleConfig] = useState(null);
   const [selectedBundleTier, setSelectedBundleTier] = useState(null);
   const [bundleBasePrice, setBundleBasePrice] = useState(null); // Original single-unit price, never mutated
+  const [compareAtPrice, setCompareAtPrice] = useState(null); // Shopify compare_at_price for strikethrough in bundles
   const [inventoryQuantity, setInventoryQuantity] = useState(initialInventoryQuantity); // null = unknown/unlimited, number = tracked stock
   const [productVariants, setProductVariants] = useState(null); // Cached product variants for variant mix dropdowns
   const [variantMixSelections, setVariantMixSelections] = useState(null); // Array of variant IDs per bundle slot
@@ -429,6 +430,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           // Apps like Pumper modify the variant price to their discounted price,
           // so draft orders must calculate discount against this, not compare_at.
           productDataResult.variantShopifyPrice = variant.price / 100;
+        }
+
+        // Store compare_at_price when available (for bundle strikethrough display)
+        if (variant.compare_at_price && variant.compare_at_price > variant.price) {
+          productDataResult.compareAtPrice = variant.compare_at_price / 100;
         }
 
         return productDataResult;
@@ -1482,6 +1488,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     const unitPrice = bundleBasePrice ?? currentProduct.price;
     if (bundleBasePrice === null) {
       setBundleBasePrice(unitPrice);
+      // Capture compare_at_price for bundle strikethrough display
+      if (currentProduct.compareAtPrice) {
+        setCompareAtPrice(currentProduct.compareAtPrice);
+      }
     }
 
     // Check if stock is sufficient for the requested tier quantity.
@@ -1606,6 +1616,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     if (wantsVariantMix && !productVariants) {
       if (bundleBasePrice === null) {
         setBundleBasePrice(currentProduct.price);
+        if (currentProduct.compareAtPrice) setCompareAtPrice(currentProduct.compareAtPrice);
       }
       return;
     }
@@ -1631,6 +1642,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       currentVariantIdRef.current = currentProduct.variantId;
       if (selectedBundleTier && activeBundleConfig && bundleBasePrice !== null) {
         setBundleBasePrice(null);
+        setCompareAtPrice(null);
         setVariantMixSelections(null);
         setVariantMixOosError(false);
         setCurrentProduct(prev => prev ? { ...prev, isVariantMixBundle: false } : prev);
@@ -2034,6 +2046,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         <BundleWidget
           bundleConfig={activeBundleConfig}
           productPrice={bundleBasePrice ?? currentProduct?.price ?? 0}
+          compareAtPrice={compareAtPrice}
           currencySymbol={currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country)}
           onTierSelect={handleBundleTierSelect}
           selectedTierId={selectedBundleTier?.id}
