@@ -76,6 +76,9 @@ export const loader = async ({ request }) => {
         cardButtonBgColor: shopData.settings.cardButtonBgColor,
         cardButtonTextColor: shopData.settings.cardButtonTextColor,
         cardButtonFontSize: shopData.settings.cardButtonFontSize,
+        cardDiscountEnabled: shopData.settings.cardDiscountEnabled,
+        cardDiscountType: shopData.settings.cardDiscountType,
+        cardDiscountValue: shopData.settings.cardDiscountValue,
         allowDiscountOnBundles: shopData.settings.allowDiscountOnBundles,
         // OTP verification
         enableOTP: shopData.settings.enableOTP,

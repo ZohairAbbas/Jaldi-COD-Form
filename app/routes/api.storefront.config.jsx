@@ -45,6 +45,9 @@ export const loader = async ({ request }) => {
         cardButtonBgColor: shopData.settings.cardButtonBgColor,
         cardButtonTextColor: shopData.settings.cardButtonTextColor,
         cardButtonFontSize: shopData.settings.cardButtonFontSize,
+        cardDiscountEnabled: shopData.settings.cardDiscountEnabled,
+        cardDiscountType: shopData.settings.cardDiscountType,
+        cardDiscountValue: shopData.settings.cardDiscountValue,
       },
       shop: {
         country: shopData.country || 'PAK',

@@ -609,6 +609,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
       const allItems = [...transformedItems, ...selectedOneTickItems];
 
+      // Calculate card discount if enabled — base it on the effective total after bundle discounts,
+      // including pre/post purchase upsells but excluding one-tick upsells.
+      const cardSettings = config.settings || {};
+      let cardDiscountAmount = 0;
+      if (cardSettings.cardDiscountEnabled && cardSettings.cardDiscountValue > 0) {
+        const effectiveTotal = allItems.reduce((sum, item) => {
+          if (item.isOneTickUpsell) return sum;
+          const lineTotal = item.price * (item.quantity || 1);
+          const lineBundleDiscount = item.bundleDiscount || 0;
+          return sum + lineTotal - lineBundleDiscount;
+        }, 0);
+        if (cardSettings.cardDiscountType === 'percentage') {
+          cardDiscountAmount = effectiveTotal * (cardSettings.cardDiscountValue / 100);
+        } else {
+          cardDiscountAmount = Math.min(cardSettings.cardDiscountValue, effectiveTotal);
+        }
+        cardDiscountAmount = parseFloat(cardDiscountAmount.toFixed(2));
+      }
+
       const response = await fetch(`${appPath}proxy/draft-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -632,7 +651,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           recoveryDiscount: recoveryDiscount ? {
             type: recoveryDiscount.type,
             value: recoveryDiscount.value,
-            amount: recoveryDiscountAmount, // Use locally computed amount (matches what's displayed)
+            amount: recoveryDiscountAmount,
             downsellId: recoveryDiscount.downsellId,
           } : null,
           userDiscount: appliedDiscount ? {
@@ -641,6 +660,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             discountValue: appliedDiscount.discountValue,
             amount: userDiscountAmount,
           } : null,
+          cardDiscount: cardDiscountAmount > 0 ? { amount: cardDiscountAmount } : null,
           shippingCost: shippingCost,
           shippingRateName: selectedShippingRate?.name,
         }),
