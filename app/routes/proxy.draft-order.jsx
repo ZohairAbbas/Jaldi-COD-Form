@@ -148,6 +148,13 @@ export const action = async ({ request }) => {
       discountParts.push(`${codeName}: ${userDiscountAmount.toFixed(2)}`);
     }
 
+    // Card payment discount
+    const cardDiscountAmount = normalizePrice(data.cardDiscount?.amount || 0);
+    if (cardDiscountAmount > 0) {
+      totalOrderDiscount += cardDiscountAmount;
+      discountParts.push(`Card Discount: ${cardDiscountAmount.toFixed(2)}`);
+    }
+
     // Build draft order input
     const draftOrderInput = {
       lineItems: lineItems,

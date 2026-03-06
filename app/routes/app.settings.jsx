@@ -730,6 +730,75 @@ export default function Settings() {
                   </s-text>
                 </s-stack>
               </label>
+
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={settings.cardDiscountEnabled || false}
+                  onChange={(e) => {
+                    const updates = { cardDiscountEnabled: e.target.checked };
+                    if (!e.target.checked) {
+                      updates.cardDiscountType = "percentage";
+                      updates.cardDiscountValue = 0;
+                    }
+                    handleUpdate(updates);
+                  }}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+                />
+                <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                  <s-text variant="heading-sm">Enable discount on Pay with Card</s-text>
+                  <s-text variant="body-sm" tone="subdued">
+                    Offer a discount to customers who choose to pay with card instead of COD.
+                  </s-text>
+                </s-stack>
+              </label>
+
+              {settings.cardDiscountEnabled && (
+                <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                  <s-stack direction="block" gap="base">
+                    <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
+                      <div style={{ flex: 1 }}>
+                        <s-text variant="body-sm" style={{ marginBottom: "4px" }}>Discount Type</s-text>
+                        <select
+                          value={settings.cardDiscountType || "percentage"}
+                          onChange={(e) => handleUpdate({ cardDiscountType: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #ccc",
+                            fontSize: "14px",
+                          }}
+                        >
+                          <option value="percentage">Percentage (%)</option>
+                          <option value="fixed">Fixed Amount</option>
+                        </select>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <s-text variant="body-sm" style={{ marginBottom: "4px" }}>
+                          {(settings.cardDiscountType || "percentage") === "percentage" ? "Discount (%)" : "Discount Amount"}
+                        </s-text>
+                        <input
+                          type="number"
+                          min="0"
+                          max={settings.cardDiscountType === "percentage" ? 100 : undefined}
+                          step="any"
+                          value={settings.cardDiscountValue || ""}
+                          onChange={(e) => handleUpdate({ cardDiscountValue: parseFloat(e.target.value) || 0 })}
+                          placeholder={settings.cardDiscountType === "percentage" ? "e.g. 10" : "e.g. 50"}
+                          style={{
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #ccc",
+                            fontSize: "14px",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </s-stack>
+                </s-box>
+              )}
             </>
           )}
 
