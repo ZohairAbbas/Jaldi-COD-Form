@@ -721,48 +721,47 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         if (currentVariantId && currentVariantId !== lastKnownVariantId) {
           updateProductVariant(currentVariantId);
         }
-        return;
-      }
+        // Don't return — fall through to currency converter check below
+      } else {
+        // First check for Pumper Bundle changes (takes priority)
+        const pumperUpdated = await updateWithPumperBundle();
+        if (!pumperUpdated) {
+          // Then check for Bundler app changes
+          const bundlerUpdated = await updateWithBundlerData();
+          if (!bundlerUpdated) {
+            // Then check for theme quantity-breaks changes
+            const qbUpdated = await updateWithQuantityBreaks();
+            if (!qbUpdated) {
+              // Check for variant changes
+              const currentVariantId = getSelectedVariantId();
+              if (currentVariantId && currentVariantId !== lastKnownVariantId) {
+                updateProductVariant(currentVariantId);
+              }
 
-      // First check for Pumper Bundle changes (takes priority)
-      const pumperUpdated = await updateWithPumperBundle();
-      if (pumperUpdated) return; // Skip other checks if Pumper updated
-
-      // Then check for Bundler app changes
-      const bundlerUpdated = await updateWithBundlerData();
-      if (bundlerUpdated) return; // Skip other checks if Bundler updated
-
-      // Then check for theme quantity-breaks changes
-      const qbUpdated = await updateWithQuantityBreaks();
-      if (qbUpdated) return; // Skip other checks if quantity-breaks updated
-
-      // Check for variant changes
-      const currentVariantId = getSelectedVariantId();
-      if (currentVariantId && currentVariantId !== lastKnownVariantId) {
-        updateProductVariant(currentVariantId);
-      }
-
-      // Check for quantity changes (only if no bundle apps are active)
-      const hasPumperBundles = document.querySelector('.prvw_pair');
-      const hasBundlerApp = document.querySelector('.bndlr-quantity-break');
-      const hasQuantityBreaks = document.querySelector('quantity-breaks');
-      if (!hasPumperBundles && !hasBundlerApp && !hasQuantityBreaks) {
-        const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
-        if (quantityInput) {
-          const currentQuantity = parseInt(quantityInput.value);
-          if (!isNaN(currentQuantity) && currentQuantity > 0 && currentQuantity !== lastKnownQuantity) {
-            lastKnownQuantity = currentQuantity;
-            setCurrentProduct(prev => prev ? { ...prev, quantity: currentQuantity } : prev);
-            setCart(prevCart => {
-              const items = prevCart.items.map(item => {
-                // Update the first item that matches the current product variant
-                if (item.variantId && lastKnownVariantId && item.variantId.includes(lastKnownVariantId)) {
-                  return { ...item, quantity: currentQuantity };
+              // Check for quantity changes (only if no bundle apps are active)
+              const hasPumperBundles = document.querySelector('.prvw_pair');
+              const hasBundlerApp = document.querySelector('.bndlr-quantity-break');
+              const hasQuantityBreaks = document.querySelector('quantity-breaks');
+              if (!hasPumperBundles && !hasBundlerApp && !hasQuantityBreaks) {
+                const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+                if (quantityInput) {
+                  const currentQuantity = parseInt(quantityInput.value);
+                  if (!isNaN(currentQuantity) && currentQuantity > 0 && currentQuantity !== lastKnownQuantity) {
+                    lastKnownQuantity = currentQuantity;
+                    setCurrentProduct(prev => prev ? { ...prev, quantity: currentQuantity } : prev);
+                    setCart(prevCart => {
+                      const items = prevCart.items.map(item => {
+                        if (item.variantId && lastKnownVariantId && item.variantId.includes(lastKnownVariantId)) {
+                          return { ...item, quantity: currentQuantity };
+                        }
+                        return item;
+                      });
+                      return { items };
+                    });
+                  }
                 }
-                return item;
-              });
-              return { items };
-            });
+              }
+            }
           }
         }
       }
