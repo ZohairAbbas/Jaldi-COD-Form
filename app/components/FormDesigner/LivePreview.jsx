@@ -2,6 +2,8 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
   const visibleSections = sections.filter((s) => s.visible).sort((a, b) => a.order - b.order);
   const visibleFields = fields.filter((f) => f.visible).sort((a, b) => a.order - b.order);
 
+  const isRTL = settings?.enableRTL || false;
+
   const formStyle = {
     backgroundColor: formConfig.backgroundColor,
     color: formConfig.textColor,
@@ -10,54 +12,189 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
     border: `${formConfig.borderWidth}px solid ${formConfig.borderColor}`,
     boxShadow: `0 ${formConfig.shadowIntensity}px ${formConfig.shadowIntensity * 2}px rgba(0,0,0,0.1)`,
     padding: "24px",
-    maxWidth: "600px",
+    maxWidth: "560px",
     margin: "0 auto",
+    direction: isRTL ? "rtl" : "ltr",
+  };
+
+  const hasIcon = (fieldId) => ['full-name', 'first-name', 'last-name', 'email', 'phone', 'address', 'city'].includes(fieldId);
+
+  const PersonIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000">
+      <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
+      <path fillRule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z" />
+    </svg>
+  );
+
+  const PhoneIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000">
+      <path fillRule="evenodd" d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.678.678 0 0 0 .178.643l2.457 2.457a.678.678 0 0 0 .644.178l2.189-.547a1.745 1.745 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.634 18.634 0 0 1-7.01-4.42 18.634 18.634 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877L1.885.511z" />
+    </svg>
+  );
+
+  const EmailIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000">
+      <path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555ZM0 4.697v7.104l5.803-3.558L0 4.697ZM6.761 8.83l-6.57 4.027A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757ZM16 11.801V4.697l-5.803 3.546L16 11.801Z" />
+    </svg>
+  );
+
+  const LocationIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000">
+      <path fillRule="evenodd" d="M12.166 8.94c-.524 1.062-1.234 2.12-1.96 3.07A31.493 31.493 0 0 1 8 14.58a31.481 31.481 0 0 1-2.206-2.57c-.726-.95-1.436-2.008-1.96-3.07C3.304 7.867 3 6.862 3 6a5 5 0 0 1 10 0c0 .862-.305 1.867-.834 2.94zM8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10z" />
+      <path d="M8 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+    </svg>
+  );
+
+  const getFieldIcon = (fieldId) => {
+    if (fieldId === 'full-name' || fieldId === 'first-name' || fieldId === 'last-name') return <PersonIcon />;
+    if (fieldId === 'email') return <EmailIcon />;
+    if (fieldId === 'phone') return <PhoneIcon />;
+    if (fieldId === 'address' || fieldId === 'city') return <LocationIcon />;
+    return null;
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: "0",
+    border: "none",
+    fontSize: "16px",
+    color: "#111827",
+    backgroundColor: "#FFFFFF",
+    outline: "none",
+    flex: 1,
+  };
+
+  const inputGroupStyle = {
+    display: "flex",
+    alignItems: "center",
+    borderRadius: "4px",
+    border: "1px solid #D1D5DB",
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+    flex: 1,
+  };
+
+  const iconContainerStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 12px",
+    backgroundColor: "#E9ECEF",
+    borderRight: "1px solid #D1D5DB",
+    alignSelf: "stretch",
+  };
+
+  const labelStyle = {
+    display: "flex",
+    alignItems: "center",
+    fontSize: "16px",
+    fontWeight: "600",
+    color: "#000000",
+    width: "100px",
+    minWidth: "100px",
+    flexShrink: 0,
+    lineHeight: "1.3",
+  };
+
+  const fieldRowStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginBottom: "16px",
   };
 
   const renderField = (field) => {
-    const inputStyle = {
-      width: "100%",
-      padding: "8px 12px",
-      borderRadius: "4px",
-      border: "1px solid #d1d5db",
-      fontSize: "14px",
-      marginTop: "4px",
-    };
-
-    const labelStyle = {
-      display: "block",
-      marginBottom: "4px",
-      fontWeight: "500",
-    };
+    // Special rendering for discount-code field
+    if (field.id === 'discount-code') {
+      return (
+        <div key={field.id} style={{ marginBottom: "16px" }}>
+          <div style={fieldRowStyle}>
+            <label style={labelStyle}>
+              {field.label}
+            </label>
+            <div style={{ display: "flex", gap: "8px", flex: 1 }}>
+              <div style={inputGroupStyle}>
+                <input
+                  type="text"
+                  placeholder={field.placeholder || "Discount Code"}
+                  style={inputStyle}
+                  disabled
+                />
+              </div>
+              <button
+                type="button"
+                disabled
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor: "#000000",
+                  color: "#FFFFFF",
+                  border: "none",
+                  borderRadius: "4px",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  cursor: "not-allowed",
+                  opacity: 0.5,
+                  whiteSpace: "nowrap",
+                  minWidth: "80px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     switch (field.type) {
       case "text":
         return (
-          <div key={field.id} style={{ marginBottom: "16px" }}>
-            <label style={labelStyle}>
-              {field.label} {field.required && <span style={{ color: "red" }}>*</span>}
-            </label>
-            <input
-              type={field.id === "email" ? "email" : "text"}
-              placeholder={field.id === "email" ? "email@example.com" : field.placeholder}
-              style={inputStyle}
-              disabled
-            />
+          <div key={field.id} style={{ marginBottom: "0" }}>
+            <div style={fieldRowStyle}>
+              <label style={labelStyle}>
+                {field.label} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
+              </label>
+              <div style={{ flex: 1 }}>
+                <div style={inputGroupStyle}>
+                  {hasIcon(field.id) && (
+                    <div style={iconContainerStyle}>
+                      {getFieldIcon(field.id)}
+                    </div>
+                  )}
+                  <input
+                    type={field.id === "email" ? "email" : "text"}
+                    placeholder={field.id === "email" ? "email@example.com" : field.placeholder}
+                    style={inputStyle}
+                    disabled
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         );
 
       case "dropdown":
         return (
-          <div key={field.id} style={{ marginBottom: "16px" }}>
-            <label style={labelStyle}>
-              {field.label} {field.required && <span style={{ color: "red" }}>*</span>}
-            </label>
-            <select style={inputStyle} disabled>
-              <option>{field.placeholder || "Select..."}</option>
-              {field.options?.map((opt, idx) => (
-                <option key={idx}>{opt}</option>
-              ))}
-            </select>
+          <div key={field.id} style={{ marginBottom: "0" }}>
+            <div style={fieldRowStyle}>
+              <label style={labelStyle}>
+                {field.label} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
+              </label>
+              <div style={{ flex: 1 }}>
+                <div style={inputGroupStyle}>
+                  <select style={{ ...inputStyle, cursor: "pointer" }} disabled>
+                    <option>{field.placeholder || "Select..."}</option>
+                    {field.options?.map((opt, idx) => (
+                      <option key={idx}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         );
 
@@ -67,7 +204,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
             <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <input type="checkbox" disabled />
               <span>
-                {field.label} {field.required && <span style={{ color: "red" }}>*</span>}
+                {field.label} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
               </span>
             </label>
           </div>
@@ -75,21 +212,33 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
 
       case "date":
         return (
-          <div key={field.id} style={{ marginBottom: "16px" }}>
-            <label style={labelStyle}>
-              {field.label} {field.required && <span style={{ color: "red" }}>*</span>}
-            </label>
-            <input type="date" style={inputStyle} disabled />
+          <div key={field.id} style={{ marginBottom: "0" }}>
+            <div style={fieldRowStyle}>
+              <label style={labelStyle}>
+                {field.label} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
+              </label>
+              <div style={{ flex: 1 }}>
+                <div style={inputGroupStyle}>
+                  <input type="date" style={inputStyle} disabled />
+                </div>
+              </div>
+            </div>
           </div>
         );
 
       case "quantity":
         return (
-          <div key={field.id} style={{ marginBottom: "16px" }}>
-            <label style={labelStyle}>
-              {field.label} {field.required && <span style={{ color: "red" }}>*</span>}
-            </label>
-            <input type="number" min="1" defaultValue="1" style={inputStyle} disabled />
+          <div key={field.id} style={{ marginBottom: "0" }}>
+            <div style={fieldRowStyle}>
+              <label style={labelStyle}>
+                {field.label} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
+              </label>
+              <div style={{ flex: 1 }}>
+                <div style={inputGroupStyle}>
+                  <input type="number" min="1" defaultValue="1" style={inputStyle} disabled />
+                </div>
+              </div>
+            </div>
           </div>
         );
 
@@ -127,13 +276,18 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
 
   return (
     <div style={formStyle}>
-      <h2 style={{ marginTop: 0, marginBottom: "24px" }}>{formConfig.formTitle}</h2>
+      <h2 style={{ marginTop: 0, marginBottom: "24px", fontWeight: "900" }}>{formConfig.formTitle}</h2>
 
       {visibleSections.map((section) => {
         switch (section.type) {
           case "orderSummary":
             return (
-              <div key={section.id} style={{ marginBottom: "24px" }}>
+              <div key={section.id} style={{
+                marginBottom: "24px",
+                borderTop: "1px solid #E5E7EB",
+                borderBottom: "1px solid #E5E7EB",
+                padding: "16px 0",
+              }}>
                 <div style={{ position: "relative" }}>
                   {/* Product Image with Quantity Badge */}
                   <div style={{ display: "flex", gap: "12px", position: "relative" }}>
@@ -189,9 +343,9 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                     >
                       <div
                         style={{
-                          fontSize: "14px",
-                          fontWeight: "500",
-                          color: "#111827",
+                          fontSize: "16px",
+                          fontWeight: "700",
+                          color: "#000000",
                           marginBottom: "4px",
                           lineHeight: "1.4",
                         }}
@@ -206,9 +360,9 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                     {/* Price */}
                     <div
                       style={{
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        color: "#111827",
+                        fontSize: "16px",
+                        fontWeight: "700",
+                        color: "#000000",
                         whiteSpace: "nowrap",
                         alignSelf: "center",
                       }}
@@ -252,28 +406,30 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
               <div key={section.id} style={{ marginBottom: "24px" }}>
                 <div
                   style={{
-                    padding: "16px",
+                    padding: "8px 12px",
                     backgroundColor: "#F3F4F6",
-                    borderRadius: "6px",
+                    borderRadius: "4px",
+                    border: "1px solid #E5E7EB",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "15px", fontWeight: "500", color: "#374151" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "16px", fontWeight: "400", color: "#000000" }}>
                     <span>Subtotal</span>
-                    <span style={{ color: "#111827", fontWeight: "600" }}>{currencySymbol} 19.99</span>
+                    <span style={{ fontWeight: "600" }}>{currencySymbol} 19.99</span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "15px", fontWeight: "500", color: "#374151" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "16px", fontWeight: "400", color: "#000000" }}>
                     <span>Shipping</span>
-                    <span style={{ color: "#10B981", fontWeight: "600" }}>Free</span>
+                    <span style={{ fontWeight: "600" }}>Free</span>
                   </div>
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      paddingTop: "12px",
+                      paddingTop: "8px",
+                      marginTop: "4px",
                       borderTop: "1px solid #D1D5DB",
                       fontSize: "16px",
                       fontWeight: "700",
-                      color: "#111827",
+                      color: "#000000",
                     }}
                   >
                     <span>Total</span>
@@ -286,10 +442,21 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingMethod":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "12px" }}>Shipping Method</h3>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <input type="radio" checked disabled />
-                  <span>Free shipping - Free</span>
+                <h3 style={{ marginBottom: "8px", fontSize: "16px", fontWeight: "700" }}>Shipping Options</h3>
+                <label style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 16px",
+                  border: "1px solid #D1D5DB",
+                  borderRadius: "4px",
+                  backgroundColor: "#FFFFFF",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <input type="radio" checked disabled style={{ width: "16px", height: "16px", accentColor: "#000" }} />
+                    <span style={{ fontSize: "16px", color: "#000000" }}>Free shipping</span>
+                  </div>
+                  <span style={{ fontSize: "16px", fontWeight: "700", color: "#000000" }}>Free</span>
                 </label>
               </div>
             );
@@ -297,7 +464,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingAddress":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "12px" }}>Enter your shipping address</h3>
+                <h3 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "700" }}>Enter your shipping address</h3>
                 {visibleFields
                   .filter((f) => f.section === "shipping-address")
                   .map(renderField)}

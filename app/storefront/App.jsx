@@ -2001,7 +2001,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         style={{
           backgroundColor: 'white',
           borderRadius: '8px',
-          maxWidth: '500px',
+          maxWidth: '560px',
           width: '100%',
           maxHeight: '90vh',
           overflow: 'hidden',
