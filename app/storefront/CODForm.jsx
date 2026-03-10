@@ -232,7 +232,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     border: mode === 'popup' ? 'none' : `${config.formConfig.borderWidth}px solid ${config.formConfig.borderColor}`,
     boxShadow: mode === 'popup' ? 'none' : `0 ${config.formConfig.shadowIntensity}px ${config.formConfig.shadowIntensity * 2}px rgba(0,0,0,0.1)`,
     padding: '0',
-    maxWidth: mode === 'popup' ? '500px' : '100%',
+    maxWidth: mode === 'popup' ? '560px' : '100%',
     width: '100%',
     maxHeight: mode === 'popup' ? '90vh' : 'auto',
     display: 'flex',
@@ -681,33 +681,32 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
-  // Icon components - position changes based on RTL
-  const iconPosition = isRTL ? { right: '12px' } : { left: '12px' };
+  // Icon components - black filled, matching EasySell's Bootstrap icon style
+  const iconStyle = { flexShrink: 0, pointerEvents: 'none' };
 
   const PersonIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000" style={iconStyle}>
+      <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
+      <path fillRule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z" />
     </svg>
   );
 
   const PhoneIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000" style={iconStyle}>
+      <path fillRule="evenodd" d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.678.678 0 0 0 .178.643l2.457 2.457a.678.678 0 0 0 .644.178l2.189-.547a1.745 1.745 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.634 18.634 0 0 1-7.01-4.42 18.634 18.634 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877L1.885.511z" />
     </svg>
   );
 
   const EmailIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-      <polyline points="22,6 12,13 2,6" />
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000" style={iconStyle}>
+      <path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555ZM0 4.697v7.104l5.803-3.558L0 4.697ZM6.761 8.83l-6.57 4.027A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757ZM16 11.801V4.697l-5.803 3.546L16 11.801Z" />
     </svg>
   );
 
   const LocationIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', ...iconPosition, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="#000000" style={iconStyle}>
+      <path fillRule="evenodd" d="M12.166 8.94c-.524 1.062-1.234 2.12-1.96 3.07A31.493 31.493 0 0 1 8 14.58a31.481 31.481 0 0 1-2.206-2.57c-.726-.95-1.436-2.008-1.96-3.07C3.304 7.867 3 6.862 3 6a5 5 0 0 1 10 0c0 .862-.305 1.867-.834 2.94zM8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10z" />
+      <path d="M8 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
     </svg>
   );
 
@@ -720,32 +719,60 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     const inputStyle = {
       width: '100%',
-      padding: hasIcon
-        ? (isRTL ? '10px 42px 10px 12px' : '10px 12px 10px 42px')
-        : '10px 12px',
-      borderRadius: '4px',
-      border: error ? '1px solid #EF4444' : '1px solid #D1D5DB',
-      fontSize: '14px',
+      padding: '10px 12px',
+      borderRadius: '0',
+      border: 'none',
+      fontSize: '16px',
       color: '#111827',
       backgroundColor: '#FFFFFF',
       outline: 'none',
-      textAlign: isRTL ? 'right' : 'left',
+      flex: 1,
+    };
+
+    const inputGroupStyle = {
+      display: 'flex',
+      alignItems: 'center',
+      borderRadius: '4px',
+      border: error ? '1px solid #EF4444' : '1px solid #D1D5DB',
+      backgroundColor: '#FFFFFF',
+      overflow: 'hidden',
+      flex: 1,
+    };
+
+    const iconContainerStyle = {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '0 12px',
+      backgroundColor: '#E9ECEF',
+      borderRight: '1px solid #D1D5DB',
+      borderLeft: 'none',
+      alignSelf: 'stretch',
     };
 
     const labelStyle = {
-      display: 'block',
-      marginBottom: '6px',
-      fontSize: '14px',
-      fontWeight: '500',
-      color: '#111827',
-      textAlign: isRTL ? 'right' : 'left',
+      display: 'flex',
+      alignItems: 'center',
+      fontSize: '16px',
+      fontWeight: '600',
+      color: '#000000',
+      width: '100px',
+      minWidth: '100px',
+      flexShrink: 0,
+      lineHeight: '1.3',
+    };
+
+    const fieldRowStyle = {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '16px',
     };
 
     const errorStyle = {
       color: '#EF4444',
       fontSize: '12px',
       marginTop: '4px',
-      textAlign: isRTL ? 'right' : 'left',
     };
 
     const getFieldIcon = (fieldId) => {
@@ -762,66 +789,65 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
       return (
         <div key={field.id} style={{ marginBottom: '16px' }}>
-          <label style={labelStyle}>
-            {field.label}
-          </label>
+          <div style={fieldRowStyle}>
+            <label style={labelStyle}>
+              {field.label}
+            </label>
 
-          {/* Input + Apply button row */}
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="text"
-              value={discountCodeInput}
-              onChange={(e) => {
-                setDiscountCodeInput(e.target.value.toUpperCase());
-                if (discountError) setDiscountError('');
-              }}
-              placeholder={discountBlockedByBundle ? 'Discount is not allowed on bundles' : (field.placeholder || 'Discount Code')}
-              disabled={isDiscountDisabled}
-              style={{
-                ...inputStyle,
-                flex: 1,
-                padding: '10px 12px',
-                opacity: isDiscountDisabled ? 0.6 : 1,
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleApplyDiscount();
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleApplyDiscount}
-              disabled={!discountCodeInput.trim() || isDiscountDisabled}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#111827',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: '700',
-                cursor: (!discountCodeInput.trim() || isDiscountDisabled)
-                  ? 'not-allowed' : 'pointer',
-                opacity: (!discountCodeInput.trim() || isDiscountDisabled)
-                  ? 0.5 : 1,
-                whiteSpace: 'nowrap',
-                minWidth: '80px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {isValidatingDiscount ? (
-                <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
-              ) : 'Apply'}
-            </button>
+            {/* Input + Apply button row */}
+            <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+              <div style={{ ...inputGroupStyle, opacity: isDiscountDisabled ? 0.6 : 1 }}>
+                <input
+                  type="text"
+                  value={discountCodeInput}
+                  onChange={(e) => {
+                    setDiscountCodeInput(e.target.value.toUpperCase());
+                    if (discountError) setDiscountError('');
+                  }}
+                  placeholder={discountBlockedByBundle ? 'Not allowed on bundles' : (field.placeholder || 'Discount Code')}
+                  disabled={isDiscountDisabled}
+                  style={inputStyle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleApplyDiscount();
+                    }
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleApplyDiscount}
+                disabled={!discountCodeInput.trim() || isDiscountDisabled}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#000000',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: (!discountCodeInput.trim() || isDiscountDisabled)
+                    ? 'not-allowed' : 'pointer',
+                  opacity: (!discountCodeInput.trim() || isDiscountDisabled)
+                    ? 0.5 : 1,
+                  whiteSpace: 'nowrap',
+                  minWidth: '80px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {isValidatingDiscount ? (
+                  <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
+                ) : 'Apply'}
+              </button>
+            </div>
           </div>
 
           {/* Error message */}
           {discountError && (
-            <div style={errorStyle}>{discountError}</div>
+            <div style={{ ...errorStyle, marginInlineStart: '108px' }}>{discountError}</div>
           )}
 
           {/* Applied discount tag/chip */}
@@ -830,7 +856,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              marginTop: '8px',
+              marginTop: '4px',
+              marginInlineStart: '108px',
               padding: '4px 10px',
               backgroundColor: '#F0FDF4',
               border: '1px solid #BBF7D0',
@@ -866,28 +893,37 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     switch (field.type) {
       case 'text':
         return (
-          <div key={field.id} style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>
-              {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
-            </label>
-            <div style={{ position: 'relative' }}>
-              {getFieldIcon(field.id)}
-              <input
-                type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
-                value={value}
-                onChange={(e) => handleChange(fieldId, e.target.value)}
-                onBlur={field.id === 'phone' ? handlePhoneBlur : undefined}
-                placeholder={field.id === 'phone' ? `${country.phoneCode}3001234567` : field.id === 'email' ? 'email@example.com' : field.placeholder}
-                maxLength={field.id === 'phone' ? 15 : undefined}
-                style={inputStyle}
-              />
-              {field.id === 'phone' && isLookingUpCustomer && (
-                <div style={{ position: 'absolute', ...(isRTL ? { left: '12px' } : { right: '12px' }), top: '50%', transform: 'translateY(-50%)' }}>
-                  <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
+          <div key={field.id} style={{ marginBottom: '0' }}>
+            <div style={fieldRowStyle}>
+              <label style={labelStyle}>
+                {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+              </label>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <div style={inputGroupStyle}>
+                  {hasIcon && (
+                    <div style={iconContainerStyle}>
+                      {getFieldIcon(field.id)}
+                    </div>
+                  )}
+                  <input
+                    type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
+                    name={field.id}
+                    value={value}
+                    onChange={(e) => handleChange(fieldId, e.target.value)}
+                    onBlur={field.id === 'phone' ? handlePhoneBlur : undefined}
+                    placeholder={field.id === 'phone' ? `${country.phoneCode}3001234567` : field.id === 'email' ? 'email@example.com' : field.placeholder}
+                    maxLength={field.id === 'phone' ? 15 : undefined}
+                    style={inputStyle}
+                  />
+                  {field.id === 'phone' && isLookingUpCustomer && (
+                    <div style={{ padding: '0 12px', display: 'flex', alignItems: 'center' }}>
+                      <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
+                    </div>
+                  )}
                 </div>
-              )}
+                {error && <div style={errorStyle}>{error}</div>}
+              </div>
             </div>
-            {error && <div style={errorStyle}>{error}</div>}
           </div>
         );
 
@@ -898,40 +934,52 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         // If province field has no options (empty provinces array), render as text input instead
         if (field.id === 'province' && (!options || options.length === 0)) {
           return (
-            <div key={field.id} style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>
-                {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  value={value}
-                  onChange={(e) => handleChange(fieldId, e.target.value)}
-                  placeholder={field.placeholder || 'Enter your province/state'}
-                  style={inputStyle}
-                />
+            <div key={field.id} style={{ marginBottom: '0' }}>
+              <div style={fieldRowStyle}>
+                <label style={labelStyle}>
+                  {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+                </label>
+                <div style={{ flex: 1 }}>
+                  <div style={inputGroupStyle}>
+                    <input
+                      type="text"
+                      name={field.id}
+                      value={value}
+                      onChange={(e) => handleChange(fieldId, e.target.value)}
+                      placeholder={field.placeholder || 'Enter your province/state'}
+                      style={inputStyle}
+                    />
+                  </div>
+                  {error && <div style={errorStyle}>{error}</div>}
+                </div>
               </div>
-              {error && <div style={errorStyle}>{error}</div>}
             </div>
           );
         }
 
         return (
-          <div key={field.id} style={{ marginBottom: '16px' }}>
-            <label style={labelStyle}>
-              {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
-            </label>
-            <select
-              value={value}
-              onChange={(e) => handleChange(fieldId, e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">{field.placeholder || 'Select...'}</option>
-              {options?.map((opt, idx) => (
-                <option key={idx} value={opt}>{opt}</option>
-              ))}
-            </select>
-            {error && <div style={errorStyle}>{error}</div>}
+          <div key={field.id} style={{ marginBottom: '0' }}>
+            <div style={fieldRowStyle}>
+              <label style={labelStyle}>
+                {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+              </label>
+              <div style={{ flex: 1 }}>
+                <div style={inputGroupStyle}>
+                  <select
+                    name={field.id}
+                    value={value}
+                    onChange={(e) => handleChange(fieldId, e.target.value)}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                  >
+                    <option value="">{field.placeholder || 'Select...'}</option>
+                    {options?.map((opt, idx) => (
+                      <option key={idx} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+                {error && <div style={errorStyle}>{error}</div>}
+              </div>
+            </div>
           </div>
         );
 
@@ -1158,10 +1206,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         <h2 style={{
           margin: '0',
           fontSize: '18px',
-          fontWeight: '600',
+          fontWeight: '900',
           letterSpacing: '0.5px',
           color: '#000',
-          textAlign: isRTL ? 'right' : 'left',
         }}>
           {config.formConfig.formTitle}
         </h2>
@@ -1187,7 +1234,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               fontSize: '14px',
               fontWeight: '500',
               color: '#374151',
-              textAlign: isRTL ? 'right' : 'left',
             }}>
               What would you like to order?
             </label>
@@ -1202,8 +1248,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 fontSize: '14px',
                 backgroundColor: 'white',
                 cursor: 'pointer',
-                textAlign: isRTL ? 'right' : 'left',
-                direction: isRTL ? 'rtl' : 'ltr',
               }}
             >
               <option value="current+cart">Current product + Cart items ({1 + fullCartItemCount} items)</option>
@@ -1217,15 +1261,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           switch (section.type) {
             case 'orderSummary':
               return (
-                <div key={section.id} style={{ marginBottom: '20px' }}>
-                  {/* <h3 style={{
-                    fontSize: '16px',
-                    fontWeight: '600',
-                    marginBottom: '12px',
-                    color: '#000',
-                  }}>
-                    Order Summary
-                  </h3> */}
+                <div key={section.id} style={{
+                  marginBottom: '20px',
+                  borderTop: '1px solid #E5E7EB',
+                  borderBottom: '1px solid #E5E7EB',
+                  padding: '16px 0',
+                }}>
                   {cart.items.map((item, idx) => (
                     <div key={idx} style={{
                       display: 'flex',
@@ -1286,9 +1327,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         minWidth: 0,
                       }}>
                         <div style={{
-                          fontSize: '14px',
-                          fontWeight: '500',
-                          color: '#111827',
+                          fontSize: '16px',
+                          fontWeight: '700',
+                          color: '#000000',
                           marginBottom: '4px',
                           lineHeight: '1.4',
                           display: 'flex',
@@ -1325,9 +1366,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       {/* Price - show original price for upsell items since discount is in totals */}
                       {/* For bundle discounts (Pumper Bundles), show both prices */}
                       <div style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: '#111827',
+                        fontSize: '16px',
+                        fontWeight: '700',
+                        color: '#000000',
                         whiteSpace: 'nowrap',
                         alignSelf: 'center',
                         textAlign: 'right',
@@ -1405,30 +1446,31 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               return (
                 <div key={section.id} style={{
                   marginBottom: '20px',
-                  padding: '16px',
+                  padding: '8px 12px',
                   backgroundColor: '#F3F4F6',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
+                  border: '1px solid #E5E7EB',
                 }}>
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    marginBottom: '10px',
-                    fontSize: '15px',
-                    fontWeight: '500',
-                    color: '#374151',
+                    padding: '2.5px 0',
+                    fontSize: '16px',
+                    fontWeight: '400',
+                    color: '#000000',
                   }}>
                     <span>Subtotal</span>
-                    <span style={{ color: '#111827', fontWeight: '600' }}>{currencySymbol}{displaySubtotal.toFixed(2)}</span>
+                    <span style={{ fontWeight: '600' }}>{currencySymbol}{displaySubtotal.toFixed(2)}</span>
                   </div>
                   {/* Show bundle discount line if there's a bundle discount from Pumper Bundles */}
                   {bundleDiscount > 0 && (
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      marginBottom: '10px',
-                      fontSize: '15px',
-                      fontWeight: '500',
-                      color: '#374151',
+                      padding: '2.5px 0',
+                      fontSize: '16px',
+                      fontWeight: '400',
+                      color: '#000000',
                     }}>
                       <span>Bundle Discount</span>
                       <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayBundleDiscount.toFixed(2)}</span>
@@ -1439,10 +1481,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      marginBottom: '10px',
-                      fontSize: '15px',
-                      fontWeight: '500',
-                      color: '#374151',
+                      padding: '2.5px 0',
+                      fontSize: '16px',
+                      fontWeight: '400',
+                      color: '#000000',
                     }}>
                       <span>Upsell Discount</span>
                       <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayUpsellDiscount.toFixed(2)}</span>
@@ -1453,14 +1495,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      marginBottom: '10px',
-                      fontSize: '15px',
-                      fontWeight: '500',
-                      color: '#374151',
+                      padding: '2.5px 0',
+                      fontSize: '16px',
+                      fontWeight: '400',
+                      color: '#000000',
                     }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontSize: '12px' }}>⊘</span>
-                        RECOVERY DISCOUNT
+                        Recovery Discount
                       </span>
                       <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayRecoveryDiscountAmount.toFixed(2)}</span>
                     </div>
@@ -1470,10 +1512,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      marginBottom: '10px',
-                      fontSize: '15px',
-                      fontWeight: '500',
-                      color: '#374151',
+                      padding: '2.5px 0',
+                      fontSize: '16px',
+                      fontWeight: '400',
+                      color: '#000000',
                     }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontSize: '12px' }}>&#x25C7;</span>
@@ -1485,15 +1527,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    marginBottom: '10px',
-                    fontSize: '15px',
-                    fontWeight: '500',
-                    color: '#374151',
+                    padding: '2.5px 0',
+                    fontSize: '16px',
+                    fontWeight: '400',
+                    color: '#000000',
                   }}>
                     <span>Shipping</span>
                     <span style={{
-                      color: shippingCost === 0 ? '#10B981' : '#111827',
-                      fontWeight: '600'
+                      fontWeight: '600',
                     }}>
                       {shippingCost === 0 ? 'Free' : `${currencySymbol}${displayShippingCost.toFixed(2)}`}
                     </span>
@@ -1501,11 +1542,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    paddingTop: '12px',
+                    paddingTop: '8px',
+                    marginTop: '4px',
                     borderTop: '1px solid #D1D5DB',
                     fontSize: '16px',
                     fontWeight: '700',
-                    color: '#111827',
+                    color: '#000000',
                   }}>
                     <span>Total</span>
                     <span>{currencySymbol}{displayTotal.toFixed(2)}</span>
@@ -1518,11 +1560,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 <div key={section.id} style={{ marginBottom: '20px' }}>
                   <h3 style={{
                     fontSize: '16px',
-                    fontWeight: '600',
-                    marginBottom: '12px',
+                    fontWeight: '700',
+                    marginBottom: '8px',
                     color: '#000',
                   }}>
-                    Shipping Method
+                    Shipping Options
                   </h3>
 
                   {eligibleShippingRates.length > 0 ? (
@@ -1534,9 +1576,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '12px',
+                            padding: '8px 16px',
                             border: selectedShippingRate?.id === rate.id
-                              ? '2px solid #000'
+                              ? '1px solid #000'
                               : '1px solid #D1D5DB',
                             borderRadius: '4px',
                             cursor: 'pointer',
@@ -1555,21 +1597,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                 accentColor: '#000',
                               }}
                             />
-                            <div>
-                              <span style={{ fontSize: '14px', color: '#111827' }}>
-                                {rate.name}
-                              </span>
-                              {rate.description && (
-                                <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                                  {rate.description}
-                                </div>
-                              )}
-                            </div>
+                            <span style={{ fontSize: '16px', color: '#000000' }}>
+                              {rate.name}
+                            </span>
                           </div>
                           <span style={{
-                            fontSize: '14px',
-                            fontWeight: '500',
-                            color: rate.price === 0 ? '#10B981' : '#111827'
+                            fontSize: '16px',
+                            fontWeight: '700',
+                            color: '#000000',
                           }}>
                             {rate.price === 0 ? 'Free' : `${currencySymbol}${(hasDisplayPrice ? parseFloat((rate.price * displayExchangeRate).toFixed(2)) : rate.price).toFixed(2)}`}
                           </span>
@@ -1582,7 +1617,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '12px',
+                      padding: '8px 16px',
                       border: '1px solid #D1D5DB',
                       borderRadius: '4px',
                       backgroundColor: '#FFFFFF',
@@ -1594,9 +1629,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                           readOnly
                           style={{ width: '16px', height: '16px', accentColor: '#000' }}
                         />
-                        <span style={{ fontSize: '14px', color: '#111827' }}>Free shipping</span>
+                        <span style={{ fontSize: '16px', color: '#000000' }}>Free shipping</span>
                       </div>
-                      <span style={{ fontSize: '14px', fontWeight: '500', color: '#10B981' }}>Free</span>
+                      <span style={{ fontSize: '16px', fontWeight: '700', color: '#000000' }}>Free</span>
                     </label>
                   )}
                 </div>
@@ -1607,7 +1642,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 <div key={section.id} style={{ marginBottom: '20px' }}>
                   <h3 style={{
                     fontSize: '16px',
-                    fontWeight: '600',
+                    fontWeight: '700',
                     marginBottom: '16px',
                     color: '#000',
                   }}>
@@ -1616,58 +1651,74 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
                   {/* Country Selector - Only show in multi-country mode with more than 1 country */}
                   {config.shop?.enableMultiCountry && supportedCountries.length > 1 && (
-                    <div style={{ marginBottom: '16px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '16px',
+                    }}>
                       <label style={{
-                        display: 'block',
-                        marginBottom: '8px',
-                        fontWeight: 500,
-                        fontSize: `${config.formConfig?.fontSize || 14}px`,
-                        color: config.formConfig?.textColor || '#333',
-                        textAlign: isRTL ? 'right' : 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        color: '#000000',
+                        width: '100px',
+                        minWidth: '100px',
+                        flexShrink: 0,
+                        lineHeight: '1.3',
                       }}>
-                        Country <span style={{ color: '#EF4444' }}>*</span>
+                        Country
                       </label>
-                      <select
-                        value={countryCode}
-                        onChange={(e) => {
-                          setSelectedCountry(e.target.value);
-                          // Reset province and update phone when country changes
-                          const newCountry = COUNTRIES[e.target.value];
-                          setFormData(prev => ({
-                            ...prev,
-                            province: '',
-                            phone: newCountry?.phoneCode || '',
-                          }));
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          borderRadius: '6px',
-                          border: '1px solid #d1d5db',
-                          fontSize: `${config.formConfig?.fontSize || 14}px`,
-                          backgroundColor: '#fff',
-                          cursor: 'pointer',
-                          textAlign: isRTL ? 'right' : 'left',
-                          direction: isRTL ? 'rtl' : 'ltr',
-                        }}
-                      >
-                        {supportedCountries.map(c => (
-                          <option key={c.code} value={c.code}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                      {detectedCountry && !selectedCountry && (
-                        <small style={{
-                          display: 'block',
-                          marginTop: '4px',
-                          color: '#666',
-                          fontSize: '12px',
-                          textAlign: isRTL ? 'right' : 'left',
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          borderRadius: '4px',
+                          border: '1px solid #D1D5DB',
+                          backgroundColor: '#FFFFFF',
+                          overflow: 'hidden',
                         }}>
-                          Auto-detected based on your location
-                        </small>
-                      )}
+                          <select
+                            value={countryCode}
+                            onChange={(e) => {
+                              setSelectedCountry(e.target.value);
+                              const newCountry = COUNTRIES[e.target.value];
+                              setFormData(prev => ({
+                                ...prev,
+                                province: '',
+                                phone: newCountry?.phoneCode || '',
+                              }));
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: '0',
+                              border: 'none',
+                              fontSize: '16px',
+                              backgroundColor: '#fff',
+                              cursor: 'pointer',
+                              outline: 'none',
+                            }}
+                          >
+                            {supportedCountries.map(c => (
+                              <option key={c.code} value={c.code}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {detectedCountry && !selectedCountry && (
+                          <small style={{
+                            display: 'block',
+                            marginTop: '4px',
+                            color: '#666',
+                            fontSize: '12px',
+                          }}>
+                            Auto-detected based on your location
+                          </small>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1690,8 +1741,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             : upsell.upsellPrice;
           const oneTickCurrency = hasDisplayPrice ? currencySymbol : getCurrencyCode(config.shop?.country);
           const checkboxText = upsell.checkboxText
-            .replace('{title}', upsell.upsellTitle || '')
-            .replace('{price}', `${oneTickCurrency} ${oneTickPrice?.toFixed(2) || '0.00'}`);
+            .replace('{title}', `<strong>${upsell.upsellTitle || ''}</strong>`)
+            .replace('{price}', `<strong>${oneTickCurrency} ${oneTickPrice?.toFixed(2) || '0.00'}</strong>`);
 
           return (
             <div
@@ -1740,18 +1791,17 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 <div style={{ flex: 1 }}>
                   <div
                     style={{
-                      fontSize: '14px',
-                      fontWeight: '500',
+                      fontSize: '16px',
+                      fontWeight: '400',
                       color: upsell.textColor || '#000000',
                       marginBottom: upsell.descriptionText ? '4px' : '0',
                     }}
-                  >
-                    {checkboxText}
-                  </div>
+                    dangerouslySetInnerHTML={{ __html: checkboxText }}
+                  />
                   {upsell.descriptionText && (
                     <div
                       style={{
-                        fontSize: '13px',
+                        fontSize: '14px',
                         color: upsell.descriptionColor || '#595959',
                       }}
                     >

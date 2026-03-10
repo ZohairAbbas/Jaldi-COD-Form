@@ -348,7 +348,7 @@ export default function FormDesigner() {
                         border: `${settings.buttonBorderWidth || 0}px solid ${settings.buttonBorderColor || '#000000'}`,
                         borderRadius: `${settings.buttonBorderRadius || 4}px`,
                         fontSize: `${settings.buttonFontSize || 16}px`,
-                        fontWeight: "600",
+                        fontWeight: "700",
                         cursor: "pointer",
                         width: "100%",
                         display: "flex",
