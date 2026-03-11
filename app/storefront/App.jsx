@@ -322,6 +322,20 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           }
         }
       }
+      // Fallback: Bucks is present but hasn't converted (same currency as base).
+      // Extract the currency symbol directly from the price text in the DOM.
+      const moneyEl = document.querySelector('.price .money.buckscc-money')
+        || document.querySelector('product-price .money.buckscc-money');
+      if (moneyEl) {
+        const text = moneyEl.textContent.trim();
+        const match = text.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+        if (match) {
+          const symbol = match[1] || match[3] || '';
+          if (symbol) {
+            return { currencySymbol: symbol, price: null, currencyCode: '', exchangeRate: null };
+          }
+        }
+      }
       return null;
     };
 
