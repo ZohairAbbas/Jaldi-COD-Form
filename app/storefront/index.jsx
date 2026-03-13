@@ -580,6 +580,30 @@ function renderPopupOnProductCards(shopDomain) {
   });
 }
 
+// Helper: find the best insertion target by escaping third-party flex row wrappers.
+// When a form is nested inside a horizontal flex container (e.g. Kluck AI Buy Now),
+// inserting after the form places our widget as a squished flex child. Walk up past
+// flex-row parents so we insert after the outermost row wrapper.
+// Column-direction flex is fine (each child gets full width), so we stop there.
+function getInsertionTarget(element) {
+  let target = element;
+  const MAX_DEPTH = 3; // Safety limit to avoid walking too far up the DOM
+  let depth = 0;
+  while (target.parentElement && depth < MAX_DEPTH) {
+    const parentStyle = getComputedStyle(target.parentElement);
+    const display = parentStyle.display;
+    const direction = parentStyle.flexDirection;
+    // Only escape flex-row containers (where our widget would be squished horizontally)
+    if ((display === 'flex' || display === 'inline-flex') && direction === 'row') {
+      target = target.parentElement;
+      depth++;
+    } else {
+      break;
+    }
+  }
+  return target;
+}
+
 // Render popup button at default position
 function renderPopupAtDefault(shopDomain, productData) {
   const pageType = detectPageType();
@@ -609,7 +633,8 @@ function renderPopupAtDefault(shopDomain, productData) {
       productFormButtons.before(button);
     } else if (shopifyProductForm || productSection) {
       const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
-      (shopifyProductForm || productSection).after(button);
+      const insertTarget = getInsertionTarget(shopifyProductForm || productSection);
+      insertTarget.after(button);
     }
   } else if (pageType === 'cart') {
     // Find checkout button area - priority: after checkout button's parent (.cart__ctas) > after checkout button
@@ -663,7 +688,8 @@ function renderEmbeddedAtDefault(shopDomain, productData) {
       productFormButtons.before(form);
     } else if (shopifyProductForm || productSection) {
       const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
-      (shopifyProductForm || productSection).after(form);
+      const insertTarget = getInsertionTarget(shopifyProductForm || productSection);
+      insertTarget.after(form);
     }
   } else if (pageType === 'cart') {
     // Find checkout button area - priority: after checkout button's parent (.cart__ctas) > after checkout button
