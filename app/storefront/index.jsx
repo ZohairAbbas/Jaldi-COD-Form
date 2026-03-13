@@ -455,6 +455,8 @@ function hideNativeButtons(config) {
 function createPopupButton(container, shopDomain, productData, pageType) {
   const buttonContainer = document.createElement('div');
   buttonContainer.id = 'preventify-popup';
+  // Ensure full width even when injected inside third-party flex containers
+  buttonContainer.style.width = '100%';
   // Only add padding on product page, not on cart page
   if (pageType === 'product') {
     buttonContainer.style.padding = '20px 0';
