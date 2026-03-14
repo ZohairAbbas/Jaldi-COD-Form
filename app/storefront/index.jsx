@@ -143,10 +143,9 @@ function getBundlerData() {
   };
 }
 
-// Helper to get displayed/converted price from the DOM (for currency converter extensions like Bucks)
+// Helper to get displayed/converted price from the DOM (for currency converters like Bucks or Shopify Markets)
 function getDisplayedPriceData() {
-  // Look for currency converter elements (e.g. Bucks Currency Converter)
-  // Use product-price parent to target the actual product price, not hidden/unrelated $0.00 elements
+  // 1. Check for Bucks Currency Converter first (has explicit attributes)
   const convertedEl = document.querySelector('product-price .buckscc-converted[bucks-current]')
     || document.querySelector('.price .buckscc-converted[bucks-current]');
   if (convertedEl) {
@@ -162,8 +161,8 @@ function getDisplayedPriceData() {
       }
     }
   }
-  // Fallback: Bucks is present but hasn't converted (same currency as base).
-  // Extract the currency symbol directly from the price text in the DOM.
+
+  // 2. Check for Bucks fallback (same currency as base)
   const moneyEl = document.querySelector('.price .money.buckscc-money')
     || document.querySelector('product-price .money.buckscc-money');
   if (moneyEl) {
@@ -176,6 +175,36 @@ function getDisplayedPriceData() {
       }
     }
   }
+
+  // 3. Check for Shopify Markets (multi-currency via window.Shopify.currency)
+  if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+    const currencyCode = window.Shopify.currency.active;
+    const exchangeRate = parseFloat(window.Shopify.currency.rate);
+
+    // Find the price element (common Shopify selectors)
+    const priceEl = document.querySelector('.price-item--regular')
+      || document.querySelector('.price__regular .price-item')
+      || document.querySelector('.price .money')
+      || document.querySelector('[data-price]');
+
+    if (priceEl) {
+      const text = priceEl.textContent.trim();
+      const match = text.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+      if (match) {
+        const symbol = (match[1] || match[3] || '').trim();
+        const amount = normalizePrice(match[2]);
+        if (symbol) {
+          return {
+            currencySymbol: symbol,
+            price: amount > 0 ? amount : null,
+            currencyCode: currencyCode,
+            exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null
+          };
+        }
+      }
+    }
+  }
+
   return null;
 }
 
