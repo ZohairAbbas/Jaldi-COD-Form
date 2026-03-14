@@ -15,10 +15,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     ? (config.shop.supportedCountries || []).map(code => COUNTRIES[code]).filter(Boolean)
     : [country];
 
-  // Use displayed currency symbol from currency converter if available, otherwise fall back to country's symbol
+  // Use displayed currency symbol from currency converter if available, otherwise fall back to SHOP's base country symbol
+  // Country dropdown is for shipping address, NOT currency conversion - prices stay in shop's base currency
   const displayCurrency = cart.items?.find(item => item.displayCurrencySymbol);
-  const currencySymbol = displayCurrency?.displayCurrencySymbol || country.currencySymbol;
-
+  const shopBaseCountry = COUNTRIES[config.shop?.country] || COUNTRIES.PAK;
+  const currencySymbol = displayCurrency?.displayCurrencySymbol || shopBaseCountry.currencySymbol;
+  
   // Check if RTL is enabled
   const isRTL = config.settings?.enableRTL || false;
 
