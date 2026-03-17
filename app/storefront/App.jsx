@@ -359,7 +359,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
                 currencySymbol: symbol,
                 price: amount > 0 ? amount : null,
                 currencyCode: currencyCode,
-                exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null
+                exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
+                isShopifyMarkets: true // Flag to indicate this is Shopify Markets (prices already converted)
               };
             }
           }
@@ -462,7 +463,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           productDataResult.displayPrice = bundleData?.displayDiscountedPrice || displayedPriceData.price;
           productDataResult.displayCurrencySymbol = displayedPriceData.currencySymbol;
           productDataResult.displayCurrencyCode = displayedPriceData.currencyCode;
-          if (displayedPriceData.exchangeRate) productDataResult.displayExchangeRate = displayedPriceData.exchangeRate;
+
+          // Always set exchangeRate when available (needed for upsells, shipping, tick-sells)
+          if (displayedPriceData.exchangeRate) {
+            productDataResult.displayExchangeRate = displayedPriceData.exchangeRate;
+          }
+
+          // Store flag if this is Shopify Markets (API prices pre-converted, don't multiply for bundles)
+          if (displayedPriceData.isShopifyMarkets) {
+            productDataResult.isShopifyMarkets = true;
+          }
+
           if (bundleData?.displayOriginalPrice) productDataResult.displayOriginalPrice = bundleData.displayOriginalPrice;
         }
 
@@ -2094,7 +2105,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onTierSelect={handleBundleTierSelect}
           selectedTierId={selectedBundleTier?.id}
           isRTL={config?.settings?.enableRTL}
-          exchangeRate={currentProduct?.displayExchangeRate || null}
+          exchangeRate={
+            // IMPORTANT: Don't convert bundle prices when Shopify Markets is active
+            // Shopify Markets pre-converts API prices server-side (variant.price already in target currency)
+            // Only use exchangeRate for Bucks converter (client-side conversion, API prices in base currency)
+            currentProduct?.isShopifyMarkets
+              ? null // Shopify Markets: prices already converted, don't multiply again
+              : (currentProduct?.displayExchangeRate || null) // Bucks or no converter: use exchange rate
+          }
           inventoryQuantity={inventoryQuantity}
           productVariants={activeBundleConfig?.allowVariantMix ? productVariants : null}
           variantMixSelections={variantMixSelections}
