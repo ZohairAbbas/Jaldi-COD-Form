@@ -198,7 +198,8 @@ function getDisplayedPriceData() {
             currencySymbol: symbol,
             price: amount > 0 ? amount : null,
             currencyCode: currencyCode,
-            exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null
+            exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
+            isShopifyMarkets: true // Flag to indicate this is Shopify Markets (prices already converted)
           };
         }
       }
