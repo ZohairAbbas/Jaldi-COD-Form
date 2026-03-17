@@ -283,6 +283,17 @@ function getProductData(container) {
       productData.displayPrice = bundleData?.displayDiscountedPrice || displayedPriceData.price;
       productData.displayCurrencySymbol = displayedPriceData.currencySymbol;
       productData.displayCurrencyCode = displayedPriceData.currencyCode;
+
+      // Set exchange rate if available (needed for upsells, shipping, tick-sells)
+      if (displayedPriceData.exchangeRate) {
+        productData.displayExchangeRate = displayedPriceData.exchangeRate;
+      }
+
+      // Store Shopify Markets flag (prevents double conversion in bundles)
+      if (displayedPriceData.isShopifyMarkets) {
+        productData.isShopifyMarkets = true;
+      }
+
       if (bundleData?.displayOriginalPrice) productData.displayOriginalPrice = bundleData.displayOriginalPrice;
     }
 
