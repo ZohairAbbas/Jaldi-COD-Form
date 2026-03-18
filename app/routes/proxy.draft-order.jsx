@@ -164,6 +164,11 @@ export const action = async ({ request }) => {
         { key: "_preventify_source", value: "card_checkout" },
         { key: "_preventify_shop", value: data.shop },
       ],
+      // Shopify Markets: create draft order in the presentment currency.
+      // Only set when presentmentCurrencyCode is provided (i.e., Shopify Markets is active).
+      ...(data.presentmentCurrencyCode ? {
+        presentmentCurrencyCode: data.presentmentCurrencyCode,
+      } : {}),
     };
 
     // Add shipping address

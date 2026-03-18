@@ -469,6 +469,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       return item;
     });
 
+    // Detect Shopify Markets currency from cart items
+    const marketItem = cart.items.find(i => i.isShopifyMarkets && i.displayCurrencyCode);
+
     const orderData = {
       shop: config.shopDomain,
       sessionId: sessionId, // Include session ID for abandoned cart tracking
@@ -506,6 +509,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       // Pixel tracking data for server-side CAPI
       pixelEventId,
       pixelAttribution: attributionData,
+      // Shopify Markets: pass presentment currency so the order is created in the correct currency
+      ...(marketItem ? { presentmentCurrencyCode: marketItem.displayCurrencyCode } : {}),
     };
 
     // If OTP is enabled, trigger OTP flow before submitting
@@ -630,6 +635,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         cardDiscountAmount = parseFloat(cardDiscountAmount.toFixed(2));
       }
 
+      // Detect Shopify Markets currency from cart items
+      const draftMarketItem = cart.items.find(i => i.isShopifyMarkets && i.displayCurrencyCode);
+
       const response = await fetch(`${appPath}proxy/draft-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -665,6 +673,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           cardDiscount: cardDiscountAmount > 0 ? { amount: cardDiscountAmount } : null,
           shippingCost: shippingCost,
           shippingRateName: selectedShippingRate?.name,
+          // Shopify Markets: pass presentment currency for draft order
+          ...(draftMarketItem ? { presentmentCurrencyCode: draftMarketItem.displayCurrencyCode } : {}),
         }),
       });
 
@@ -989,19 +999,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         return null;
     }
   };
-
-  // DEBUG: Log cart items to understand COD form pricing
-  console.log('=== COD FORM CART DEBUG ===');
-  cart.items.forEach((item, i) => {
-    console.log(`Item ${i}:`, JSON.stringify({
-      title: item.title, variantId: item.variantId, quantity: item.quantity,
-      price: item.price, originalPrice: item.originalPrice,
-      displayPrice: item.displayPrice, displayOriginalPrice: item.displayOriginalPrice,
-      hasBundleDiscount: item.hasBundleDiscount, hasCartDiscount: item.hasCartDiscount,
-      isUpsell: item.isUpsell, isShopifyMarkets: item.isShopifyMarkets,
-      displayExchangeRate: item.displayExchangeRate,
-    }));
-  });
 
   // Calculate subtotal using original prices for upsell items and bundle items, regular price for others
   // Note: For Pumper Bundle items, the price is already the total bundle price, not per-unit
