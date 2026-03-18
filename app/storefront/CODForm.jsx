@@ -990,6 +990,19 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
+  // DEBUG: Log cart items to understand COD form pricing
+  console.log('=== COD FORM CART DEBUG ===');
+  cart.items.forEach((item, i) => {
+    console.log(`Item ${i}:`, JSON.stringify({
+      title: item.title, variantId: item.variantId, quantity: item.quantity,
+      price: item.price, originalPrice: item.originalPrice,
+      displayPrice: item.displayPrice, displayOriginalPrice: item.displayOriginalPrice,
+      hasBundleDiscount: item.hasBundleDiscount, hasCartDiscount: item.hasCartDiscount,
+      isUpsell: item.isUpsell, isShopifyMarkets: item.isShopifyMarkets,
+      displayExchangeRate: item.displayExchangeRate,
+    }));
+  });
+
   // Calculate subtotal using original prices for upsell items and bundle items, regular price for others
   // Note: For Pumper Bundle items, the price is already the total bundle price, not per-unit
   // For cart discount items (quantity-breaks), prices are per-unit
