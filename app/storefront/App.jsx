@@ -1623,10 +1623,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         originalPrice: effectiveOriginalPrice,
         hasBundleDiscount: effectiveHasDiscount,
         isVariantMixBundle: false,
-        ...(displayEffectivePrice && {
-          displayPrice: displayEffectivePrice,
-          displayOriginalPrice: displayOriginal,
-        }),
+        // Set new display prices or clear stale ones from previous state
+        displayPrice: displayEffectivePrice || undefined,
+        displayOriginalPrice: displayOriginal || undefined,
       }));
 
       setCart(prevCart => {
@@ -1640,10 +1639,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
               price: effectivePrice,
               originalPrice: effectiveOriginalPrice,
               hasBundleDiscount: effectiveHasDiscount,
-              ...(displayEffectivePrice && {
-                displayPrice: displayEffectivePrice,
-                displayOriginalPrice: displayOriginal,
-              }),
+              // Set new display prices or clear stale ones from previous state
+              displayPrice: displayEffectivePrice || undefined,
+              displayOriginalPrice: displayOriginal || undefined,
             };
           }
           return item;
