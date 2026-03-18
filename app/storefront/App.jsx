@@ -1432,7 +1432,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(unitPrice, tier);
     const totalBundleDiscount = hasDiscount ? fullPrice - discountedPrice : 0;
     const perUnitDiscount = hasDiscount ? totalBundleDiscount / totalQuantity : 0;
-    const rate = currentProduct.displayExchangeRate;
+    // For Shopify Markets: prices already in target currency, don't convert
+    // For Bucks/other converters: prices in base currency, multiply by exchange rate
+    const rate = currentProduct.isShopifyMarkets ? null : currentProduct.displayExchangeRate;
 
     // Group selections by variant ID
     const grouped = {};
@@ -1608,7 +1610,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         effectiveHasDiscount = hasDiscount;
       }
 
-      const rate = currentProduct.displayExchangeRate;
+      // For Shopify Markets: prices are already in target currency, don't convert
+      // For Bucks/other converters: prices are in base currency, multiply by exchange rate
+      const rate = currentProduct.isShopifyMarkets ? null : currentProduct.displayExchangeRate;
       const displayEffectivePrice = rate ? parseFloat((effectivePrice * rate).toFixed(2)) : null;
       const displayOriginal = rate && effectiveOriginalPrice ? parseFloat((effectiveOriginalPrice * rate).toFixed(2)) : undefined;
 
