@@ -53,6 +53,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [pendingOrderData, setPendingOrderData] = useState(null);
   const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
+  const [buyerData, setBuyerData] = useState(null); // Global buyer lookup result
   const [focusedOtpIndex, setFocusedOtpIndex] = useState(-1);
   const otpInputRefs = useRef([]);
 
@@ -150,10 +151,54 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     return () => clearInterval(timer);
   }, [otpCountdown]);
 
-  // Customer lookup on phone blur
-  // Customer lookup disabled - security issue (exposes address for any phone number)
+  // Global buyer lookup on phone blur (trust-based: server decides what data to return)
   const handlePhoneBlur = async () => {
-    // No-op: customer lookup is disabled
+    const phone = formData.phone;
+    if (!phone || phone === country.phoneCode || phone.length < 10) return;
+
+    setIsLookingUpCustomer(true);
+    try {
+      const response = await fetch(`${appPath}proxy/buyer-lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await response.json();
+
+      if (data.buyer) {
+        setBuyerData(data.buyer);
+
+        if (data.buyer.trustLevel === 'trusted' && data.buyer.address) {
+          // Trusted buyer — full address autofill (only fill empty fields)
+          setFormData(prev => ({
+            ...prev,
+            firstName: prev.firstName || data.buyer.firstName || '',
+            lastName: prev.lastName || data.buyer.lastName || '',
+            email: prev.email || data.buyer.email || '',
+            address: prev.address || data.buyer.address.address || '',
+            address2: prev.address2 || data.buyer.address.address2 || '',
+            city: prev.city || data.buyer.address.city || '',
+            province: prev.province || data.buyer.address.province || '',
+            postalCode: prev.postalCode || data.buyer.address.postalCode || '',
+          }));
+        } else if (data.buyer.trustLevel === 'recognized') {
+          // Recognized buyer — preview only (firstName, city, province)
+          setFormData(prev => ({
+            ...prev,
+            firstName: prev.firstName || data.buyer.firstName || '',
+            city: prev.city || data.buyer.city || '',
+            province: prev.province || data.buyer.province || '',
+          }));
+        }
+      } else {
+        setBuyerData(null);
+      }
+    } catch (error) {
+      console.error('Buyer lookup failed:', error);
+      setBuyerData(null);
+    } finally {
+      setIsLookingUpCustomer(false);
+    }
   };
 
   // Send OTP to customer's phone
@@ -263,6 +308,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       const codeLength = country.phoneCode.length;
       const digitsOnly = value.slice(codeLength).replace(/\D/g, '');
       value = country.phoneCode + digitsOnly;
+      // Clear buyer lookup when phone changes
+      setBuyerData(null);
     }
 
     setFormData(prev => ({ ...prev, [fieldId]: value }));
@@ -933,6 +980,28 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     </div>
                   )}
                 </div>
+                {field.id === 'phone' && buyerData && (
+                  <div style={{
+                    fontSize: '12px',
+                    color: buyerData.trustLevel === 'trusted' ? '#059669' : '#6B7280',
+                    marginTop: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}>
+                    {buyerData.trustLevel === 'trusted' ? (
+                      <>
+                        <span>&#10003;</span>
+                        <span>Welcome back{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>&#10003;</span>
+                        <span>Welcome back{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
+                      </>
+                    )}
+                  </div>
+                )}
                 {error && <div style={errorStyle}>{error}</div>}
               </div>
             </div>

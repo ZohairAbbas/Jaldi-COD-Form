@@ -1,5 +1,6 @@
 import { getShopByDomain } from "../lib/db.server";
 import { verifyOTP } from "../lib/sms.server";
+import { markBuyerVerified } from "../lib/buyer.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -19,6 +20,16 @@ export const action = async ({ request }) => {
     }
 
     const result = await verifyOTP(shopData.id, phone, otp);
+
+    // On successful OTP verification, mark buyer as globally verified
+    if (result.success) {
+      try {
+        await markBuyerVerified(phone);
+      } catch (err) {
+        console.error("Failed to mark buyer verified:", err);
+      }
+    }
+
     return Response.json(result);
   } catch (error) {
     console.error("OTP verify error:", error);

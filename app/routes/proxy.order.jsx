@@ -4,6 +4,7 @@ import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../
 import { normalizePrice } from "../lib/constants";
 import prisma from "../db.server";
 import { upsertCustomerProfile } from "../lib/sms.server";
+import { upsertGlobalBuyer } from "../lib/buyer.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -207,6 +208,25 @@ export const action = async ({ request }) => {
       });
     } catch (profileError) {
       console.error("Failed to upsert customer profile:", profileError);
+    }
+
+    // Save/update global buyer profile for cross-merchant recognition
+    try {
+      await upsertGlobalBuyer(shop.id, {
+        phone: orderData.phone,
+        firstName: orderData.firstName,
+        lastName: orderData.lastName,
+        email: orderData.email,
+        address: orderData.address,
+        address2: orderData.address2,
+        city: orderData.city,
+        province: orderData.province,
+        postalCode: orderData.postalCode,
+        country: orderData.country,
+        countryCode: orderData.countryCode || "PAK",
+      });
+    } catch (globalBuyerError) {
+      console.error("Failed to upsert global buyer:", globalBuyerError);
     }
 
     // Mark session as completed if sessionId is provided
