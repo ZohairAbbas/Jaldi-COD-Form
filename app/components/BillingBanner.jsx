@@ -2,12 +2,50 @@
  * Billing Banner Component
  *
  * Displays subscription status and prompts for action
- * Shows trial information, expired subscriptions, etc.
+ * Shows trial information, expired subscriptions, usage warnings, etc.
  */
 
 import { Link } from 'react-router';
 
-export default function BillingBanner({ subscription }) {
+export default function BillingBanner({ subscription, planUsage }) {
+  // Order usage warnings (checked first - most actionable)
+  if (planUsage && planUsage.usageStatus === 'exceeded') {
+    return (
+      <s-banner
+        status="critical"
+        style={{ marginBottom: '16px' }}
+      >
+        <s-text>
+          You have used <strong>{planUsage.monthlyOrderCount} / {planUsage.planLimit} orders</strong> this month.
+          You have exceeded your plan limit.{' '}
+          <Link to="/app/billing">
+            <s-link>Upgrade your plan</s-link>
+          </Link>{' '}
+          for more orders.
+        </s-text>
+      </s-banner>
+    );
+  }
+
+  if (planUsage && planUsage.usageStatus === 'warning') {
+    return (
+      <s-banner
+        status="warning"
+        style={{ marginBottom: '16px' }}
+      >
+        <s-text>
+          You have used <strong>{planUsage.monthlyOrderCount} / {planUsage.planLimit} orders</strong> this month
+          ({planUsage.usagePercentage}%). You are approaching your plan limit.{' '}
+          <Link to="/app/billing">
+            <s-link>Upgrade your plan</s-link>
+          </Link>{' '}
+          to avoid any disruptions.
+        </s-text>
+      </s-banner>
+    );
+  }
+
+  // Subscription status warnings
   if (!subscription) return null;
 
   const { status, trialEndsAt, planName, cancelAtPeriodEnd, currentPeriodEnd } =
