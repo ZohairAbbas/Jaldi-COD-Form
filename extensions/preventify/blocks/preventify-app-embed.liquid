@@ -52,6 +52,9 @@
          data-product-title="{{ product.title | escape }}"
          data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
          data-product-price="{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}"
+         {% if product.selected_or_first_available_variant.compare_at_price > product.selected_or_first_available_variant.price %}
+           data-compare-at-price="{{ product.selected_or_first_available_variant.compare_at_price | divided_by: 100.0 }}"
+         {% endif %}
          data-product-image="{{ product.featured_image | image_url: width: 100 }}"
          data-inventory-quantity="{{ product.selected_or_first_available_variant.inventory_quantity }}"
          data-inventory-policy="{{ product.selected_or_first_available_variant.inventory_policy }}"
