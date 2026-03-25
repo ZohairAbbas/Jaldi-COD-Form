@@ -236,6 +236,7 @@ function getProductData(container) {
   const productTitle = container.dataset.productTitle;
   const variantTitle = container.dataset.variantTitle;
   const productPrice = container.dataset.productPrice;
+  const compareAtPriceRaw = container.dataset.compareAtPrice;
   const productImage = container.dataset.productImage;
   const productAvailable = container.dataset.productAvailable;
 
@@ -277,6 +278,14 @@ function getProductData(container) {
       price: price,
       image: productImage,
     };
+
+    // Add compare_at_price for bundle strikethrough display
+    if (compareAtPriceRaw) {
+      const compareAtPrice = normalizePrice(compareAtPriceRaw);
+      if (compareAtPrice > price) {
+        productData.compareAtPrice = compareAtPrice;
+      }
+    }
 
     // Add displayed currency info if a converter is active (for display only, not order submission)
     if (displayedPriceData) {

@@ -150,9 +150,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }
   };
 
-  // Listen for variant changes on product page
+  // Listen for variant changes on product page (skip for cart drawer — it shouldn't monitor products)
   useEffect(() => {
-    if (currentPageType !== 'product') return;
+    if (currentPageType !== 'product' || isCartDrawer) return;
 
     const container = document.querySelector('[data-preventify-app-embed]');
     if (!container) return;
@@ -1544,10 +1544,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     const unitPrice = bundleBasePrice ?? currentProduct.price;
     if (bundleBasePrice === null) {
       setBundleBasePrice(unitPrice);
-      // Capture compare_at_price for bundle strikethrough display
-      if (currentProduct.compareAtPrice) {
-        setCompareAtPrice(currentProduct.compareAtPrice);
-      }
+    }
+
+    // Always update compare_at_price when available — it may arrive later
+    // than bundleBasePrice (e.g., fetchVariantData returns after initial Liquid data).
+    if (currentProduct.compareAtPrice && !compareAtPrice) {
+      setCompareAtPrice(currentProduct.compareAtPrice);
     }
 
     // Check if stock is sufficient for the requested tier quantity.
@@ -1672,7 +1674,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     if (wantsVariantMix && !productVariants) {
       if (bundleBasePrice === null) {
         setBundleBasePrice(currentProduct.price);
-        if (currentProduct.compareAtPrice) setCompareAtPrice(currentProduct.compareAtPrice);
+      }
+      if (currentProduct.compareAtPrice && !compareAtPrice) {
+        setCompareAtPrice(currentProduct.compareAtPrice);
       }
       return;
     }
@@ -2097,8 +2101,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   return (
     <>
-      {/* Bundle / Quantity Break Widget */}
-      {activeBundleConfig && currentPageType === 'product' && currentProduct && (
+      {/* Bundle / Quantity Break Widget — never in cart drawer */}
+      {activeBundleConfig && currentPageType === 'product' && currentProduct && !isCartDrawer && (
         <BundleWidget
           bundleConfig={activeBundleConfig}
           productPrice={bundleBasePrice ?? currentProduct?.price ?? 0}
