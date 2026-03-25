@@ -621,6 +621,28 @@ function renderPopupOnProductCards(shopDomain) {
   });
 }
 
+// Helper: querySelector that skips elements inside hidden ancestors (e.g. cart drawer).
+// Returns the first match whose ancestors are all visible.
+function queryVisibleElement(selector) {
+  const candidates = document.querySelectorAll(selector);
+  for (const el of candidates) {
+    if (el.offsetParent !== null || getComputedStyle(el).display !== 'none') {
+      // Check visibility up the tree — cart drawers use visibility:hidden
+      let hidden = false;
+      let ancestor = el;
+      while (ancestor) {
+        if (getComputedStyle(ancestor).visibility === 'hidden') {
+          hidden = true;
+          break;
+        }
+        ancestor = ancestor.parentElement;
+      }
+      if (!hidden) return el;
+    }
+  }
+  return null;
+}
+
 // Helper: find the best insertion target by escaping third-party flex row wrappers.
 // When a form is nested inside a horizontal flex container (e.g. Kluck AI Buy Now),
 // inserting after the form places our widget as a squished flex child. Walk up past
@@ -650,14 +672,14 @@ function renderPopupAtDefault(shopDomain, productData) {
   const pageType = detectPageType();
 
   if (pageType === 'product') {
-    // Find product form area - try multiple selectors for different themes
-    const addToCartButton = document.querySelector('button[name="add"]');
+    // Find product form area - use queryVisibleElement to skip hidden containers (e.g. cart drawer)
+    const addToCartButton = queryVisibleElement('button[name="add"]');
     const productFormButtons = addToCartButton?.closest('.product-form-buttons');
-    const shopifyProductForm = document.querySelector('form.shopify-product-form')
-      || document.querySelector('form[action*="/cart/add"]:not(.payment-terms)');
-    const productSection = document.querySelector('[data-section-type="product"]')
-      || document.querySelector('.product-form')?.closest('section')
-      || document.querySelector('form[action*="/cart/add"]')?.closest('section');
+    const shopifyProductForm = queryVisibleElement('form.shopify-product-form')
+      || queryVisibleElement('form[action*="/cart/add"]:not(.payment-terms)');
+    const productSection = queryVisibleElement('[data-section-type="product"]')
+      || queryVisibleElement('.product-form')?.closest('section')
+      || queryVisibleElement('form[action*="/cart/add"]')?.closest('section');
 
     // Check for bundle/quantity-breaks sections that should appear before the COD button
     const quantityBreaks = document.querySelector('quantity-breaks');
@@ -705,14 +727,14 @@ function renderEmbeddedAtDefault(shopDomain, productData) {
   const pageType = detectPageType();
 
   if (pageType === 'product') {
-    // Find product form area - try multiple selectors for different themes
-    const addToCartButton = document.querySelector('button[name="add"]');
+    // Find product form area - use queryVisibleElement to skip hidden containers (e.g. cart drawer)
+    const addToCartButton = queryVisibleElement('button[name="add"]');
     const productFormButtons = addToCartButton?.closest('.product-form-buttons');
-    const shopifyProductForm = document.querySelector('form.shopify-product-form')
-      || document.querySelector('form[action*="/cart/add"]:not(.payment-terms)');
-    const productSection = document.querySelector('[data-section-type="product"]')
-      || document.querySelector('.product-form')?.closest('section')
-      || document.querySelector('form[action*="/cart/add"]')?.closest('section');
+    const shopifyProductForm = queryVisibleElement('form.shopify-product-form')
+      || queryVisibleElement('form[action*="/cart/add"]:not(.payment-terms)');
+    const productSection = queryVisibleElement('[data-section-type="product"]')
+      || queryVisibleElement('.product-form')?.closest('section')
+      || queryVisibleElement('form[action*="/cart/add"]')?.closest('section');
 
     // Check for bundle/quantity-breaks sections that should appear before the COD button
     const quantityBreaks = document.querySelector('quantity-breaks');
