@@ -242,6 +242,16 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       }];
     }
 
+    console.log('[Preventify]', 'shopify-rest-order', JSON.stringify({
+      shopDomain: shopDomain,
+      currency: restOrder.currency || '(not set - shop default)',
+      presentment_currency: restOrder.presentment_currency || '(not set - shop default)',
+      inputPresentmentCurrencyCode: presentmentCurrencyCode || null,
+      lineItemCount: restLineItems.length,
+      lineItems: restLineItems.map(li => ({ variant_id: li.variant_id, price: li.price, quantity: li.quantity })),
+      phoneLast4: cleanedPhone?.slice(-4),
+    }));
+
     // Create order using REST API
     const orderResponse = await fetch(
       `https://${shopDomain}/admin/api/2025-01/orders.json`,
@@ -268,6 +278,16 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       console.error("Full order result:", JSON.stringify(orderResult, null, 2));
       throw new Error("Failed to create order - no order ID returned");
     }
+
+    console.log('[Preventify]', 'order-created', JSON.stringify({
+      orderId: order.id,
+      orderName: order.name,
+      orderCurrency: order.currency,
+      orderPresentmentCurrency: order.presentment_currency,
+      totalPrice: order.total_price,
+      phoneLast4: cleanedPhone?.slice(-4),
+      shopDomain: shopDomain,
+    }));
 
     return {
       success: true,
