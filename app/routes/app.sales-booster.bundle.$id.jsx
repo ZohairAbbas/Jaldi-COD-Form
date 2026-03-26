@@ -109,7 +109,7 @@ function calculateTierPrice(productPrice, tier) {
     case "percentage": discounted = fullPrice * (1 - tier.discountValue / 100); break;
     case "flat": discounted = Math.max(0, fullPrice - tier.discountValue); break;
     case "specific": discounted = tier.discountValue; break;
-    case "bogo": discounted = productPrice * (tier.quantity - 1); break;
+    case "bogo": discounted = productPrice * (tier.bogoBuyX || Math.max(1, tier.quantity - 1)); break;
     case "none": default: discounted = fullPrice;
   }
   if (tier.priceRounding) discounted = Math.floor(discounted) + (tier.priceRoundingValue || 0.99);
@@ -261,7 +261,20 @@ export default function BundleEditor() {
   const updateTier = (tierIdx, field, value) => {
     setBundle((prev) => {
       const tiers = [...prev.tiers];
-      tiers[tierIdx] = { ...tiers[tierIdx], [field]: value };
+      const updated = { ...tiers[tierIdx], [field]: value };
+      // Auto-calculate total quantity for BOGO
+      if (updated.discountType === "bogo" && (field === "bogoBuyX" || field === "bogoGetYFree" || field === "discountType")) {
+        const buyX = updated.bogoBuyX || 1;
+        const getY = updated.bogoGetYFree || 1;
+        updated.quantity = buyX + getY;
+      }
+      // Set defaults when switching to BOGO
+      if (field === "discountType" && value === "bogo") {
+        if (!updated.bogoBuyX) updated.bogoBuyX = 1;
+        if (!updated.bogoGetYFree) updated.bogoGetYFree = 1;
+        updated.quantity = (updated.bogoBuyX || 1) + (updated.bogoGetYFree || 1);
+      }
+      tiers[tierIdx] = updated;
       return { ...prev, tiers };
     });
   };
@@ -701,31 +714,67 @@ export default function BundleEditor() {
                               </div>
 
                               {/* Discount Value + Quantity */}
-                              <div style={{ display: "flex", gap: "12px" }}>
-                                {tier.discountType !== "none" && tier.discountType !== "bogo" && (
+                              {tier.discountType === "bogo" ? (
+                                <div style={{ display: "flex", gap: "8px", alignItems: "end" }}>
                                   <div style={{ flex: 1 }}>
-                                    <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>
-                                      {tier.discountType === "percentage" ? "Discount in %" : tier.discountType === "flat" ? "Flat Discount" : "Specific Price"}
-                                    </label>
+                                    <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Buy X</label>
                                     <input
                                       type="number"
-                                      value={tier.discountValue}
-                                      onChange={(e) => updateTier(idx, "discountValue", parseFloat(e.target.value) || 0)}
+                                      min="1"
+                                      value={tier.bogoBuyX || 1}
+                                      onChange={(e) => updateTier(idx, "bogoBuyX", Math.max(1, parseInt(e.target.value) || 1))}
                                       style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box" }}
                                     />
                                   </div>
-                                )}
-                                <div style={{ flex: 1 }}>
-                                  <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Total Quantity</label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={tier.quantity}
-                                    onChange={(e) => updateTier(idx, "quantity", parseInt(e.target.value) || 1)}
-                                    style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box" }}
-                                  />
+                                  <div style={{ padding: "10px 0", fontSize: "18px", fontWeight: "500", color: "#6b7280" }}>+</div>
+                                  <div style={{ flex: 1 }}>
+                                    <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Get Y Free</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={tier.bogoGetYFree || 1}
+                                      onChange={(e) => updateTier(idx, "bogoGetYFree", Math.max(1, parseInt(e.target.value) || 1))}
+                                      style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box" }}
+                                    />
+                                  </div>
+                                  <div style={{ padding: "10px 0", fontSize: "18px", fontWeight: "500", color: "#6b7280" }}>=</div>
+                                  <div style={{ flex: 1 }}>
+                                    <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Total Quantity</label>
+                                    <input
+                                      type="number"
+                                      value={tier.quantity}
+                                      readOnly
+                                      style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box", backgroundColor: "#f3f4f6", color: "#6b7280" }}
+                                    />
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <div style={{ display: "flex", gap: "12px" }}>
+                                  {tier.discountType !== "none" && (
+                                    <div style={{ flex: 1 }}>
+                                      <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>
+                                        {tier.discountType === "percentage" ? "Discount in %" : tier.discountType === "flat" ? "Flat Discount" : "Specific Price"}
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={tier.discountValue}
+                                        onChange={(e) => updateTier(idx, "discountValue", parseFloat(e.target.value) || 0)}
+                                        style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box" }}
+                                      />
+                                    </div>
+                                  )}
+                                  <div style={{ flex: 1 }}>
+                                    <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Total Quantity</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={tier.quantity}
+                                      onChange={(e) => updateTier(idx, "quantity", parseInt(e.target.value) || 1)}
+                                      style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box" }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Price Rounding */}
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

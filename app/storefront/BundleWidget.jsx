@@ -17,7 +17,7 @@ export function calculateTierPrice(productPrice, tier) {
       discounted = tier.discountValue;
       break;
     case 'bogo':
-      discounted = productPrice * (tier.quantity - 1);
+      discounted = productPrice * (tier.bogoBuyX || Math.max(1, tier.quantity - 1));
       break;
     case 'none':
     default:
