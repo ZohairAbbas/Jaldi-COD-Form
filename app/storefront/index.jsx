@@ -270,6 +270,20 @@ function getProductData(container) {
     // Check for currency converter (e.g. Bucks) displayed price
     const displayedPriceData = getDisplayedPriceData();
 
+    console.log('[Preventify Debug]', 'currency-detection', {
+      detector: displayedPriceData?.isShopifyMarkets ? 'ShopifyMarkets'
+               : displayedPriceData?.currencyCode ? 'Bucks'
+               : 'none',
+      currencyCode: displayedPriceData?.currencyCode || null,
+      currencySymbol: displayedPriceData?.currencySymbol || null,
+      exchangeRate: displayedPriceData?.exchangeRate || null,
+      displayPrice: displayedPriceData?.price || null,
+      isShopifyMarkets: displayedPriceData?.isShopifyMarkets || false,
+      shopifyCurrencyActive: window.Shopify?.currency?.active || null,
+      shopifyCurrencyRate: window.Shopify?.currency?.rate || null,
+      bucksElFound: !!document.querySelector('.buckscc-converted[bucks-current]'),
+    });
+
     const productData = {
       variantId: `gid://shopify/ProductVariant/${variantId}`,
       title: productTitle,
@@ -315,6 +329,16 @@ function getProductData(container) {
       // so draft orders must calculate discount against this, not compare_at.
       productData.variantShopifyPrice = normalizePrice(productPrice);
     }
+
+    console.log('[Preventify Debug]', 'initial-product-data', {
+      variantId: productData.variantId,
+      price: productData.price,
+      displayPrice: productData.displayPrice || null,
+      displayCurrencyCode: productData.displayCurrencyCode || null,
+      displayExchangeRate: productData.displayExchangeRate || null,
+      isShopifyMarkets: productData.isShopifyMarkets || false,
+      hasBundleDiscount: productData.hasBundleDiscount || false,
+    });
 
     return productData;
   }

@@ -492,6 +492,16 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           productDataResult.compareAtPrice = variant.compare_at_price / 100;
         }
 
+        console.log('[Preventify Debug]', 'variant-update', {
+          variantId: productDataResult.variantId,
+          price: productDataResult.price,
+          displayPrice: productDataResult.displayPrice || null,
+          displayCurrencyCode: productDataResult.displayCurrencyCode || null,
+          displayExchangeRate: productDataResult.displayExchangeRate || null,
+          isShopifyMarkets: productDataResult.isShopifyMarkets || false,
+          hasBundleDiscount: productDataResult.hasBundleDiscount || false,
+        });
+
         return productDataResult;
       } catch (error) {
         console.error('Preventify: Failed to fetch variant data', error);
@@ -1231,6 +1241,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           }
         }
         return cartItem;
+      });
+
+      console.log('[Preventify Debug]', 'cart-items-loaded', {
+        itemCount: cartItems.length,
+        items: cartItems.map(item => ({
+          variantId: item.variantId,
+          price: item.price,
+          displayPrice: item.displayPrice || null,
+          displayCurrencyCode: item.displayCurrencyCode || null,
+          isShopifyMarkets: item.isShopifyMarkets || false,
+        })),
       });
 
       // Store full cart

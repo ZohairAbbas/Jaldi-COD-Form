@@ -222,6 +222,16 @@ export const action = async ({ request }) => {
       };
     }
 
+    console.log('[Preventify]', 'draft-order-input', JSON.stringify({
+      presentmentCurrencyCode: draftOrderInput.presentmentCurrencyCode || '(not set - shop default)',
+      inputPresentmentCurrencyCode: data.presentmentCurrencyCode || null,
+      currencyDebug: data.currencyDebug || null,
+      lineItemCount: lineItems.length,
+      hasShippingLine: !!draftOrderInput.shippingLine,
+      hasAppliedDiscount: !!draftOrderInput.appliedDiscount,
+      phoneLast4: (customerInfo.phone || '').replace(/[^\d]/g, '').slice(-4),
+    }));
+
     // GraphQL mutation to create draft order
     const mutation = `
       mutation draftOrderCreate($input: DraftOrderInput!) {
@@ -264,6 +274,15 @@ export const action = async ({ request }) => {
     }
 
     const draftOrder = draftOrderResult.draftOrder;
+
+    console.log('[Preventify]', 'draft-order-created', JSON.stringify({
+      draftOrderId: draftOrder.id,
+      draftOrderName: draftOrder.name,
+      totalPrice: draftOrder.totalPrice,
+      inputPresentmentCurrencyCode: data.presentmentCurrencyCode || null,
+      phoneLast4: (customerInfo.phone || '').replace(/[^\d]/g, '').slice(-4),
+      shop: data.shop,
+    }));
 
     return Response.json({
       success: true,
