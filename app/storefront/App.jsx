@@ -150,9 +150,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }
   };
 
-  // Listen for variant changes on product page
+  // Listen for variant changes on product page (skip for cart drawer — it shouldn't monitor products)
   useEffect(() => {
-    if (currentPageType !== 'product') return;
+    if (currentPageType !== 'product' || isCartDrawer) return;
 
     const container = document.querySelector('[data-preventify-app-embed]');
     if (!container) return;
@@ -338,33 +338,45 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       }
 
       // 3. Check for Shopify Markets (multi-currency via window.Shopify.currency)
-      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+      // Skip if Bucks is installed (window.bucksCC exists) — even if Bucks DOM elements haven't
+      // rendered yet, the global is set on script init. Without this guard, stores with both
+      // Bucks AND Shopify Markets active would falsely detect as ShopifyMarkets on slow loads,
+      // causing presentmentCurrencyCode to be sent for Bucks-only orders (wrong currency on order).
+      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active && !window.bucksCC) {
         const currencyCode = window.Shopify.currency.active;
         const exchangeRate = parseFloat(window.Shopify.currency.rate);
 
-        // Find the price element (common Shopify selectors)
+        // Derive currency symbol from Intl.NumberFormat — no DOM dependency.
+        // Previously relied on finding a price element in the theme, which fails on custom themes
+        // that use different selectors or hide price elements.
+        let currencySymbol = currencyCode; // fallback to code if Intl fails
+        try {
+          const parts = new Intl.NumberFormat('en', { style: 'currency', currency: currencyCode })
+            .formatToParts(0);
+          const symbolPart = parts.find(p => p.type === 'currency');
+          if (symbolPart) currencySymbol = symbolPart.value;
+        } catch (e) {
+          // Intl.NumberFormat failed for this currency code — stick with code as symbol
+        }
+
+        // Try DOM for display price amount (best-effort, not required for detection)
+        let displayPrice = null;
         const priceEl = document.querySelector('.price-item--regular')
           || document.querySelector('.price__regular .price-item')
           || document.querySelector('.price .money')
           || document.querySelector('[data-price]');
-
         if (priceEl) {
-          const text = priceEl.textContent.trim();
-          const match = text.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
-          if (match) {
-            const symbol = (match[1] || match[3] || '').trim();
-            const amount = normalizePrice(match[2]);
-            if (symbol) {
-              return {
-                currencySymbol: symbol,
-                price: amount > 0 ? amount : null,
-                currencyCode: currencyCode,
-                exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
-                isShopifyMarkets: true // Flag to indicate this is Shopify Markets (prices already converted)
-              };
-            }
-          }
+          const match = priceEl.textContent.trim().match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+          if (match) displayPrice = normalizePrice(match[2]) || null;
         }
+
+        return {
+          currencySymbol,
+          price: displayPrice,
+          currencyCode,
+          exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
+          isShopifyMarkets: true,
+        };
       }
 
       return null;
@@ -491,6 +503,16 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         if (variant.compare_at_price && variant.compare_at_price > variant.price) {
           productDataResult.compareAtPrice = variant.compare_at_price / 100;
         }
+
+        console.log('[Preventify Debug]', 'variant-update', {
+          variantId: productDataResult.variantId,
+          price: productDataResult.price,
+          displayPrice: productDataResult.displayPrice || null,
+          displayCurrencyCode: productDataResult.displayCurrencyCode || null,
+          displayExchangeRate: productDataResult.displayExchangeRate || null,
+          isShopifyMarkets: productDataResult.isShopifyMarkets || false,
+          hasBundleDiscount: productDataResult.hasBundleDiscount || false,
+        });
 
         return productDataResult;
       } catch (error) {
@@ -1233,6 +1255,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         return cartItem;
       });
 
+      console.log('[Preventify Debug]', 'cart-items-loaded', {
+        itemCount: cartItems.length,
+        items: cartItems.map(item => ({
+          variantId: item.variantId,
+          price: item.price,
+          displayPrice: item.displayPrice || null,
+          displayCurrencyCode: item.displayCurrencyCode || null,
+          isShopifyMarkets: item.isShopifyMarkets || false,
+        })),
+      });
+
       // Store full cart
       setFullCart({ items: cartItems });
 
@@ -1544,10 +1577,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     const unitPrice = bundleBasePrice ?? currentProduct.price;
     if (bundleBasePrice === null) {
       setBundleBasePrice(unitPrice);
-      // Capture compare_at_price for bundle strikethrough display
-      if (currentProduct.compareAtPrice) {
-        setCompareAtPrice(currentProduct.compareAtPrice);
-      }
+    }
+
+    // Always update compare_at_price when available — it may arrive later
+    // than bundleBasePrice (e.g., fetchVariantData returns after initial Liquid data).
+    if (currentProduct.compareAtPrice && !compareAtPrice) {
+      setCompareAtPrice(currentProduct.compareAtPrice);
     }
 
     // Check if stock is sufficient for the requested tier quantity.
@@ -1672,7 +1707,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     if (wantsVariantMix && !productVariants) {
       if (bundleBasePrice === null) {
         setBundleBasePrice(currentProduct.price);
-        if (currentProduct.compareAtPrice) setCompareAtPrice(currentProduct.compareAtPrice);
+      }
+      if (currentProduct.compareAtPrice && !compareAtPrice) {
+        setCompareAtPrice(currentProduct.compareAtPrice);
       }
       return;
     }
@@ -2097,8 +2134,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   return (
     <>
-      {/* Bundle / Quantity Break Widget */}
-      {activeBundleConfig && currentPageType === 'product' && currentProduct && (
+      {/* Bundle / Quantity Break Widget — never in cart drawer */}
+      {activeBundleConfig && currentPageType === 'product' && currentProduct && !isCartDrawer && (
         <BundleWidget
           bundleConfig={activeBundleConfig}
           productPrice={bundleBasePrice ?? currentProduct?.price ?? 0}

@@ -663,6 +663,18 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     // Detect Shopify Markets currency from cart items
     const marketItem = cart.items.find(i => i.isShopifyMarkets && i.displayCurrencyCode);
 
+    // Snapshot of currency detection state at order submission time (for backend debugging)
+    const bucksEl = document.querySelector('.buckscc-converted[bucks-current]');
+    const currencyDebug = {
+      detector: marketItem ? 'ShopifyMarkets' : bucksEl ? 'Bucks' : 'none',
+      shopifyCurrencyActive: window.Shopify?.currency?.active || null,
+      shopifyCurrencyRate: window.Shopify?.currency?.rate || null,
+      bucksElFound: !!bucksEl,
+      bucksCurrency: bucksEl?.getAttribute('bucks-currency') || null,
+      itemDisplayCurrencies: [...new Set(cart.items.map(i => i.displayCurrencyCode).filter(Boolean))],
+      presentmentCurrencyCode: marketItem?.displayCurrencyCode || null,
+    };
+
     const orderData = {
       shop: config.shopDomain,
       sessionId: sessionId, // Include session ID for abandoned cart tracking
@@ -702,7 +714,21 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       pixelAttribution: attributionData,
       // Shopify Markets: pass presentment currency so the order is created in the correct currency
       ...(marketItem ? { presentmentCurrencyCode: marketItem.displayCurrencyCode } : {}),
+      // Currency debug snapshot for server-side logging
+      currencyDebug,
     };
+
+    console.log('[Preventify Debug]', 'cod-order-submit', {
+      currencyDebug,
+      itemCount: orderData.items.length,
+      items: orderData.items.map(item => ({
+        variantId: item.variantId,
+        price: item.price,
+        isShopifyMarkets: item.isShopifyMarkets || false,
+        displayCurrencyCode: item.displayCurrencyCode || null,
+      })),
+      phoneLast4: orderData.phone?.slice(-4),
+    });
 
     // If OTP/verification is enabled, trigger WhatsApp-first verification
     if (config.settings?.enableOTP) {
@@ -829,6 +855,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       // Detect Shopify Markets currency from cart items
       const draftMarketItem = cart.items.find(i => i.isShopifyMarkets && i.displayCurrencyCode);
 
+      // Snapshot of currency detection state at draft order submission time
+      const draftBucksEl = document.querySelector('.buckscc-converted[bucks-current]');
+      const draftCurrencyDebug = {
+        detector: draftMarketItem ? 'ShopifyMarkets' : draftBucksEl ? 'Bucks' : 'none',
+        shopifyCurrencyActive: window.Shopify?.currency?.active || null,
+        shopifyCurrencyRate: window.Shopify?.currency?.rate || null,
+        bucksElFound: !!draftBucksEl,
+        bucksCurrency: draftBucksEl?.getAttribute('bucks-currency') || null,
+        itemDisplayCurrencies: [...new Set(cart.items.map(i => i.displayCurrencyCode).filter(Boolean))],
+        presentmentCurrencyCode: draftMarketItem?.displayCurrencyCode || null,
+      };
+
+      console.log('[Preventify Debug]', 'card-order-submit', {
+        currencyDebug: draftCurrencyDebug,
+        itemCount: allItems.length,
+        cardDiscount: cardDiscountAmount,
+        phoneLast4: (formData.phone || '').slice(-4),
+      });
+
       const response = await fetch(`${appPath}proxy/draft-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -866,6 +911,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           shippingRateName: selectedShippingRate?.name,
           // Shopify Markets: pass presentment currency for draft order
           ...(draftMarketItem ? { presentmentCurrencyCode: draftMarketItem.displayCurrencyCode } : {}),
+          // Currency debug snapshot for server-side logging
+          currencyDebug: draftCurrencyDebug,
         }),
       });
 

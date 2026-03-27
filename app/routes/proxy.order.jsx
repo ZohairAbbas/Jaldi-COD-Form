@@ -15,6 +15,22 @@ export const action = async ({ request }) => {
   try {
     const orderData = await request.json();
 
+    console.log('[Preventify]', 'order-received', JSON.stringify({
+      shop: orderData.shop,
+      presentmentCurrencyCode: orderData.presentmentCurrencyCode || null,
+      currencyDebug: orderData.currencyDebug || null,
+      countryCode: orderData.countryCode || null,
+      country: orderData.country || null,
+      phoneLast4: orderData.phone?.slice(-4),
+      itemCount: (orderData.items || []).length,
+      items: (orderData.items || []).map(item => ({
+        variantId: item.variantId,
+        price: item.price,
+        isShopifyMarkets: item.isShopifyMarkets || false,
+        displayCurrencyCode: item.displayCurrencyCode || null,
+      })),
+    }));
+
     if (!orderData.shop) {
       return Response.json({ error: "Shop parameter is required" }, { status: 400 });
     }

@@ -177,33 +177,45 @@ function getDisplayedPriceData() {
   }
 
   // 3. Check for Shopify Markets (multi-currency via window.Shopify.currency)
-  if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+  // Skip if Bucks is installed (window.bucksCC exists) — even if Bucks DOM elements haven't
+  // rendered yet, the global is set on script init. Without this guard, stores with both
+  // Bucks AND Shopify Markets active would falsely detect as ShopifyMarkets on slow loads,
+  // causing presentmentCurrencyCode to be sent for Bucks-only orders (wrong currency on order).
+  if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active && !window.bucksCC) {
     const currencyCode = window.Shopify.currency.active;
     const exchangeRate = parseFloat(window.Shopify.currency.rate);
 
-    // Find the price element (common Shopify selectors)
+    // Derive currency symbol from Intl.NumberFormat — no DOM dependency.
+    // Previously relied on finding a price element in the theme, which fails on custom themes
+    // that use different selectors or hide price elements.
+    let currencySymbol = currencyCode; // fallback to code if Intl fails
+    try {
+      const parts = new Intl.NumberFormat('en', { style: 'currency', currency: currencyCode })
+        .formatToParts(0);
+      const symbolPart = parts.find(p => p.type === 'currency');
+      if (symbolPart) currencySymbol = symbolPart.value;
+    } catch (e) {
+      // Intl.NumberFormat failed for this currency code — stick with code as symbol
+    }
+
+    // Try DOM for display price amount (best-effort, not required for detection)
+    let displayPrice = null;
     const priceEl = document.querySelector('.price-item--regular')
       || document.querySelector('.price__regular .price-item')
       || document.querySelector('.price .money')
       || document.querySelector('[data-price]');
-
     if (priceEl) {
-      const text = priceEl.textContent.trim();
-      const match = text.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
-      if (match) {
-        const symbol = (match[1] || match[3] || '').trim();
-        const amount = normalizePrice(match[2]);
-        if (symbol) {
-          return {
-            currencySymbol: symbol,
-            price: amount > 0 ? amount : null,
-            currencyCode: currencyCode,
-            exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
-            isShopifyMarkets: true // Flag to indicate this is Shopify Markets (prices already converted)
-          };
-        }
-      }
+      const match = priceEl.textContent.trim().match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+      if (match) displayPrice = normalizePrice(match[2]) || null;
     }
+
+    return {
+      currencySymbol,
+      price: displayPrice,
+      currencyCode,
+      exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
+      isShopifyMarkets: true,
+    };
   }
 
   return null;
@@ -236,6 +248,7 @@ function getProductData(container) {
   const productTitle = container.dataset.productTitle;
   const variantTitle = container.dataset.variantTitle;
   const productPrice = container.dataset.productPrice;
+  const compareAtPriceRaw = container.dataset.compareAtPrice;
   const productImage = container.dataset.productImage;
   const productAvailable = container.dataset.productAvailable;
 
@@ -269,6 +282,21 @@ function getProductData(container) {
     // Check for currency converter (e.g. Bucks) displayed price
     const displayedPriceData = getDisplayedPriceData();
 
+    console.log('[Preventify Debug]', 'currency-detection', {
+      detector: displayedPriceData?.isShopifyMarkets ? 'ShopifyMarkets'
+               : displayedPriceData?.currencyCode ? 'Bucks'
+               : 'none',
+      currencyCode: displayedPriceData?.currencyCode || null,
+      currencySymbol: displayedPriceData?.currencySymbol || null,
+      exchangeRate: displayedPriceData?.exchangeRate || null,
+      displayPrice: displayedPriceData?.price || null,
+      isShopifyMarkets: displayedPriceData?.isShopifyMarkets || false,
+      shopifyCurrencyActive: window.Shopify?.currency?.active || null,
+      shopifyCurrencyRate: window.Shopify?.currency?.rate || null,
+      bucksGlobalFound: !!window.bucksCC,
+      bucksElFound: !!document.querySelector('.buckscc-converted[bucks-current]'),
+    });
+
     const productData = {
       variantId: `gid://shopify/ProductVariant/${variantId}`,
       title: productTitle,
@@ -277,6 +305,14 @@ function getProductData(container) {
       price: price,
       image: productImage,
     };
+
+    // Add compare_at_price for bundle strikethrough display
+    if (compareAtPriceRaw) {
+      const compareAtPrice = normalizePrice(compareAtPriceRaw);
+      if (compareAtPrice > price) {
+        productData.compareAtPrice = compareAtPrice;
+      }
+    }
 
     // Add displayed currency info if a converter is active (for display only, not order submission)
     if (displayedPriceData) {
@@ -306,6 +342,16 @@ function getProductData(container) {
       // so draft orders must calculate discount against this, not compare_at.
       productData.variantShopifyPrice = normalizePrice(productPrice);
     }
+
+    console.log('[Preventify Debug]', 'initial-product-data', {
+      variantId: productData.variantId,
+      price: productData.price,
+      displayPrice: productData.displayPrice || null,
+      displayCurrencyCode: productData.displayCurrencyCode || null,
+      displayExchangeRate: productData.displayExchangeRate || null,
+      isShopifyMarkets: productData.isShopifyMarkets || false,
+      hasBundleDiscount: productData.hasBundleDiscount || false,
+    });
 
     return productData;
   }
