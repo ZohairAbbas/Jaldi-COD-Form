@@ -430,6 +430,84 @@ model OTPSession {
   @@index([expiresAt])
 }
 
+// ============================================
+// GLOBAL BUYER IDENTITY (Cross-Merchant Network)
+// ============================================
+
+model GlobalBuyer {
+  id                 String             @id @default(cuid())
+  phone              String             @unique
+  firstName          String?
+  lastName           String?
+  email              String?
+  whatsappVerified   Boolean            @default(false)
+  totalOrdersGlobal  Int                @default(0)
+  lastVerifiedAt     DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  addresses          BuyerAddress[]
+  shopProfiles       ShopBuyerProfile[]
+
+  @@index([phone])
+}
+
+model BuyerAddress {
+  id          String      @id @default(cuid())
+  buyerId     String
+  label       String      @default("Home")
+  address     String
+  address2    String?
+  city        String
+  province    String
+  postalCode  String?
+  country     String      @default("Pakistan")
+  countryCode String      @default("PAK")
+  isDefault   Boolean     @default(true)
+  lastUsedAt  DateTime    @default(now())
+  usageCount  Int         @default(1)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  buyer       GlobalBuyer @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@index([buyerId, lastUsedAt])
+}
+
+model ShopBuyerProfile {
+  id              String      @id @default(cuid())
+  shopId          String
+  buyerId         String
+  totalOrders     Int         @default(0)
+  completedOrders Int         @default(0)
+  rtoOrders       Int         @default(0)
+  rtoRate         Float       @default(0)
+  riskScore       String      @default("UNKNOWN")
+  isBlacklisted   Boolean     @default(false)
+  firstOrderAt    DateTime?
+  lastOrderAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  buyer           GlobalBuyer @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, buyerId])
+  @@index([shopId])
+  @@index([buyerId])
+}
+
+model WhatsAppLoginSession {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  phone      String
+  status     String    @default("pending") // "pending" | "verified" | "expired"
+  verifiedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  @@index([token])
+  @@index([phone, status])
+  @@index([expiresAt])
+}
+
 model ShippingRate {
   id                    String   @id @default(cuid())
   shopId                String

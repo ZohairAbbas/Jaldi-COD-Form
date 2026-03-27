@@ -1,5 +1,50 @@
 import prisma from "../db.server.js";
-import { CORE_FIELD_IDS, COUNTRIES } from "./constants.js";
+import { CORE_FIELD_IDS, COUNTRIES, mapShopifyCountryCode } from "./constants.js";
+
+/**
+ * Fetch the shop's country from Shopify Admin API and map to our internal code
+ * @param {string} shopifyDomain - The shop's myshopify.com domain
+ * @param {string} accessToken - Shopify Admin API access token
+ * @returns {string} Our internal country code (e.g., "GBR", "PAK")
+ */
+async function fetchShopCountry(shopifyDomain, accessToken) {
+  try {
+    const response = await fetch(
+      `https://${shopifyDomain}/admin/api/2025-01/graphql.json`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': accessToken,
+        },
+        body: JSON.stringify({
+          query: `{ shop { billingAddress { countryCodeV2 } shopAddress { countryCodeV2 } } }`,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`[Preventify] Failed to fetch shop country: ${response.status}`);
+      return 'PAK';
+    }
+
+    const data = await response.json();
+    // shopAddress is the newer field (replaces deprecated billingAddress)
+    const shopifyCountryCode = data?.data?.shop?.shopAddress?.countryCodeV2
+      || data?.data?.shop?.billingAddress?.countryCodeV2;
+
+    if (shopifyCountryCode) {
+      const mapped = mapShopifyCountryCode(shopifyCountryCode);
+      console.log(`[Preventify] Detected shop country: ${shopifyCountryCode} -> ${mapped}`);
+      return mapped;
+    }
+
+    return 'PAK';
+  } catch (error) {
+    console.error('[Preventify] Error fetching shop country:', error.message);
+    return 'PAK';
+  }
+}
 
 /**
  * Get or create shop record with default settings and form config
@@ -15,10 +60,14 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
   });
 
   if (!shop) {
+    // Detect the shop's actual country from Shopify Admin API
+    const detectedCountry = await fetchShopCountry(shopifyDomain, accessToken);
+
     shop = await prisma.shop.create({
       data: {
         shopifyDomain,
         accessToken,
+        country: detectedCountry,
         setupProgress: {
           step1Completed: false,
           step2Completed: false,
@@ -50,6 +99,23 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
           upsells: true,
         },
       });
+    }
+
+    // Auto-detect country for shops still using the old PAK default
+    if (shop.country === 'PAK') {
+      const detectedCountry = await fetchShopCountry(shopifyDomain, accessToken);
+      if (detectedCountry !== 'PAK') {
+        shop = await prisma.shop.update({
+          where: { shopifyDomain },
+          data: { country: detectedCountry },
+          include: {
+            settings: true,
+            formConfig: true,
+            upsells: true,
+          },
+        });
+        console.log(`[Preventify] Updated ${shopifyDomain} country from PAK to ${detectedCountry}`);
+      }
     }
 
     // Initialize setupProgress if missing

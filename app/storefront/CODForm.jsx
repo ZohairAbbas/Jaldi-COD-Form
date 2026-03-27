@@ -45,7 +45,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
 
   // OTP verification state
-  const [otpStep, setOtpStep] = useState('form'); // 'form' | 'otp'
+  const [otpStep, setOtpStep] = useState('form'); // 'form' | 'otp' | 'whatsapp'
   const [otpCode, setOtpCode] = useState('');
   const [otpError, setOtpError] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -53,8 +53,17 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [pendingOrderData, setPendingOrderData] = useState(null);
   const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
+  const [buyerData, setBuyerData] = useState(null); // Global buyer lookup result
   const [focusedOtpIndex, setFocusedOtpIndex] = useState(-1);
   const otpInputRefs = useRef([]);
+
+  // WhatsApp verification state
+  const [waLoginToken, setWaLoginToken] = useState(null);
+  const [waLoginDeepLink, setWaLoginDeepLink] = useState(null);
+  const [waLoginStatus, setWaLoginStatus] = useState('idle'); // 'idle' | 'waiting' | 'verified'
+  const [verifyMethod, setVerifyMethod] = useState('whatsapp-login'); // 'whatsapp-login' | 'whatsapp-otp' | 'sms-otp'
+  const [waError, setWaError] = useState('');
+  const waPollingRef = useRef(null);
 
   // One-Tick Upsells state
   const [selectedUpsells, setSelectedUpsells] = useState(() => {
@@ -150,10 +159,112 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     return () => clearInterval(timer);
   }, [otpCountdown]);
 
-  // Customer lookup on phone blur
-  // Customer lookup disabled - security issue (exposes address for any phone number)
+  // WhatsApp login status polling
+  useEffect(() => {
+    if (waLoginStatus !== 'waiting' || !waLoginToken) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${appPath}proxy/wa-login-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: waLoginToken }),
+        });
+        const data = await response.json();
+
+        if (data.status === 'verified') {
+          clearInterval(pollInterval);
+          setWaLoginStatus('verified');
+          // Auto-submit the pending order
+          if (pendingOrderData) {
+            try {
+              await onSubmit(pendingOrderData);
+            } catch (error) {
+              console.error('Order submission error:', error);
+              if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
+                setErrors(error.fieldErrors);
+                setOtpStep('form');
+                setPendingOrderData(null);
+              } else {
+                setWaError('Failed to submit order: ' + error.message);
+              }
+              setIsSubmitting(false);
+              isSubmittingRef.current = false;
+            }
+          }
+        } else if (data.status === 'expired') {
+          clearInterval(pollInterval);
+          setWaLoginStatus('idle');
+          setWaError('Verification timed out. Please try again.');
+        }
+      } catch {
+        // Silently retry on network errors
+      }
+    }, 2000);
+
+    waPollingRef.current = pollInterval;
+
+    // Stop polling after 5 minutes
+    const timeout = setTimeout(() => {
+      clearInterval(pollInterval);
+      setWaLoginStatus('idle');
+      setWaError('Verification timed out. Please try again.');
+    }, 5 * 60 * 1000);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearTimeout(timeout);
+    };
+  }, [waLoginStatus, waLoginToken]);
+
+  // Global buyer lookup on phone blur (trust-based: server decides what data to return)
   const handlePhoneBlur = async () => {
-    // No-op: customer lookup is disabled
+    const phone = formData.phone;
+    if (!phone || phone === country.phoneCode || phone.length < 10) return;
+
+    setIsLookingUpCustomer(true);
+    try {
+      const response = await fetch(`${appPath}proxy/buyer-lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await response.json();
+
+      if (data.buyer) {
+        setBuyerData(data.buyer);
+
+        if (data.buyer.trustLevel === 'trusted' && data.buyer.address) {
+          // Trusted buyer — full address autofill (only fill empty fields)
+          setFormData(prev => ({
+            ...prev,
+            firstName: prev.firstName || data.buyer.firstName || '',
+            lastName: prev.lastName || data.buyer.lastName || '',
+            email: prev.email || data.buyer.email || '',
+            address: prev.address || data.buyer.address.address || '',
+            address2: prev.address2 || data.buyer.address.address2 || '',
+            city: prev.city || data.buyer.address.city || '',
+            province: prev.province || data.buyer.address.province || '',
+            postalCode: prev.postalCode || data.buyer.address.postalCode || '',
+          }));
+        } else if (data.buyer.trustLevel === 'recognized') {
+          // Recognized buyer — preview only (firstName, city, province)
+          setFormData(prev => ({
+            ...prev,
+            firstName: prev.firstName || data.buyer.firstName || '',
+            city: prev.city || data.buyer.city || '',
+            province: prev.province || data.buyer.province || '',
+          }));
+        }
+      } else {
+        setBuyerData(null);
+      }
+    } catch (error) {
+      console.error('Buyer lookup failed:', error);
+      setBuyerData(null);
+    } finally {
+      setIsLookingUpCustomer(false);
+    }
   };
 
   // Send OTP to customer's phone
@@ -226,6 +337,84 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
+  // Initialize WhatsApp login session (free channel)
+  const handleWhatsAppLogin = async () => {
+    setWaError('');
+    setIsSendingOtp(true);
+    try {
+      const response = await fetch(`${appPath}proxy/wa-login-init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formData.phone }),
+      });
+      const data = await response.json();
+      if (data.token && data.deepLink) {
+        setWaLoginToken(data.token);
+        setWaLoginDeepLink(data.deepLink);
+        setWaLoginStatus('waiting');
+        // Open WhatsApp deep link
+        window.open(data.deepLink, '_blank');
+      } else {
+        setWaError(data.error || 'Failed to start WhatsApp verification');
+      }
+    } catch {
+      setWaError('Failed to start WhatsApp verification. Please try again.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Send OTP via WhatsApp (paid fallback)
+  const handleSendWhatsAppOtp = async () => {
+    setIsSendingOtp(true);
+    setOtpError('');
+    setOtpCode('');
+    try {
+      const response = await fetch(`${appPath}proxy/wa-otp-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop: config.shopDomain, phone: formData.phone }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setVerifyMethod('whatsapp-otp');
+        setOtpStep('otp');
+        setOtpCountdown(60);
+      } else {
+        setWaError(data.error || 'Failed to send WhatsApp OTP');
+      }
+    } catch {
+      setWaError('Failed to send WhatsApp OTP. Please try again.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Switch to SMS OTP (most expensive fallback) — disabled, re-enable when smsmobileapi is active
+  // const handleSwitchToSmsOtp = async () => {
+  //   setVerifyMethod('sms-otp');
+  //   await handleSendOtp(); // Existing SMS OTP handler
+  // };
+
+  // Reset WhatsApp verification state
+  const resetVerification = () => {
+    setOtpStep('form');
+    setOtpCode('');
+    setOtpError('');
+    setWaError('');
+    setWaLoginToken(null);
+    setWaLoginDeepLink(null);
+    setWaLoginStatus('idle');
+    setVerifyMethod('whatsapp-login');
+    setFocusedOtpIndex(-1);
+    setIsSubmitting(false);
+    isSubmittingRef.current = false;
+    setPendingOrderData(null);
+    if (waPollingRef.current) {
+      clearInterval(waPollingRef.current);
+    }
+  };
+
   const formStyle = {
     backgroundColor: config.formConfig.backgroundColor,
     color: config.formConfig.textColor,
@@ -263,6 +452,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       const codeLength = country.phoneCode.length;
       const digitsOnly = value.slice(codeLength).replace(/\D/g, '');
       value = country.phoneCode + digitsOnly;
+      // Clear buyer lookup when phone changes
+      setBuyerData(null);
     }
 
     setFormData(prev => ({ ...prev, [fieldId]: value }));
@@ -539,11 +730,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       phoneLast4: orderData.phone?.slice(-4),
     });
 
-    // If OTP is enabled, trigger OTP flow before submitting
+    // If OTP/verification is enabled, trigger WhatsApp-first verification
     if (config.settings?.enableOTP) {
       setPendingOrderData(orderData);
-      await handleSendOtp();
-      // Don't setIsSubmitting(false) here — it stays true until OTP completes or user cancels
+      setOtpStep('whatsapp'); // Show WhatsApp verification screen
+      // Don't setIsSubmitting(false) here — it stays true until verification completes or user cancels
       return;
     }
 
@@ -980,6 +1171,28 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     </div>
                   )}
                 </div>
+                {field.id === 'phone' && buyerData && (
+                  <div style={{
+                    fontSize: '12px',
+                    color: buyerData.trustLevel === 'trusted' ? '#059669' : '#6B7280',
+                    marginTop: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}>
+                    {buyerData.trustLevel === 'trusted' ? (
+                      <>
+                        <span>&#10003;</span>
+                        <span>Welcome back{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>&#10003;</span>
+                        <span>Welcome back{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
+                      </>
+                    )}
+                  </div>
+                )}
                 {error && <div style={errorStyle}>{error}</div>}
               </div>
             </div>
@@ -2039,8 +2252,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       </form>
       </div>
 
-      {/* OTP Verification Overlay */}
-      {otpStep === 'otp' && (
+      {/* WhatsApp Verification Overlay (Primary) */}
+      {otpStep === 'whatsapp' && (
         <div style={{
           position: 'absolute',
           top: 0,
@@ -2055,21 +2268,20 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           padding: '32px 24px',
           zIndex: 10,
         }}>
-          {/* Shield Icon with animated ring */}
+          {/* WhatsApp Icon */}
           <div style={{
             width: '72px',
             height: '72px',
             borderRadius: '50%',
-            backgroundColor: '#F0F9FF',
+            backgroundColor: '#ECFDF5',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: '20px',
-            border: '2px solid #DBEAFE',
+            border: '2px solid #D1FAE5',
           }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              <path d="M9 12l2 2 4-4" />
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="#25D366">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
             </svg>
           </div>
 
@@ -2089,7 +2301,305 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             marginBottom: '4px',
             textAlign: 'center',
           }}>
-            Enter the 6-digit code sent to
+            Verify your number to place the order
+          </p>
+          <p style={{
+            fontSize: '15px',
+            color: '#111827',
+            fontWeight: '600',
+            marginBottom: '24px',
+            textAlign: 'center',
+            letterSpacing: '0.5px',
+          }}>
+            {formData.phone}
+          </p>
+
+          {/* Error message */}
+          <div style={{ minHeight: '24px', marginBottom: '8px' }}>
+            {waError && (
+              <p style={{
+                color: '#EF4444',
+                fontSize: '13px',
+                textAlign: 'center',
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+                {waError}
+              </p>
+            )}
+          </div>
+
+          {/* Verify with WhatsApp button (primary - FREE) */}
+          {waLoginStatus === 'idle' && (
+            <button
+              type="button"
+              onClick={handleWhatsAppLogin}
+              disabled={isSendingOtp}
+              style={{
+                width: '100%',
+                maxWidth: '310px',
+                padding: '14px 20px',
+                backgroundColor: '#25D366',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '15px',
+                fontWeight: '600',
+                cursor: isSendingOtp ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+            >
+              {isSendingOtp ? (
+                <>
+                  <div className="jaldi-loading"></div>
+                  <span>Starting...</span>
+                </>
+              ) : (
+                <>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#FFFFFF">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                  </svg>
+                  Verify with WhatsApp
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Waiting for WhatsApp verification */}
+          {waLoginStatus === 'waiting' && (
+            <div style={{
+              width: '100%',
+              maxWidth: '310px',
+              padding: '16px 20px',
+              backgroundColor: '#F0FDF4',
+              border: '1px solid #BBF7D0',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+                <div className="jaldi-loading" style={{ borderTopColor: '#25D366' }}></div>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>Waiting for verification...</span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>
+                Send the message in WhatsApp to verify
+              </p>
+              {waLoginDeepLink && (
+                <button
+                  type="button"
+                  onClick={() => window.open(waLoginDeepLink, '_blank')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#25D366',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    padding: '4px 0',
+                    marginTop: '4px',
+                  }}
+                >
+                  Open WhatsApp again
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Verified state (brief flash before auto-submit) */}
+          {waLoginStatus === 'verified' && (
+            <div style={{
+              width: '100%',
+              maxWidth: '310px',
+              padding: '16px 20px',
+              backgroundColor: '#F0FDF4',
+              border: '1px solid #BBF7D0',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>Verified! Placing order...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Divider */}
+          {waLoginStatus === 'idle' && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              maxWidth: '310px',
+              margin: '8px 0 16px',
+            }}>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }}></div>
+              <span style={{ padding: '0 12px', fontSize: '12px', color: '#9CA3AF', fontWeight: '500' }}>or verify with code</span>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }}></div>
+            </div>
+          )}
+
+          {/* Fallback buttons */}
+          {waLoginStatus === 'idle' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '310px' }}>
+              <button
+                type="button"
+                onClick={handleSendWhatsAppOtp}
+                disabled={isSendingOtp}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#374151',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: isSendingOtp ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                </svg>
+                Send WhatsApp OTP
+              </button>
+
+              {/* SMS OTP fallback disabled — re-enable when smsmobileapi is active
+              <button
+                type="button"
+                onClick={handleSwitchToSmsOtp}
+                disabled={isSendingOtp}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#6B7280',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: isSendingOtp ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                Send SMS OTP
+              </button>
+              */}
+            </div>
+          )}
+
+          {/* Back / Change phone */}
+          <button
+            type="button"
+            onClick={resetVerification}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6B7280',
+              fontSize: '13px',
+              cursor: 'pointer',
+              marginTop: '16px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Change phone number
+          </button>
+        </div>
+      )}
+
+      {/* OTP Code Entry Overlay (for WhatsApp OTP or SMS OTP fallback) */}
+      {otpStep === 'otp' && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: '#ffffff',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 24px',
+          zIndex: 10,
+        }}>
+          {/* Icon based on method */}
+          <div style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            backgroundColor: verifyMethod === 'whatsapp-otp' ? '#ECFDF5' : '#F0F9FF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+            border: verifyMethod === 'whatsapp-otp' ? '2px solid #D1FAE5' : '2px solid #DBEAFE',
+          }}>
+            {verifyMethod === 'whatsapp-otp' ? (
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="#25D366">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+              </svg>
+            ) : (
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            )}
+          </div>
+
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: '700',
+            color: '#111827',
+            marginBottom: '6px',
+            textAlign: 'center',
+          }}>
+            Enter Verification Code
+          </h3>
+
+          <p style={{
+            fontSize: '14px',
+            color: '#6B7280',
+            marginBottom: '4px',
+            textAlign: 'center',
+          }}>
+            {verifyMethod === 'whatsapp-otp'
+              ? 'Enter the 6-digit code sent via WhatsApp to'
+              : 'Enter the 6-digit code sent via SMS to'}
           </p>
           <p style={{
             fontSize: '15px',
@@ -2129,20 +2639,17 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     if (!val) return;
                     const newCode = otpCode.split('');
                     newCode[index] = val[val.length - 1];
-                    // Fill any gaps with empty strings
                     for (let i = 0; i < 6; i++) {
                       if (!newCode[i]) newCode[i] = '';
                     }
                     const joined = newCode.join('').replace(/\s/g, '');
                     setOtpCode(joined);
                     setOtpError('');
-                    // Auto-focus next box
                     if (index < 5 && otpInputRefs.current[index + 1]) {
                       otpInputRefs.current[index + 1].focus();
                     }
                   }}
                   onKeyDown={(e) => {
-                    // On backspace, clear current and go to previous
                     if (e.key === 'Backspace') {
                       e.preventDefault();
                       const newCode = otpCode.split('');
@@ -2155,7 +2662,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         otpInputRefs.current[index - 1]?.focus();
                       }
                     }
-                    // Arrow keys navigation
                     if (e.key === 'ArrowLeft' && index > 0) {
                       otpInputRefs.current[index - 1]?.focus();
                     }
@@ -2274,7 +2780,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 <span style={{ fontSize: '13px', color: '#6B7280' }}>Didn't receive the code?</span>
                 <button
                   type="button"
-                  onClick={handleSendOtp}
+                  onClick={handleSendWhatsAppOtp}
                   disabled={isSendingOtp}
                   style={{
                     background: 'none',
@@ -2292,16 +2798,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             )}
           </div>
 
-          {/* Back / Change phone */}
+          {/* Back to WhatsApp options */}
           <button
             type="button"
             onClick={() => {
-              setOtpStep('form');
+              setOtpStep('whatsapp');
               setOtpCode('');
               setOtpError('');
               setFocusedOtpIndex(-1);
-              setIsSubmitting(false);
-              setPendingOrderData(null);
             }}
             style={{
               background: 'none',
@@ -2321,7 +2825,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               <line x1="19" y1="12" x2="5" y2="12" />
               <polyline points="12 19 5 12 12 5" />
             </svg>
-            Change phone number
+            Back to verification options
           </button>
         </div>
       )}

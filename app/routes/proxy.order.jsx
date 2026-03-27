@@ -4,6 +4,8 @@ import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../
 import { normalizePrice } from "../lib/constants";
 import prisma from "../db.server";
 import { upsertCustomerProfile } from "../lib/sms.server";
+import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
+import { sendWhatsAppReply } from "../lib/whatsapp.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -223,6 +225,48 @@ export const action = async ({ request }) => {
       });
     } catch (profileError) {
       console.error("Failed to upsert customer profile:", profileError);
+    }
+
+    // Save/update global buyer profile for cross-merchant recognition
+    try {
+      await upsertGlobalBuyer(shop.id, {
+        phone: orderData.phone,
+        firstName: orderData.firstName,
+        lastName: orderData.lastName,
+        email: orderData.email,
+        address: orderData.address,
+        address2: orderData.address2,
+        city: orderData.city,
+        province: orderData.province,
+        postalCode: orderData.postalCode,
+        country: orderData.country,
+        countryCode: orderData.countryCode || "PAK",
+      });
+    } catch (globalBuyerError) {
+      console.error("Failed to upsert global buyer:", globalBuyerError);
+    }
+
+    // Send WhatsApp order confirmation if buyer verified via WhatsApp login channel
+    try {
+      const normalized = normalizePhone(orderData.phone);
+      if (normalized) {
+        const recentVerified = await prisma.whatsAppLoginSession.findFirst({
+          where: {
+            phone: normalized,
+            status: "verified",
+            verifiedAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }, // within last 10 minutes
+          },
+          orderBy: { verifiedAt: "desc" },
+        });
+        if (recentVerified) {
+          await sendWhatsAppReply(
+            normalized,
+            `🎉 Your order has been placed successfully! Our team will call you shortly to confirm the delivery details. Thank you for shopping with us!`
+          );
+        }
+      }
+    } catch (waNotifyError) {
+      console.error("Failed to send WhatsApp order confirmation:", waNotifyError);
     }
 
     // Mark session as completed if sessionId is provided
