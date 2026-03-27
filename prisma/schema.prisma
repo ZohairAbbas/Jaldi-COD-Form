@@ -494,6 +494,20 @@ model ShopBuyerProfile {
   @@index([buyerId])
 }
 
+model WhatsAppLoginSession {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  phone      String
+  status     String    @default("pending") // "pending" | "verified" | "expired"
+  verifiedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  @@index([token])
+  @@index([phone, status])
+  @@index([expiresAt])
+}
+
 model ShippingRate {
   id                    String   @id @default(cuid())
   shopId                String
