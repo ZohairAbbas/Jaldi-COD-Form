@@ -338,33 +338,45 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       }
 
       // 3. Check for Shopify Markets (multi-currency via window.Shopify.currency)
-      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+      // Skip if Bucks is installed (window.bucksCC exists) — even if Bucks DOM elements haven't
+      // rendered yet, the global is set on script init. Without this guard, stores with both
+      // Bucks AND Shopify Markets active would falsely detect as ShopifyMarkets on slow loads,
+      // causing presentmentCurrencyCode to be sent for Bucks-only orders (wrong currency on order).
+      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active && !window.bucksCC) {
         const currencyCode = window.Shopify.currency.active;
         const exchangeRate = parseFloat(window.Shopify.currency.rate);
 
-        // Find the price element (common Shopify selectors)
+        // Derive currency symbol from Intl.NumberFormat — no DOM dependency.
+        // Previously relied on finding a price element in the theme, which fails on custom themes
+        // that use different selectors or hide price elements.
+        let currencySymbol = currencyCode; // fallback to code if Intl fails
+        try {
+          const parts = new Intl.NumberFormat('en', { style: 'currency', currency: currencyCode })
+            .formatToParts(0);
+          const symbolPart = parts.find(p => p.type === 'currency');
+          if (symbolPart) currencySymbol = symbolPart.value;
+        } catch (e) {
+          // Intl.NumberFormat failed for this currency code — stick with code as symbol
+        }
+
+        // Try DOM for display price amount (best-effort, not required for detection)
+        let displayPrice = null;
         const priceEl = document.querySelector('.price-item--regular')
           || document.querySelector('.price__regular .price-item')
           || document.querySelector('.price .money')
           || document.querySelector('[data-price]');
-
         if (priceEl) {
-          const text = priceEl.textContent.trim();
-          const match = text.match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
-          if (match) {
-            const symbol = (match[1] || match[3] || '').trim();
-            const amount = normalizePrice(match[2]);
-            if (symbol) {
-              return {
-                currencySymbol: symbol,
-                price: amount > 0 ? amount : null,
-                currencyCode: currencyCode,
-                exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
-                isShopifyMarkets: true // Flag to indicate this is Shopify Markets (prices already converted)
-              };
-            }
-          }
+          const match = priceEl.textContent.trim().match(/^([^\d]*)([\d,]+\.?\d*)(.*)$/);
+          if (match) displayPrice = normalizePrice(match[2]) || null;
         }
+
+        return {
+          currencySymbol,
+          price: displayPrice,
+          currencyCode,
+          exchangeRate: exchangeRate && !isNaN(exchangeRate) ? exchangeRate : null,
+          isShopifyMarkets: true,
+        };
       }
 
       return null;
