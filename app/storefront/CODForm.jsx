@@ -64,6 +64,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [verifyMethod, setVerifyMethod] = useState('whatsapp-login'); // 'whatsapp-login' | 'whatsapp-otp' | 'sms-otp'
   const [waError, setWaError] = useState('');
   const waPollingRef = useRef(null);
+  const [pendingAction, setPendingAction] = useState(null); // 'cod' | 'card' — what to do after verification
+  const pendingCardPayloadRef = useRef(null); // Stores card draft order payload for post-verification submission
 
   // One-Tick Upsells state
   const [selectedUpsells, setSelectedUpsells] = useState(() => {
@@ -175,23 +177,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         if (data.status === 'verified') {
           clearInterval(pollInterval);
           setWaLoginStatus('verified');
-          // Auto-submit the pending order
-          if (pendingOrderData) {
-            try {
-              await onSubmit(pendingOrderData);
-            } catch (error) {
-              console.error('Order submission error:', error);
-              if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
-                setErrors(error.fieldErrors);
-                setOtpStep('form');
-                setPendingOrderData(null);
-              } else {
-                setWaError('Failed to submit order: ' + error.message);
-              }
-              setIsSubmitting(false);
-              isSubmittingRef.current = false;
-            }
-          }
+          // Auto-execute the pending action (COD or Card)
+          await executePendingAction();
         } else if (data.status === 'expired') {
           clearInterval(pollInterval);
           setWaLoginStatus('idle');
@@ -308,25 +295,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       });
       const data = await response.json();
       if (data.success) {
-        // OTP verified — submit the pending order
-        if (pendingOrderData) {
-          try {
-            await onSubmit(pendingOrderData);
-          } catch (error) {
-            console.error('Order submission error:', error);
-            if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
-              setErrors(error.fieldErrors);
-              setOtpStep('form'); // Go back to form to show errors
-              setPendingOrderData(null);
-            } else {
-              alert('Failed to submit order: ' + error.message);
-            }
-            // Only reset on error — on success, the page navigates away so the guard
-            // must stay locked to prevent duplicate submissions during redirect.
-            setIsSubmitting(false);
-            isSubmittingRef.current = false;
-          }
-        }
+        // OTP verified — execute the pending action (COD or Card)
+        await executePendingAction();
       } else {
         setOtpError(data.error || 'Invalid OTP');
       }
@@ -341,6 +311,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const handleWhatsAppLogin = async () => {
     setWaError('');
     setIsSendingOtp(true);
+    // Open blank window synchronously inside the user gesture so iOS Safari
+    // doesn't block it. We redirect it to the deep link after the async fetch.
+    const waWindow = window.open('', '_blank');
     try {
       const response = await fetch(`${appPath}proxy/wa-login-init`, {
         method: 'POST',
@@ -352,12 +325,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         setWaLoginToken(data.token);
         setWaLoginDeepLink(data.deepLink);
         setWaLoginStatus('waiting');
-        // Open WhatsApp deep link
-        window.open(data.deepLink, '_blank');
+        // Redirect the already-opened window to the WhatsApp deep link
+        if (waWindow) {
+          waWindow.location.href = data.deepLink;
+        }
       } else {
+        if (waWindow) waWindow.close();
         setWaError(data.error || 'Failed to start WhatsApp verification');
       }
     } catch {
+      if (waWindow) waWindow.close();
       setWaError('Failed to start WhatsApp verification. Please try again.');
     } finally {
       setIsSendingOtp(false);
@@ -409,9 +386,54 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setFocusedOtpIndex(-1);
     setIsSubmitting(false);
     isSubmittingRef.current = false;
+    setIsRedirectingToCheckout(false);
     setPendingOrderData(null);
+    setPendingAction(null);
+    pendingCardPayloadRef.current = null;
     if (waPollingRef.current) {
       clearInterval(waPollingRef.current);
+    }
+  };
+
+  // Execute pending action after verification (COD or Card)
+  const executePendingAction = async () => {
+    if (pendingAction === 'cod' && pendingOrderData) {
+      try {
+        await onSubmit(pendingOrderData);
+      } catch (error) {
+        console.error('Order submission error:', error);
+        if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
+          setErrors(error.fieldErrors);
+          resetVerification();
+        } else {
+          setWaError('Failed to submit order: ' + error.message);
+        }
+        setIsSubmitting(false);
+        isSubmittingRef.current = false;
+      }
+    } else if (pendingAction === 'card' && pendingCardPayloadRef.current) {
+      try {
+        const response = await fetch(`${appPath}proxy/draft-order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pendingCardPayloadRef.current),
+        });
+        const result = await response.json();
+        if (result.success && result.invoiceUrl) {
+          window.location.href = result.invoiceUrl;
+        } else {
+          setWaError(result.error || 'Failed to create checkout. Please try again.');
+          setIsRedirectingToCheckout(false);
+          setIsSubmitting(false);
+          isSubmittingRef.current = false;
+        }
+      } catch (error) {
+        console.error('Pay with Card error:', error);
+        setWaError('Something went wrong. Please try again.');
+        setIsRedirectingToCheckout(false);
+        setIsSubmitting(false);
+        isSubmittingRef.current = false;
+      }
     }
   };
 
@@ -733,6 +755,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     // If OTP/verification is enabled, trigger WhatsApp-first verification
     if (config.settings?.enableOTP) {
       setPendingOrderData(orderData);
+      setPendingAction('cod');
       setOtpStep('whatsapp'); // Show WhatsApp verification screen
       // Don't setIsSubmitting(false) here — it stays true until verification completes or user cancels
       return;
@@ -874,46 +897,57 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         phoneLast4: (formData.phone || '').slice(-4),
       });
 
+      const cardPayload = {
+        shop: config.shopDomain,
+        items: allItems,
+        customerInfo: {
+          firstName,
+          lastName,
+          email: formData.email || '',
+          phone: formData.phone || '',
+        },
+        address: {
+          address: formData.address || '',
+          address2: formData.address2 || '',
+          city: formData.city || '',
+          province: formData.province || '',
+          postalCode: formData.postalcode || formData.postalCode || '',
+          country: country.name || 'Pakistan',
+        },
+        recoveryDiscount: recoveryDiscount ? {
+          type: recoveryDiscount.type,
+          value: recoveryDiscount.value,
+          amount: recoveryDiscountAmount,
+          downsellId: recoveryDiscount.downsellId,
+        } : null,
+        userDiscount: appliedDiscount ? {
+          code: appliedDiscount.code,
+          discountType: appliedDiscount.discountType,
+          discountValue: appliedDiscount.discountValue,
+          amount: userDiscountAmount,
+        } : null,
+        cardDiscount: cardDiscountAmount > 0 ? { amount: cardDiscountAmount } : null,
+        shippingCost: shippingCost,
+        shippingRateName: selectedShippingRate?.name,
+        // Shopify Markets: pass presentment currency for draft order
+        ...(draftMarketItem ? { presentmentCurrencyCode: draftMarketItem.displayCurrencyCode } : {}),
+        // Currency debug snapshot for server-side logging
+        currencyDebug: draftCurrencyDebug,
+      };
+
+      // If verification is enabled, gate card payment behind WhatsApp verification too
+      if (config.settings?.enableOTP) {
+        pendingCardPayloadRef.current = cardPayload;
+        setPendingAction('card');
+        setOtpStep('whatsapp');
+        // Don't reset isRedirectingToCheckout — stays true until verification completes or user cancels
+        return;
+      }
+
       const response = await fetch(`${appPath}proxy/draft-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop: config.shopDomain,
-          items: allItems,
-          customerInfo: {
-            firstName,
-            lastName,
-            email: formData.email || '',
-            phone: formData.phone || '',
-          },
-          address: {
-            address: formData.address || '',
-            address2: formData.address2 || '',
-            city: formData.city || '',
-            province: formData.province || '',
-            postalCode: formData.postalcode || formData.postalCode || '',
-            country: country.name || 'Pakistan',
-          },
-          recoveryDiscount: recoveryDiscount ? {
-            type: recoveryDiscount.type,
-            value: recoveryDiscount.value,
-            amount: recoveryDiscountAmount,
-            downsellId: recoveryDiscount.downsellId,
-          } : null,
-          userDiscount: appliedDiscount ? {
-            code: appliedDiscount.code,
-            discountType: appliedDiscount.discountType,
-            discountValue: appliedDiscount.discountValue,
-            amount: userDiscountAmount,
-          } : null,
-          cardDiscount: cardDiscountAmount > 0 ? { amount: cardDiscountAmount } : null,
-          shippingCost: shippingCost,
-          shippingRateName: selectedShippingRate?.name,
-          // Shopify Markets: pass presentment currency for draft order
-          ...(draftMarketItem ? { presentmentCurrencyCode: draftMarketItem.displayCurrencyCode } : {}),
-          // Currency debug snapshot for server-side logging
-          currencyDebug: draftCurrencyDebug,
-        }),
+        body: JSON.stringify(cardPayload),
       });
 
       const result = await response.json();
@@ -2538,6 +2572,24 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               <polyline points="12 19 5 12 12 5" />
             </svg>
             Change phone number
+          </button>
+
+          {/* Bypass for users without WhatsApp */}
+          <button
+            type="button"
+            onClick={() => executePendingAction()}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#9CA3AF',
+              fontSize: '12px',
+              cursor: 'pointer',
+              marginTop: '8px',
+              padding: '4px 8px',
+              textDecoration: 'underline',
+            }}
+          >
+            I don't have WhatsApp
           </button>
         </div>
       )}

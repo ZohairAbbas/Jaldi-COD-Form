@@ -261,7 +261,7 @@ export const action = async ({ request }) => {
         if (recentVerified) {
           await sendWhatsAppReply(
             normalized,
-            `🎉 Your order has been placed successfully! Our team will call you shortly to confirm the delivery details. Thank you for shopping with us!`
+            `🎉 Your order has been placed successfully. Thank you for shopping with us!`
           );
         }
       }
