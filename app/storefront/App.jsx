@@ -1017,6 +1017,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         const data = await fetchVariantData(variantId);
         if (data) {
           lastKnownVariantId = variantId;
+          console.log('[Preventify Debug] Initial setTimeout: overwriting currentProduct at', Date.now(), { hasBundleDiscount: data?.hasBundleDiscount, quantity: data?.quantity, price: data?.price });
           setCurrentProduct(data);
         }
       }
@@ -1099,6 +1100,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             const preselectedTier = (matchedBundle.tiers || []).find(t => t.preselectTier);
             if (preselectedTier) {
               setSelectedBundleTier(preselectedTier);
+              console.log('[Preventify Debug] Preselect: setSelectedBundleTier called at', Date.now());
             }
             // Track bundle impression
             const resolvedPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
@@ -1695,6 +1697,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Watches all required deps including productVariants so it re-fires
   // when variant data becomes available (important after component remount).
   useEffect(() => {
+    console.log('[Preventify Debug] Preselect useEffect fired at', Date.now(), { selectedBundleTier: !!selectedBundleTier, currentProduct: !!currentProduct, activeBundleConfig: !!activeBundleConfig, bundleBasePrice, productVariants: !!productVariants });
     if (!selectedBundleTier || !currentProduct || !activeBundleConfig) return;
 
     // Determine if this bundle expects variant mix
@@ -1722,6 +1725,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     const needsVariantMixInit = wantsVariantMix && !variantMixSelections;
 
     if (needsPricing || needsVariantMixInit) {
+      console.log('[Preventify Debug] Preselect: calling handleBundleTierSelect at', Date.now());
       handleBundleTierSelect(selectedBundleTier);
     }
   }, [selectedBundleTier, currentProduct, bundleBasePrice, activeBundleConfig, productVariants, variantMixSelections]);
