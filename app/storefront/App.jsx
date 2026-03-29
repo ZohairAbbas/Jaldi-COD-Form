@@ -1017,8 +1017,28 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         const data = await fetchVariantData(variantId);
         if (data) {
           lastKnownVariantId = variantId;
-          console.log('[Preventify Debug] Initial setTimeout: overwriting currentProduct at', Date.now(), { hasBundleDiscount: data?.hasBundleDiscount, quantity: data?.quantity, price: data?.price });
-          setCurrentProduct(data);
+          // Use functional update to preserve bundle tier pricing if it was
+          // already applied by the preselect useEffect (which may have run
+          // before this setTimeout fires).
+          setCurrentProduct(prev => {
+            if (prev && (prev.hasBundleDiscount || prev.quantity !== data.quantity)) {
+              // Bundle tier already applied — merge new variant metadata
+              // (compareAtPrice, image, etc.) but keep bundle-set quantity, price, etc.
+              console.log('[Preventify Debug] Initial setTimeout: preserving bundle data', { prevQty: prev.quantity, prevPrice: prev.price, dataQty: data.quantity });
+              return {
+                ...data,
+                quantity: prev.quantity,
+                price: prev.price,
+                originalPrice: prev.originalPrice,
+                hasBundleDiscount: prev.hasBundleDiscount,
+                isVariantMixBundle: prev.isVariantMixBundle,
+                displayPrice: prev.displayPrice,
+                displayOriginalPrice: prev.displayOriginalPrice,
+              };
+            }
+            console.log('[Preventify Debug] Initial setTimeout: no bundle active, using fresh data', { qty: data.quantity, price: data.price });
+            return data;
+          });
         }
       }
     }, 500);
@@ -1323,6 +1343,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         return;
       }
 
+      console.log('[Preventify Debug] cart-sync useEffect RUNNING:', { mode, currentProductQty: currentProduct.quantity, currentProductPrice: currentProduct.price, allowCartItems: config?.settings?.allowCartItems, fullCartCount: fullCart.items.length });
+
       // When allowCartItems is DISABLED, always include both cart and current product
       if (!config?.settings?.allowCartItems) {
         setCart({ items: [currentProduct, ...fullCart.items] });
@@ -1482,12 +1504,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const itemOriginalTotal = unitPrice * qty;
       const itemDiscountedTotal = (unitPrice - perUnitDiscount) * qty;
 
+      // For no-discount tiers, store per-unit price so COD form's
+      // price × quantity calculation works correctly.
       const item = {
         variantId: `gid://shopify/ProductVariant/${variantIdStr}`,
         title: currentProduct.title,
         variant: variantData?.title !== 'Default Title' ? variantData?.title : null,
         quantity: qty,
-        price: hasDiscount ? itemDiscountedTotal : itemOriginalTotal,
+        price: hasDiscount ? itemDiscountedTotal : unitPrice,
         originalPrice: hasDiscount ? itemOriginalTotal : undefined,
         hasBundleDiscount: hasDiscount,
         bundleGroupId: `bundle-${activeBundleConfig.id}`,
@@ -1570,6 +1594,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Handle bundle tier selection
   const handleBundleTierSelect = (tier) => {
+    console.log('[Preventify Debug] handleBundleTierSelect ENTER:', { tierQty: tier.quantity, inventoryQuantity, hasCurrentProduct: !!currentProduct, currentProductQty: currentProduct?.quantity, currentProductVariantId: currentProduct?.variantId });
     setSelectedBundleTier(tier);
 
     if (!currentProduct) return;
@@ -1619,6 +1644,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       buildVariantMixCartItems(tier, unitPrice, tier.quantity, selections);
     } else {
       // Standard single-item path
+      console.log('[Preventify Debug] handleBundleTierSelect STANDARD PATH:', { effectiveQuantity, isStockLimited, inventoryQuantity, tierQty: tier.quantity });
       setVariantMixSelections(null);
       setVariantMixOosError(false);
 
@@ -1647,6 +1673,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         effectiveHasDiscount = hasDiscount;
       }
 
+      // When there's no discount, effectivePrice is the total (unitPrice × qty).
+      // The COD form calculates subtotal as price × quantity for non-bundle items,
+      // which would double-count. So for no-discount tiers, store per-unit price
+      // instead, letting the COD form multiply by quantity naturally.
+      if (!effectiveHasDiscount && effectiveQuantity > 1) {
+        effectivePrice = unitPrice;
+      }
+
       // For Shopify Markets: prices are already in target currency, don't convert
       // For Bucks/other converters: prices are in base currency, multiply by exchange rate
       const rate = currentProduct.isShopifyMarkets ? null : currentProduct.displayExchangeRate;
@@ -1668,8 +1702,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       setCart(prevCart => {
         // Remove any old variant mix split items
         const filteredItems = prevCart.items.filter(item => !item.bundleGroupId);
+        console.log('[Preventify Debug] handleBundleTierSelect setCart callback:', { cartItemCount: filteredItems.length, cartVariantIds: filteredItems.map(i => i.variantId), currentProductVariantId: currentProduct.variantId });
         const updatedItems = filteredItems.map(item => {
           if (item.variantId === currentProduct.variantId) {
+            console.log('[Preventify Debug] handleBundleTierSelect setCart MATCHED item, setting qty:', effectiveQuantity);
             return {
               ...item,
               quantity: effectiveQuantity,
