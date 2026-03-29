@@ -158,7 +158,7 @@ export const action = async ({ request }) => {
     // Build draft order input
     const draftOrderInput = {
       lineItems: lineItems,
-      tags: ["preventify_cod_form", "draft_order_for_card_checkout"],
+      tags: ["preventify_cod_form", "draft_order_for_card_checkout", data.verificationMethod].filter(Boolean),
       note: "Pay with Card - Preventify COD Form",
       customAttributes: [
         { key: "_preventify_source", value: "card_checkout" },

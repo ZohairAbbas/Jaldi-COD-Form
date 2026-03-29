@@ -204,6 +204,31 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     };
   }, [waLoginStatus, waLoginToken]);
 
+  // Pre-fetch WhatsApp login token + deep link when verification screen shows.
+  // This way the "Verify with WhatsApp" button can navigate synchronously via
+  // window.location.href — no async gap, no popup blocker, no extra tab on iOS.
+  useEffect(() => {
+    if (otpStep !== 'whatsapp' || waLoginToken || waLoginDeepLink) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`${appPath}proxy/wa-login-init`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: formData.phone }),
+        });
+        const data = await response.json();
+        if (!cancelled && data.token && data.deepLink) {
+          setWaLoginToken(data.token);
+          setWaLoginDeepLink(data.deepLink);
+        }
+      } catch {
+        // Will be retried when user taps the button
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [otpStep]);
+
   // Global buyer lookup on phone blur (trust-based: server decides what data to return)
   const handlePhoneBlur = async () => {
     const phone = formData.phone;
@@ -310,10 +335,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   // Initialize WhatsApp login session (free channel)
   const handleWhatsAppLogin = async () => {
     setWaError('');
+
+    if (waLoginDeepLink && waLoginToken) {
+      // Deep link already pre-fetched — navigate synchronously (no extra tab).
+      setWaLoginStatus('waiting');
+      window.location.href = waLoginDeepLink;
+      return;
+    }
+
+    // Pre-fetch hasn't completed yet — fetch now with loading indicator.
     setIsSendingOtp(true);
-    // Open blank window synchronously inside the user gesture so iOS Safari
-    // doesn't block it. We redirect it to the deep link after the async fetch.
-    const waWindow = window.open('', '_blank');
     try {
       const response = await fetch(`${appPath}proxy/wa-login-init`, {
         method: 'POST',
@@ -325,16 +356,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         setWaLoginToken(data.token);
         setWaLoginDeepLink(data.deepLink);
         setWaLoginStatus('waiting');
-        // Redirect the already-opened window to the WhatsApp deep link
-        if (waWindow) {
-          waWindow.location.href = data.deepLink;
-        }
+        window.location.href = data.deepLink;
       } else {
-        if (waWindow) waWindow.close();
         setWaError(data.error || 'Failed to start WhatsApp verification');
       }
     } catch {
-      if (waWindow) waWindow.close();
       setWaError('Failed to start WhatsApp verification. Please try again.');
     } finally {
       setIsSendingOtp(false);
@@ -396,10 +422,20 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   };
 
   // Execute pending action after verification (COD or Card)
-  const executePendingAction = async () => {
+  // verificationTag: which verification path was used (or skipped)
+  const executePendingAction = async (skipped = false) => {
+    // Determine the verification tag based on how the user verified
+    const verificationTag = skipped
+      ? 'verification_skipped'
+      : verifyMethod === 'whatsapp-login'
+        ? 'whatsapp_verified'
+        : verifyMethod === 'whatsapp-otp'
+          ? 'whatsapp_otp_verified'
+          : 'sms_otp_verified';
+
     if (pendingAction === 'cod' && pendingOrderData) {
       try {
-        await onSubmit(pendingOrderData);
+        await onSubmit({ ...pendingOrderData, verificationMethod: verificationTag });
       } catch (error) {
         console.error('Order submission error:', error);
         if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
@@ -416,7 +452,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         const response = await fetch(`${appPath}proxy/draft-order`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pendingCardPayloadRef.current),
+          body: JSON.stringify({ ...pendingCardPayloadRef.current, verificationMethod: verificationTag }),
         });
         const result = await response.json();
         if (result.success && result.invoiceUrl) {
@@ -2434,7 +2470,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               {waLoginDeepLink && (
                 <button
                   type="button"
-                  onClick={() => window.open(waLoginDeepLink, '_blank')}
+                  onClick={() => { window.location.href = waLoginDeepLink; }}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -2577,7 +2613,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           {/* Bypass for users without WhatsApp */}
           <button
             type="button"
-            onClick={() => executePendingAction()}
+            onClick={() => executePendingAction(true)}
             style={{
               background: 'none',
               border: 'none',

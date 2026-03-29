@@ -13,7 +13,7 @@ const COUNTRY_NAME_TO_CODE = {
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod } = orderData;
 
   // Clean phone number (remove all non-digit characters except +)
   const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
@@ -142,7 +142,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       billing_address: restBillingAddress,
       financial_status: "pending",
       note: orderNote,
-      tags: "preventify_cod_form",
+      tags: ["preventify_cod_form", verificationMethod].filter(Boolean).join(", "),
       // Shopify Markets: set order currency to the presentment (customer-facing) currency.
       // Only set when presentmentCurrencyCode is provided (i.e., Shopify Markets is active).
       // For non-Markets stores this is undefined and Shopify uses the shop's base currency.
