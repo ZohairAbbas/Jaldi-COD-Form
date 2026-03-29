@@ -141,6 +141,7 @@ export const action = async ({ request }) => {
         utmData: utmAttribution, // UTM parameters for note_attributes
         countryCode: orderData.countryCode, // Country code for currency symbol lookup
         presentmentCurrencyCode: orderData.presentmentCurrencyCode, // Shopify Markets currency
+        verificationMethod: orderData.verificationMethod, // WhatsApp verification tag
       },
       shop.shopifyDomain // Pass shop domain for REST API call
     );

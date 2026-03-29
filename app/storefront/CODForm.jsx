@@ -422,10 +422,20 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   };
 
   // Execute pending action after verification (COD or Card)
-  const executePendingAction = async () => {
+  // verificationTag: which verification path was used (or skipped)
+  const executePendingAction = async (skipped = false) => {
+    // Determine the verification tag based on how the user verified
+    const verificationTag = skipped
+      ? 'verification_skipped'
+      : verifyMethod === 'whatsapp-login'
+        ? 'whatsapp_verified'
+        : verifyMethod === 'whatsapp-otp'
+          ? 'whatsapp_otp_verified'
+          : 'sms_otp_verified';
+
     if (pendingAction === 'cod' && pendingOrderData) {
       try {
-        await onSubmit(pendingOrderData);
+        await onSubmit({ ...pendingOrderData, verificationMethod: verificationTag });
       } catch (error) {
         console.error('Order submission error:', error);
         if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
@@ -442,7 +452,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         const response = await fetch(`${appPath}proxy/draft-order`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pendingCardPayloadRef.current),
+          body: JSON.stringify({ ...pendingCardPayloadRef.current, verificationMethod: verificationTag }),
         });
         const result = await response.json();
         if (result.success && result.invoiceUrl) {
@@ -2603,7 +2613,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           {/* Bypass for users without WhatsApp */}
           <button
             type="button"
-            onClick={() => executePendingAction()}
+            onClick={() => executePendingAction(true)}
             style={{
               background: 'none',
               border: 'none',
