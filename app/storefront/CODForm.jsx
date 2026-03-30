@@ -800,7 +800,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     });
 
     // If OTP/verification is enabled, trigger WhatsApp-first verification
-    if (config.settings?.enableOTP) {
+    // Skip for trusted buyers (already verified within 90 days + have previous orders)
+    if (config.settings?.enableOTP && buyerData?.trustLevel !== 'trusted') {
       setPendingOrderData(orderData);
       setPendingAction('cod');
       setOtpStep('whatsapp'); // Show WhatsApp verification screen
@@ -983,7 +984,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       };
 
       // If verification is enabled, gate card payment behind WhatsApp verification too
-      if (config.settings?.enableOTP) {
+      // Skip for trusted buyers (already verified within 90 days + have previous orders)
+      if (config.settings?.enableOTP && buyerData?.trustLevel !== 'trusted') {
         pendingCardPayloadRef.current = cardPayload;
         setPendingAction('card');
         setOtpStep('whatsapp');
