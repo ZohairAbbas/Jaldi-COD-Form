@@ -332,14 +332,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
+  // Open WhatsApp deep link: on mobile use location.href (native app handles it,
+  // no leftover tab), on desktop use window.open (keeps the store tab in place).
+  const openWhatsAppLink = (url) => {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = url;
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+
   // Initialize WhatsApp login session (free channel)
   const handleWhatsAppLogin = async () => {
     setWaError('');
 
     if (waLoginDeepLink && waLoginToken) {
-      // Deep link already pre-fetched — navigate synchronously (no extra tab).
+      // Deep link already pre-fetched — open WhatsApp.
       setWaLoginStatus('waiting');
-      window.location.href = waLoginDeepLink;
+      openWhatsAppLink(waLoginDeepLink);
       return;
     }
 
@@ -356,7 +367,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         setWaLoginToken(data.token);
         setWaLoginDeepLink(data.deepLink);
         setWaLoginStatus('waiting');
-        window.location.href = data.deepLink;
+        openWhatsAppLink(data.deepLink);
       } else {
         setWaError(data.error || 'Failed to start WhatsApp verification');
       }
@@ -2470,7 +2481,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               {waLoginDeepLink && (
                 <button
                   type="button"
-                  onClick={() => { window.location.href = waLoginDeepLink; }}
+                  onClick={() => { openWhatsAppLink(waLoginDeepLink); }}
                   style={{
                     background: 'none',
                     border: 'none',
