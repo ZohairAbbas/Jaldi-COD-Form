@@ -394,7 +394,7 @@ export default function BundleWidget({
               )}
 
               {/* Variant Mix Selectors - shown below selected tier in vertical layout */}
-              {isSelected && !isHorizontal && bundleConfig.allowVariantMix && variantMixSelections && productVariants && (
+              {isSelected && !isHorizontal && bundleConfig.allowVariantMix && variantMixSelections && productVariants && productVariants.variants.some(v => v.title !== 'Default Title') && (
                 <div style={{
                   marginTop: `${space}px`,
                   borderTop: '1px solid #e5e7eb',
