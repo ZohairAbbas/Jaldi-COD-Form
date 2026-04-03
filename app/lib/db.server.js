@@ -63,30 +63,46 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
     // Detect the shop's actual country from Shopify Admin API
     const detectedCountry = await fetchShopCountry(shopifyDomain, accessToken);
 
-    shop = await prisma.shop.create({
-      data: {
-        shopifyDomain,
-        accessToken,
-        country: detectedCountry,
-        setupProgress: {
-          step1Completed: false,
-          step2Completed: false,
-          welcomeDismissed: false,
-          setupGuideDismissed: false,
+    try {
+      shop = await prisma.shop.create({
+        data: {
+          shopifyDomain,
+          accessToken,
+          country: detectedCountry,
+          setupProgress: {
+            step1Completed: false,
+            step2Completed: false,
+            welcomeDismissed: false,
+            setupGuideDismissed: false,
+          },
+          settings: {
+            create: getDefaultSettings(),
+          },
+          formConfig: {
+            create: getDefaultFormConfig(),
+          },
         },
-        settings: {
-          create: getDefaultSettings(),
+        include: {
+          settings: true,
+          formConfig: true,
+          upsells: true,
         },
-        formConfig: {
-          create: getDefaultFormConfig(),
-        },
-      },
-      include: {
-        settings: true,
-        formConfig: true,
-        upsells: true,
-      },
-    });
+      });
+    } catch (error) {
+      // P2002 = unique constraint violation: a concurrent request created the shop first
+      if (error.code === 'P2002') {
+        shop = await prisma.shop.findUnique({
+          where: { shopifyDomain },
+          include: {
+            settings: true,
+            formConfig: true,
+            upsells: true,
+          },
+        });
+      } else {
+        throw error;
+      }
+    }
   } else {
     // Update access token if changed
     if (shop.accessToken !== accessToken) {
