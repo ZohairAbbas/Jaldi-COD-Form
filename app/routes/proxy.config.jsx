@@ -82,6 +82,7 @@ export const loader = async ({ request }) => {
         allowDiscountOnBundles: shopData.settings.allowDiscountOnBundles,
         // OTP verification
         enableOTP: shopData.settings.enableOTP,
+        enableSmartCheckout: shopData.settings.enableSmartCheckout,
         // WhatsApp verification (business phone for deep link)
         whatsappBusinessPhone: process.env.WHATSAPP_BUSINESS_PHONE || null,
       },

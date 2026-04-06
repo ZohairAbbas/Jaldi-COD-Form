@@ -837,6 +837,31 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      {/* Smart Checkout Setting */}
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>Smart Checkout</s-heading>
+          <s-paragraph>
+            Enable a 2-step checkout experience with device recognition, returning buyer detection, and address auto-fill for trusted customers.
+          </s-paragraph>
+
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.enableSmartCheckout || false}
+              onChange={(e) => handleUpdate({ enableSmartCheckout: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+              <s-text variant="heading-sm">Enable Smart Checkout</s-text>
+              <s-text variant="body-sm" tone="subdued">
+                When enabled, customers first enter their phone number, then see a personalized checkout with saved addresses and one-tap ordering. When disabled, all fields are shown at once (standard 1-step form).
+              </s-text>
+            </s-stack>
+          </label>
+        </s-stack>
+      </s-section>
+
       {/* OTP Verification Setting */}
       <s-section>
         <s-stack direction="block" gap="base">

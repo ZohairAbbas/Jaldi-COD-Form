@@ -62,6 +62,14 @@ export const action = async ({ request }) => {
           verifiedPhone,
           "✅ Your phone number has been verified! Please return to the store — your order is being placed now."
         );
+      } else {
+        // No pending session for this sender — likely a phone mismatch
+        // (e.g., friend's WhatsApp doesn't match the phone entered in the order form)
+        console.log(`[WA Webhook] No pending session for ${senderPhone} — sending mismatch reply`);
+        await sendWhatsAppReply(
+          senderPhone,
+          "No pending verification found for your number. Please make sure the phone number you entered in the order form matches this WhatsApp account."
+        );
       }
     }
 
