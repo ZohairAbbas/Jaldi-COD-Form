@@ -1253,6 +1253,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         const originalBasePrice = item.price / 100;
         const cartItem = {
           variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
+          productId: String(item.product_id),
           title: item.product_title,
           variant: item.variant_title,
           quantity: item.quantity,
@@ -1376,11 +1377,54 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }));
   };
 
+  // Helper: check disable list and allow list for product targeting
+  const checkSpecificProductAllowed = () => {
+    const itemsToCheck = fullCart.items.length > 0 ? fullCart.items : cart.items;
+
+    // Block list: hide if any item in the cart matches a disabled product
+    // (Product page blocking already handled at index.jsx level; here we handle cart/drawer)
+    const disableSpecific = config?.settings?.disableSpecificProducts;
+    if (disableSpecific && (isCartDrawer || currentPageType === 'cart')) {
+      const disabledIds = config?.settings?.disabledProductIds || [];
+      if (disabledIds.length > 0) {
+        const hasBlockedItem = itemsToCheck.some(item => {
+          if (!item.productId) return false;
+          return disabledIds.some(pid => {
+            const numericPid = String(pid).replace(/\D/g, '');
+            return numericPid === item.productId;
+          });
+        });
+        if (hasBlockedItem) return false;
+      }
+    }
+
+    // Allow list: only show if a specific product is present
+    const enableSpecific = config?.settings?.enableSpecificProducts;
+    if (!enableSpecific) return true;
+
+    const specificIds = config?.settings?.specificProductIds || [];
+    if (specificIds.length === 0) return false;
+
+    if (currentPageType === 'product') {
+      // Product page already filtered by shouldShowOnPage in index.jsx — if we mounted, it matched
+      return true;
+    }
+
+    // Cart page or cart drawer: check if any cart item's product is in specificIds
+    return itemsToCheck.some(item => {
+      if (!item.productId) return false;
+      return specificIds.some(pid => {
+        const numericPid = String(pid).replace(/\D/g, '');
+        return numericPid === item.productId;
+      });
+    });
+  };
+
   // Check if button should show based on page visibility setting
   const shouldShowButton = () => {
-    // Cart drawer button always shows (visibility check done at index.jsx level)
+    // Cart drawer: do specific product check (page-type check already passed at index.jsx level)
     if (isCartDrawer) {
-      return true;
+      return checkSpecificProductAllowed();
     }
 
     // Collection and homepage always show buttons (controlled by app embed being enabled)
@@ -1395,11 +1439,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     const visibility = config?.settings?.buttonPageVisibility || 'product';
 
     if (visibility === 'disabled') return false;
-    if (visibility === 'product') return currentPageType === 'product';
-    if (visibility === 'cart') return currentPageType === 'cart';
-    if (visibility === 'both') return ['product', 'cart'].includes(currentPageType);
+    if (visibility === 'product' && currentPageType !== 'product') return false;
+    if (visibility === 'cart' && currentPageType !== 'cart') return false;
+    if (visibility === 'both' && !['product', 'cart'].includes(currentPageType)) return false;
 
-    return false;
+    return checkSpecificProductAllowed();
   };
 
   const handleSubmit = async (orderData) => {

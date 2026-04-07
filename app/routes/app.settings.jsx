@@ -78,6 +78,42 @@ export default function Settings() {
     setShop((prev) => ({ ...prev, ...updates }));
   };
 
+  const handleSelectSpecificProducts = async () => {
+    try {
+      const selected = await shopify.resourcePicker({
+        type: "product",
+        multiple: true,
+        selectionIds: (settings.specificProductIds || []).map((id) => ({ id })),
+      });
+      if (selected) {
+        handleUpdate({
+          specificProductIds: selected.map((p) => p.id),
+          specificProductTitles: selected.map((p) => p.title),
+        });
+      }
+    } catch (e) {
+      // User cancelled — no-op
+    }
+  };
+
+  const handleSelectDisabledProducts = async () => {
+    try {
+      const selected = await shopify.resourcePicker({
+        type: "product",
+        multiple: true,
+        selectionIds: (settings.disabledProductIds || []).map((id) => ({ id })),
+      });
+      if (selected) {
+        handleUpdate({
+          disabledProductIds: selected.map((p) => p.id),
+          disabledProductTitles: selected.map((p) => p.title),
+        });
+      }
+    } catch (e) {
+      // User cancelled — no-op
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
 
@@ -1001,6 +1037,200 @@ export default function Settings() {
                   ℹ️ This setting only applies to popup mode. In embedded mode, you control placement manually through the theme editor.
                 </s-text>
               </s-box>
+            </s-stack>
+          </s-section>
+
+          {/* Disable on Specific Products */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <s-heading>Disable on Specific Products</s-heading>
+
+              {settings.enableSpecificProducts && (
+                <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                  <s-text variant="body-sm">Cannot be used together with "Enable on Specific Products". Disable that feature first.</s-text>
+                </s-box>
+              )}
+
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: settings.enableSpecificProducts ? "not-allowed" : "pointer", opacity: settings.enableSpecificProducts ? 0.5 : 1 }}>
+                <input
+                  type="checkbox"
+                  checked={settings.disableSpecificProducts || false}
+                  disabled={settings.enableSpecificProducts || false}
+                  onChange={(e) => handleUpdate({ disableSpecificProducts: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: settings.enableSpecificProducts ? "not-allowed" : "pointer" }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "13px", color: "#6B7280" }}>
+                    Hide the COD button on specific product pages and when those products are in the cart. All other products will still show the button.
+                  </div>
+                </div>
+              </label>
+
+              {settings.disableSpecificProducts && !settings.enableSpecificProducts && (
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    <button
+                      type="button"
+                      onClick={handleSelectDisabledProducts}
+                      style={{
+                        padding: "8px 16px",
+                        borderRadius: "6px",
+                        border: "1px solid #D1D5DB",
+                        background: "#fff",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      </svg>
+                      {(settings.disabledProductTitles || []).length > 0 ? "Change products" : "Select products"}
+                    </button>
+
+                    {(settings.disabledProductTitles || []).length === 0 ? (
+                      <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                        <s-text variant="body-sm">
+                          No products selected. The COD button will show on all products until you select at least one to block.
+                        </s-text>
+                      </s-box>
+                    ) : (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {(settings.disabledProductTitles || []).map((title, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              padding: "4px 10px",
+                              borderRadius: "20px",
+                              background: "#FEE2E2",
+                              color: "#991B1B",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {title}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ids = [...(settings.disabledProductIds || [])];
+                                ids.splice(i, 1);
+                                const titles = [...(settings.disabledProductTitles || [])];
+                                titles.splice(i, 1);
+                                handleUpdate({ disabledProductIds: ids, disabledProductTitles: titles });
+                              }}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: "15px", lineHeight: "1", padding: "0 0 0 2px", color: "#991B1B" }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </s-stack>
+                </s-box>
+              )}
+            </s-stack>
+          </s-section>
+
+          {/* Enable on Specific Products */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <s-heading>Enable on Specific Products</s-heading>
+
+              {settings.disableSpecificProducts && (
+                <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                  <s-text variant="body-sm">Cannot be used together with "Disable on Specific Products". Disable that feature first.</s-text>
+                </s-box>
+              )}
+
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: settings.disableSpecificProducts ? "not-allowed" : "pointer", opacity: settings.disableSpecificProducts ? 0.5 : 1 }}>
+                <input
+                  type="checkbox"
+                  checked={settings.enableSpecificProducts || false}
+                  disabled={settings.disableSpecificProducts || false}
+                  onChange={(e) => handleUpdate({ enableSpecificProducts: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: settings.disableSpecificProducts ? "not-allowed" : "pointer" }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "13px", color: "#6B7280" }}>
+                    Restrict the COD button to specific products only. When enabled, the button will appear only on the selected product pages and when those products are in the cart.
+                  </div>
+                </div>
+              </label>
+
+              {settings.enableSpecificProducts && (
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    <button
+                      type="button"
+                      onClick={handleSelectSpecificProducts}
+                      style={{
+                        padding: "8px 16px",
+                        borderRadius: "6px",
+                        border: "1px solid #D1D5DB",
+                        backgroundColor: "#FFFFFF",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: "500",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      </svg>
+                      {(settings.specificProductTitles || []).length > 0 ? "Change products" : "Select products"}
+                    </button>
+
+                    {(settings.specificProductTitles || []).length === 0 ? (
+                      <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                        <s-text variant="body-sm">
+                          No products selected. The COD button will be hidden on all pages until you select at least one product.
+                        </s-text>
+                      </s-box>
+                    ) : (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {(settings.specificProductTitles || []).map((title, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              padding: "4px 10px",
+                              backgroundColor: "#F3F4F6",
+                              border: "1px solid #E5E7EB",
+                              borderRadius: "16px",
+                              fontSize: "13px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            {title}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ids = [...(settings.specificProductIds || [])];
+                                ids.splice(i, 1);
+                                const titles = [...(settings.specificProductTitles || [])];
+                                titles.splice(i, 1);
+                                handleUpdate({ specificProductIds: ids, specificProductTitles: titles });
+                              }}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: "15px", lineHeight: "1", padding: "0 0 0 2px", color: "#6B7280" }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </s-stack>
+                </s-box>
+              )}
             </s-stack>
           </s-section>
         </>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
 import { getCurrencyCode, COUNTRIES } from '../lib/constants';
 import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } from './device-recognition';
+import { t } from './translations';
 
 export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
   // Manual country selection state (for user override)
@@ -22,8 +23,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const shopBaseCountry = COUNTRIES[config.shop?.country] || COUNTRIES.PAK;
   const currencySymbol = displayCurrency?.displayCurrencySymbol || shopBaseCountry.currencySymbol;
   
-  // Check if RTL is enabled
-  const isRTL = config.settings?.enableRTL || false;
+  // Language & RTL
+  const lang = config.settings?.language || 'en';
+  const isRTL = config.settings?.enableRTL || lang === 'ar';
   const isSmartCheckout = config.settings?.enableSmartCheckout === true;
 
   const [formData, setFormData] = useState({
@@ -240,7 +242,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         } else if (data.status === 'expired') {
           clearInterval(pollInterval);
           setWaLoginStatus('idle');
-          setWaError('Verification timed out. Please try again.');
+          setWaError(t(lang, 'verificationTimeout'));
         }
       } catch {
         // Silently retry on network errors
@@ -253,7 +255,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const timeout = setTimeout(() => {
       clearInterval(pollInterval);
       setWaLoginStatus('idle');
-      setWaError('Verification timed out. Please try again.');
+      setWaError(t(lang, 'verificationTimeout'));
     }, 5 * 60 * 1000);
 
     return () => {
@@ -293,7 +295,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     // Validate phone format
     if (!phone || phone === country.phoneCode) {
-      setErrors({ phone: 'Phone number is required' });
+      setErrors({ phone: t(lang, 'phoneRequired') });
       return;
     }
     if (!phone.startsWith(country.phoneCode)) {
@@ -388,10 +390,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         setOtpStep('otp');
         setOtpCountdown(60); // 60 second cooldown for resend
       } else {
-        setOtpError(data.error || 'Failed to send OTP');
+        setOtpError(data.error || t(lang, 'failedToSendOTP'));
       }
     } catch (error) {
-      setOtpError('Failed to send OTP. Please try again.');
+      setOtpError(t(lang, 'failedToSendOTP'));
     } finally {
       setIsSendingOtp(false);
     }
@@ -416,10 +418,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         // OTP verified — execute the pending action (COD or Card)
         await executePendingAction();
       } else {
-        setOtpError(data.error || 'Invalid OTP');
+        setOtpError(data.error || t(lang, 'invalidOTP'));
       }
     } catch (error) {
-      setOtpError('Verification failed. Please try again.');
+      setOtpError(t(lang, 'somethingWentWrong'));
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -462,10 +464,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         setWaLoginStatus('waiting');
         openWhatsAppLink(data.deepLink);
       } else {
-        setWaError(data.error || 'Failed to start WhatsApp verification');
+        setWaError(data.error || t(lang, 'failedWhatsAppVerification'));
       }
     } catch {
-      setWaError('Failed to start WhatsApp verification. Please try again.');
+      setWaError(t(lang, 'failedWhatsAppVerification'));
     } finally {
       setIsSendingOtp(false);
     }
@@ -488,10 +490,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         setOtpStep('otp');
         setOtpCountdown(60);
       } else {
-        setWaError(data.error || 'Failed to send WhatsApp OTP');
+        setWaError(data.error || t(lang, 'failedWhatsAppOTP'));
       }
     } catch {
-      setWaError('Failed to send WhatsApp OTP. Please try again.');
+      setWaError(t(lang, 'failedWhatsAppOTP'));
     } finally {
       setIsSendingOtp(false);
     }
@@ -567,7 +569,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           setErrors(error.fieldErrors);
           resetVerification();
         } else {
-          setWaError('Failed to submit order: ' + error.message);
+          setWaError(t(lang, 'somethingWentWrong'));
         }
         setIsSubmitting(false);
         isSubmittingRef.current = false;
@@ -585,14 +587,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           registerDeviceAfterOrder(pendingCardPayloadRef.current?.customerInfo?.phone, pendingCardPayloadRef.current?.customerInfo?.firstName);
           window.location.href = result.invoiceUrl;
         } else {
-          setWaError(result.error || 'Failed to create checkout. Please try again.');
+          setWaError(result.error || t(lang, 'failedCheckout'));
           setIsRedirectingToCheckout(false);
           setIsSubmitting(false);
           isSubmittingRef.current = false;
         }
       } catch (error) {
         console.error('Pay with Card error:', error);
-        setWaError('Something went wrong. Please try again.');
+        setWaError(t(lang, 'somethingWentWrong'));
         setIsRedirectingToCheckout(false);
         setIsSubmitting(false);
         isSubmittingRef.current = false;
@@ -675,7 +677,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     // Block discount codes on bundles if setting is disabled
     if (discountBlockedByBundle) {
-      setDiscountError('Discount is not allowed on bundles');
+      setDiscountError(t(lang, 'discountNotAllowedOnBundles'));
       return;
     }
 
@@ -706,11 +708,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         });
         setDiscountError('');
       } else {
-        setDiscountError(result.error || 'Invalid discount code');
+        setDiscountError(result.error || t(lang, 'invalidDiscountCode'));
         setAppliedDiscount(null);
       }
     } catch (error) {
-      setDiscountError('Failed to validate discount code');
+      setDiscountError(t(lang, 'invalidDiscountCode'));
       setAppliedDiscount(null);
     } finally {
       setIsValidatingDiscount(false);
@@ -1091,7 +1093,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           errorElement.focus();
         }
       } else {
-        setSubmitError(error.message || 'Failed to submit order. Please try again.');
+        setSubmitError(error.message || t(lang, 'failedCheckout'));
       }
       // Only reset on error — on success, the page navigates away so the guard
       // must stay locked to prevent duplicate submissions during redirect.
@@ -1274,12 +1276,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         registerDeviceAfterOrder(formData.phone, firstName);
         window.location.href = result.invoiceUrl;
       } else {
-        setSubmitError(result.error || 'Failed to create checkout. Please try again.');
+        setSubmitError(result.error || t(lang, 'failedCheckout'));
         setIsRedirectingToCheckout(false);
       }
     } catch (error) {
       console.error('Pay with Card error:', error);
-      setSubmitError('Something went wrong. Please try again.');
+      setSubmitError(t(lang, 'somethingWentWrong'));
       setIsRedirectingToCheckout(false);
     }
   };
@@ -1407,7 +1409,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     setDiscountCodeInput(e.target.value.toUpperCase());
                     if (discountError) setDiscountError('');
                   }}
-                  placeholder={discountBlockedByBundle ? 'Not allowed on bundles' : (field.placeholder || 'Discount Code')}
+                  placeholder={discountBlockedByBundle ? t(lang, 'notAllowedOnBundles') : (field.placeholder || t(lang, 'discountCode'))}
                   disabled={isDiscountDisabled}
                   style={inputStyle}
                   onKeyDown={(e) => {
@@ -1443,7 +1445,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               >
                 {isValidatingDiscount ? (
                   <div className="jaldi-loading" style={{ width: '16px', height: '16px' }}></div>
-                ) : 'Apply'}
+                ) : t(lang, 'apply')}
               </button>
             </div>
           </div>
@@ -1536,12 +1538,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     {buyerData.trustLevel === 'trusted' ? (
                       <>
                         <span>&#10003;</span>
-                        <span>Welcome back{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
+                        <span>{t(lang, 'welcomeBack')}{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
                       </>
                     ) : (
                       <>
                         <span>&#10003;</span>
-                        <span>Welcome back{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
+                        <span>{t(lang, 'welcomeBack')}{buyerData.firstName ? `, ${buyerData.firstName}` : ''}!</span>
                       </>
                     )}
                   </div>
@@ -1885,7 +1887,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       Order Summary
                     </span>
                     <span style={{ fontSize: '13px', color: '#6B7280' }}>
-                      ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? 'item' : 'items'})
+                      ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? t(lang, 'item') : t(lang, 'items')})
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1931,7 +1933,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                           {item.variant && (
                             <div style={{ fontSize: '12px', color: '#6B7280' }}>{item.variant}</div>
                           )}
-                          <div style={{ fontSize: '12px', color: '#6B7280' }}>Qty: {item.quantity}</div>
+                          <div style={{ fontSize: '12px', color: '#6B7280' }}>{t(lang, 'qty')}: {item.quantity}</div>
                         </div>
                         <div style={{ fontSize: '14px', fontWeight: '600', color: '#111', whiteSpace: 'nowrap', alignSelf: 'center' }}>
                           {item.hasBundleDiscount && item.originalPrice ? (
@@ -1958,27 +1960,27 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       fontSize: '13px',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                        <span>Subtotal</span>
+                        <span>{t(lang, 'subtotal')}</span>
                         <span style={{ fontWeight: '600' }}>{currencySymbol}{displaySubtotal.toFixed(2)}</span>
                       </div>
                       {bundleDiscount > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                          <span>Discount</span>
+                          <span>{t(lang, 'discount')}</span>
                           <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayBundleDiscount.toFixed(2)}</span>
                         </div>
                       )}
                       {upsellDiscount > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                          <span>Upsell Discount</span>
+                          <span>{t(lang, 'upsellDiscount')}</span>
                           <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayUpsellDiscount.toFixed(2)}</span>
                         </div>
                       )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                        <span>Shipping</span>
-                        <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Calculated next</span>
+                        <span>{t(lang, 'shipping')}</span>
+                        <span style={{ color: '#6B7280', fontStyle: 'italic' }}>{t(lang, 'calculatedNext')}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 2px', marginTop: '4px', borderTop: '1px solid #D1D5DB', fontWeight: '700', color: '#111' }}>
-                        <span>Total</span>
+                        <span>{t(lang, 'total')}</span>
                         <span>{currencySymbol}{displayTotal.toFixed(2)}</span>
                       </div>
                     </div>
@@ -1991,7 +1993,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             <div>
               {/* Heading */}
               <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#000', margin: '0 0 16px 0' }}>
-                Login to continue
+                {t(lang, 'loginToContinue')}
               </h3>
 
               {/* Phone Input — Shopflo style: [flag ▾ +code | number] single border */}
@@ -2128,11 +2130,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 {isTransitioningStep ? (
                   <>
                     <div className="jaldi-loading" style={{ width: '18px', height: '18px' }}></div>
-                    <span>Looking up...</span>
+                    <span>{t(lang, 'lookingUp')}</span>
                   </>
                 ) : (
                   <>
-                    <span>Continue</span>
+                    <span>{t(lang, 'continue')}</span>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                       <path d="M5.25 3.5L8.75 7L5.25 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -2150,7 +2152,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 color: '#9CA3AF',
                 fontSize: '12px',
               }}>
-                <span>🔒 Secured by <span style={{ color: '#10B981' }}>Preventify</span></span>
+                <span>🔒 {t(lang, 'securedBy')}</span>
               </div>
             </div>
           </div>
@@ -2173,7 +2175,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               fontWeight: '500',
               color: '#374151',
             }}>
-              What would you like to order?
+              {t(lang, 'whatToOrder')}
             </label>
             <select
               value={productSelection}
@@ -2188,8 +2190,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 cursor: 'pointer',
               }}
             >
-              <option value="current+cart">Current product + Cart items ({1 + fullCartItemCount} items)</option>
-              <option value="current">Current product only</option>
+              <option value="current+cart">{t(lang, 'currentProductAndCart')} ({1 + fullCartItemCount} {t(lang, 'items')})</option>
+              <option value="current">{t(lang, 'currentProductOnly')}</option>
             </select>
           </div>
         )}
@@ -2226,7 +2228,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               padding: '2px 4px',
             }}
           >
-            Change
+            {t(lang, 'change')}
           </button>
         </div>)}
 
@@ -2243,7 +2245,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             borderRadius: `${config.formConfig.borderRadius}px`,
           }}>
             <span style={{ fontSize: '13px', color: buyerData.trustLevel === 'trusted' ? '#15803d' : '#1d4ed8', fontWeight: '500' }}>
-              &#10003; Welcome back{buyerData.firstName ? `, ${buyerData.firstName}` : ''}! Please review your information before placing an order.
+              &#10003; {t(lang, 'welcomeBack')}{buyerData.firstName ? `, ${buyerData.firstName}` : ''}! {t(lang, 'reviewInfo')}
             </span>
           </div>
         )}
@@ -2280,9 +2282,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                       </svg>
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#111' }}>Order summary</span>
+                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#111' }}>{t(lang, 'orderSummary')}</span>
                       <span style={{ fontSize: '13px', color: '#6B7280' }}>
-                        ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? 'item' : 'items'})
+                        ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? t(lang, 'item') : t(lang, 'items')})
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2335,7 +2337,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             <div style={{ fontSize: '13px', fontWeight: '500', color: '#111', lineHeight: '1.3', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {item.title}
                               {item.isUpsell && (
-                                <span style={{ backgroundColor: '#10b981', color: '#fff', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '600', textTransform: 'uppercase' }}>Upsell</span>
+                                <span style={{ backgroundColor: '#10b981', color: '#fff', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '600', textTransform: 'uppercase' }}>{t(lang, 'upsell')}</span>
                               )}
                             </div>
                             {item.variant && <div style={{ fontSize: '12px', color: '#6B7280' }}>{item.variant}</div>}
@@ -2375,24 +2377,24 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       {/* Price Breakdown */}
                       <div style={{ padding: '10px 12px', backgroundColor: '#F3F4F6', borderRadius: '8px', fontSize: '13px', marginTop: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                          <span>Subtotal</span>
+                          <span>{t(lang, 'subtotal')}</span>
                           <span style={{ fontWeight: '600' }}>{currencySymbol}{displaySubtotal.toFixed(2)}</span>
                         </div>
                         {bundleDiscount > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                            <span>Bundle Discount</span>
+                            <span>{t(lang, 'bundleDiscount')}</span>
                             <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayBundleDiscount.toFixed(2)}</span>
                           </div>
                         )}
                         {upsellDiscount > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                            <span>Upsell Discount</span>
+                            <span>{t(lang, 'upsellDiscount')}</span>
                             <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayUpsellDiscount.toFixed(2)}</span>
                           </div>
                         )}
                         {recoveryDiscount && recoveryDiscountAmount > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                            <span>Recovery Discount</span>
+                            <span>{t(lang, 'recoveryDiscount')}</span>
                             <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayRecoveryDiscountAmount.toFixed(2)}</span>
                           </div>
                         )}
@@ -2403,11 +2405,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                           </div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                          <span>Shipping</span>
-                          <span style={{ fontWeight: '600' }}>{shippingCost === 0 ? 'Free' : `${currencySymbol}${displayShippingCost.toFixed(2)}`}</span>
+                          <span>{t(lang, 'shipping')}</span>
+                          <span style={{ fontWeight: '600' }}>{shippingCost === 0 ? t(lang, 'free') : `${currencySymbol}${displayShippingCost.toFixed(2)}`}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 2px', marginTop: '4px', borderTop: '1px solid #D1D5DB', fontWeight: '700', color: '#111' }}>
-                          <span>Total</span>
+                          <span>{t(lang, 'total')}</span>
                           <span>{currencySymbol}{displayTotal.toFixed(2)}</span>
                         </div>
                       </div>
@@ -2442,11 +2444,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         <circle cx="5.5" cy="18.5" r="2.5"></circle>
                         <circle cx="18.5" cy="18.5" r="2.5"></circle>
                       </svg>
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#000' }}>Shipping</span>
+                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#000' }}>{t(lang, 'shipping')}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', fontWeight: '600', color: '#000' }}>
-                        {selectedShippingRate ? (selectedShippingRate.price === 0 ? 'Free' : `${currencySymbol}${(hasDisplayPrice ? parseFloat((selectedShippingRate.price * displayExchangeRate).toFixed(2)) : selectedShippingRate.price).toFixed(2)}`) : 'Free'}
+                        {selectedShippingRate ? (selectedShippingRate.price === 0 ? t(lang, 'free') : `${currencySymbol}${(hasDisplayPrice ? parseFloat((selectedShippingRate.price * displayExchangeRate).toFixed(2)) : selectedShippingRate.price).toFixed(2)}`) : t(lang, 'free')}
                       </span>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2.5"
                         style={{ transform: shippingMethodOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
@@ -2497,7 +2499,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                 fontWeight: '700',
                                 color: '#000000',
                               }}>
-                                {rate.price === 0 ? 'Free' : `${currencySymbol}${(hasDisplayPrice ? parseFloat((rate.price * displayExchangeRate).toFixed(2)) : rate.price).toFixed(2)}`}
+                                {rate.price === 0 ? t(lang, 'free') : `${currencySymbol}${(hasDisplayPrice ? parseFloat((rate.price * displayExchangeRate).toFixed(2)) : rate.price).toFixed(2)}`}
                               </span>
                             </label>
                           ))}
@@ -2519,9 +2521,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               readOnly
                               style={{ width: '16px', height: '16px', accentColor: '#000' }}
                             />
-                            <span style={{ fontSize: '16px', color: '#000000' }}>Free shipping</span>
+                            <span style={{ fontSize: '16px', color: '#000000' }}>{t(lang, 'freeShipping')}</span>
                           </div>
-                          <span style={{ fontSize: '16px', fontWeight: '700', color: '#000000' }}>Free</span>
+                          <span style={{ fontSize: '16px', fontWeight: '700', color: '#000000' }}>{t(lang, 'free')}</span>
                         </label>
                       )}
                     </div>
@@ -2538,7 +2540,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     marginBottom: '16px',
                     color: '#000',
                   }}>
-                    Enter your shipping address
+                    {t(lang, 'enterShippingAddress')}
                   </h3>
 
                   {/* Country Selector - Only show in multi-country mode with more than 1 country */}
@@ -2560,7 +2562,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         flexShrink: 0,
                         lineHeight: '1.3',
                       }}>
-                        Country
+                        {t(lang, 'country')}
                       </label>
                       <div style={{ flex: 1 }}>
                         <div style={{
@@ -2609,7 +2611,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             color: '#666',
                             fontSize: '12px',
                           }}>
-                            Auto-detected based on your location
+                            {t(lang, 'autoDetectedLocation')}
                           </small>
                         )}
                       </div>
@@ -2641,7 +2643,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             <circle cx="5.5" cy="18.5" r="2.5"></circle>
                             <circle cx="18.5" cy="18.5" r="2.5"></circle>
                           </svg>
-                          Deliver To
+                          {t(lang, 'deliverTo')}
                         </div>
                         <button
                           type="button"
@@ -2661,7 +2663,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                           }}
                         >
                           <span style={{ fontSize: '14px', lineHeight: 1 }}>+</span>
-                          Add New Address
+                          {t(lang, 'addNewAddress')}
                         </button>
                       </div>
 
@@ -2844,7 +2846,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                         color: config.formConfig.textColor,
                                       }}
                                     >
-                                      Cancel
+                                      {t(lang, 'cancel')}
                                     </button>
                                     <button
                                       type="button"
@@ -2862,7 +2864,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                         opacity: isSavingAddress ? 0.7 : 1,
                                       }}
                                     >
-                                      {isSavingAddress ? 'Saving...' : 'Save'}
+                                      {isSavingAddress ? t(lang, 'saving') : t(lang, 'save')}
                                     </button>
                                   </div>
                                 </div>
@@ -3077,7 +3079,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             fontWeight: '500',
             marginBottom: '8px',
           }}>
-            Please remove out of stock item(s) from your bundle selection
+            {t(lang, 'removeOosFromBundle')}
           </div>
         )}
 
@@ -3109,7 +3111,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             {isSubmitting ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                 <div className="jaldi-loading"></div>
-                <span>Processing...</span>
+                <span>{t(lang, 'processing')}</span>
               </div>
             ) : (
               <>
@@ -3162,7 +3164,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       return null;
                   }
                 })()}
-                {`COMPLETE ORDER - ${currencySymbol}${displayTotal.toFixed(2)}`}
+                {`${t(lang, 'completeOrder')} - ${currencySymbol}${displayTotal.toFixed(2)}`}
               </>
             )}
           </button>
@@ -3186,7 +3188,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="#1a7340">
                   <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
                 </svg>
-                You usually pay with card
+                {t(lang, 'youUsuallyPayWithCard')}
               </div>
             )}
           <button
@@ -3217,7 +3219,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             {isRedirectingToCheckout ? (
               <>
                 <div className="jaldi-loading"></div>
-                <span>Redirecting...</span>
+                <span>{t(lang, 'redirecting')}</span>
               </>
             ) : (
               <>
@@ -3226,7 +3228,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
                   <line x1="1" y1="10" x2="23" y2="10"></line>
                 </svg>
-                <span>{config.settings?.cardButtonText || 'PAY WITH CARD'}</span>
+                <span>{config.settings?.cardButtonText && config.settings.cardButtonText !== 'PAY WITH CARD' ? config.settings.cardButtonText : t(lang, 'payWithCard')}</span>
               </>
             )}
           </button>
@@ -3244,7 +3246,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             color: '#9CA3AF',
             fontSize: '12px',
           }}>
-            <span>🔒 Secured by <span style={{ color: '#10B981' }}>Preventify</span></span>
+            <span>🔒 {t(lang, 'securedBy')}</span>
           </div>
         )}
       </form>
@@ -3292,7 +3294,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             marginBottom: '6px',
             textAlign: 'center',
           }}>
-            Verify Your Phone
+            {t(lang, 'verifyYourPhone')}
           </h3>
 
           <p style={{
@@ -3301,7 +3303,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             marginBottom: '4px',
             textAlign: 'center',
           }}>
-            Verify your number to place the order
+            {t(lang, 'verifyNumberToOrder')}
           </p>
           <p style={{
             fontSize: '15px',
@@ -3365,14 +3367,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               {isSendingOtp ? (
                 <>
                   <div className="jaldi-loading"></div>
-                  <span>Starting...</span>
+                  <span>{t(lang, 'starting')}</span>
                 </>
               ) : (
                 <>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="#FFFFFF">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                   </svg>
-                  Verify with WhatsApp
+                  {t(lang, 'verifyWithWhatsApp')}
                 </>
               )}
             </button>
@@ -3392,10 +3394,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
                 <div className="jaldi-loading" style={{ borderTopColor: '#25D366' }}></div>
-                <span style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>Waiting for verification...</span>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>{t(lang, 'waitingForVerification')}</span>
               </div>
               <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>
-                Send the message in WhatsApp to verify
+                {t(lang, 'sendMessageToVerify')}
               </p>
               {waLoginDeepLink && (
                 <button
@@ -3412,7 +3414,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     marginTop: '4px',
                   }}
                 >
-                  Open WhatsApp again
+                  {t(lang, 'openWhatsAppAgain')}
                 </button>
               )}
             </div>
@@ -3434,7 +3436,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                <span style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>Verified! Placing order...</span>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>{t(lang, 'verifiedPlacingOrder')}</span>
               </div>
             </div>
           )}
@@ -3449,7 +3451,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               margin: '8px 0 16px',
             }}>
               <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }}></div>
-              <span style={{ padding: '0 12px', fontSize: '12px', color: '#9CA3AF', fontWeight: '500' }}>or verify with code</span>
+              <span style={{ padding: '0 12px', fontSize: '12px', color: '#9CA3AF', fontWeight: '500' }}>{t(lang, 'orVerifyWithCode')}</span>
               <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }}></div>
             </div>
           )}
@@ -3481,7 +3483,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                 </svg>
-                Send WhatsApp OTP
+                {t(lang, 'sendWhatsAppOTP')}
               </button>
 
               {/* SMS OTP fallback disabled — re-enable when smsmobileapi is active
@@ -3537,7 +3539,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               <line x1="19" y1="12" x2="5" y2="12" />
               <polyline points="12 19 5 12 12 5" />
             </svg>
-            Change phone number
+            {t(lang, 'changePhoneNumber')}
           </button>
 
           {/* Bypass for users without WhatsApp */}
@@ -3555,7 +3557,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               textDecoration: 'underline',
             }}
           >
-            I don't have WhatsApp
+            {t(lang, 'dontHaveWhatsApp')}
           </button>
         </div>
       )}
@@ -3606,7 +3608,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             marginBottom: '6px',
             textAlign: 'center',
           }}>
-            Enter Verification Code
+            {t(lang, 'enterVerificationCode')}
           </h3>
 
           <p style={{
@@ -3616,8 +3618,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             textAlign: 'center',
           }}>
             {verifyMethod === 'whatsapp-otp'
-              ? 'Enter the 6-digit code sent via WhatsApp to'
-              : 'Enter the 6-digit code sent via SMS to'}
+              ? t(lang, 'enterCodeWhatsApp')
+              : t(lang, 'enterCodeSMS')}
           </p>
           <p style={{
             fontSize: '15px',
@@ -3770,9 +3772,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             {isVerifyingOtp ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                 <div className="jaldi-loading"></div>
-                <span>Verifying...</span>
+                <span>{t(lang, 'verifying')}</span>
               </div>
-            ) : 'VERIFY & PLACE ORDER'}
+            ) : t(lang, 'verifyAndPlaceOrder')}
           </button>
 
           {/* Resend / Timer */}
@@ -3790,12 +3792,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   <polyline points="12 6 12 12 16 14" />
                 </svg>
                 <span style={{ fontSize: '13px', color: '#9CA3AF' }}>
-                  Resend code in <strong style={{ color: '#6B7280' }}>{otpCountdown}s</strong>
+                  {t(lang, 'resendCodeIn')} <strong style={{ color: '#6B7280' }}>{otpCountdown}s</strong>
                 </span>
               </>
             ) : (
               <>
-                <span style={{ fontSize: '13px', color: '#6B7280' }}>Didn't receive the code?</span>
+                <span style={{ fontSize: '13px', color: '#6B7280' }}>{t(lang, 'didntReceiveCode')}</span>
                 <button
                   type="button"
                   onClick={handleSendWhatsAppOtp}
@@ -3810,7 +3812,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     padding: 0,
                   }}
                 >
-                  {isSendingOtp ? 'Sending...' : 'Resend'}
+                  {isSendingOtp ? t(lang, 'sending') : t(lang, 'resend')}
                 </button>
               </>
             )}
@@ -3843,7 +3845,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               <line x1="19" y1="12" x2="5" y2="12" />
               <polyline points="12 19 5 12 12 5" />
             </svg>
-            Back to verification options
+            {t(lang, 'backToVerificationOptions')}
           </button>
         </div>
       )}

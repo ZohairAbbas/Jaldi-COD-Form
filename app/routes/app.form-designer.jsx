@@ -14,6 +14,7 @@ import StyleCustomizer from "../components/FormDesigner/StyleCustomizer";
 import ButtonCustomizer from "../components/Settings/ButtonCustomizer";
 import CardButtonCustomizer from "../components/Settings/CardButtonCustomizer";
 import FormModeSelector from "../components/Settings/FormModeSelector";
+import { fieldTranslations } from "../storefront/translations";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -49,6 +50,23 @@ export default function FormDesigner() {
 
   const handleSettingsUpdate = (updates) => {
     setSettings((prev) => ({ ...prev, ...updates }));
+  };
+
+  const handleLanguageChange = (newLang) => {
+    setSettings((prev) => ({ ...prev, language: newLang }));
+    // Auto-translate field labels/placeholders
+    const langFields = fieldTranslations[newLang];
+    if (langFields) {
+      setFields((prev) =>
+        prev.map((f) => {
+          const tr = langFields[f.id];
+          if (tr) {
+            return { ...f, label: tr.label, placeholder: tr.placeholder };
+          }
+          return f;
+        }),
+      );
+    }
   };
 
   const handleSave = async () => {
@@ -256,6 +274,45 @@ export default function FormDesigner() {
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               <s-section>
                 <FormModeSelector settings={settings} onUpdate={handleSettingsUpdate} />
+              </s-section>
+
+              {/* Language Selector */}
+              <s-section>
+                <s-stack direction="block" gap="base">
+                  <s-heading>Language</s-heading>
+                  <s-paragraph>
+                    Choose the form language. Changing language will auto-translate all field labels and placeholders.
+                  </s-paragraph>
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    {[
+                      { code: "en", label: "English", flag: "🇬🇧" },
+                      { code: "ar", label: "العربية (Arabic)", flag: "🇸🇦" },
+                    ].map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => handleLanguageChange(lang.code)}
+                        style={{
+                          flex: 1,
+                          padding: "14px 16px",
+                          border: settings.language === lang.code ? "2px solid #000" : "1px solid #D1D5DB",
+                          borderRadius: "10px",
+                          backgroundColor: settings.language === lang.code ? "#F9FAFB" : "#FFFFFF",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          fontSize: "14px",
+                          fontWeight: settings.language === lang.code ? "600" : "400",
+                          color: "#202223",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <span style={{ fontSize: "22px" }}>{lang.flag}</span>
+                        {lang.label}
+                      </button>
+                    ))}
+                  </div>
+                </s-stack>
               </s-section>
 
               <s-section>

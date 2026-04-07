@@ -83,6 +83,17 @@ export const loader = async ({ request }) => {
         // OTP verification
         enableOTP: shopData.settings.enableOTP,
         enableSmartCheckout: shopData.settings.enableSmartCheckout,
+        // Language
+        language: shopData.settings.language || 'en',
+        // Specific product targeting
+        enableSpecificProducts: shopData.settings.enableSpecificProducts || false,
+        specificProductIds: Array.isArray(shopData.settings.specificProductIds)
+          ? shopData.settings.specificProductIds
+          : (typeof shopData.settings.specificProductIds === 'string' ? JSON.parse(shopData.settings.specificProductIds) : []),
+        disableSpecificProducts: shopData.settings.disableSpecificProducts || false,
+        disabledProductIds: Array.isArray(shopData.settings.disabledProductIds)
+          ? shopData.settings.disabledProductIds
+          : (typeof shopData.settings.disabledProductIds === 'string' ? JSON.parse(shopData.settings.disabledProductIds) : []),
         // WhatsApp verification (business phone for deep link)
         whatsappBusinessPhone: process.env.WHATSAPP_BUSINESS_PHONE || null,
       },
