@@ -242,6 +242,7 @@ export const action = async ({ request }) => {
         postalCode: orderData.postalCode,
         country: orderData.country,
         countryCode: orderData.countryCode || "PAK",
+        paymentMethod: orderData.paymentMethod || "cod",
       });
     } catch (globalBuyerError) {
       console.error("Failed to upsert global buyer:", globalBuyerError);

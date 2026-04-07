@@ -53,7 +53,7 @@ export async function lookupGlobalBuyer(phone) {
     include: {
       addresses: {
         orderBy: [{ isDefault: "desc" }, { lastUsedAt: "desc" }],
-        take: 1,
+        take: 5,
       },
     },
   });
@@ -71,6 +71,22 @@ export async function lookupGlobalBuyer(phone) {
       lastName: buyer.lastName,
       email: buyer.email,
       totalOrders: buyer.totalOrdersGlobal,
+      preferredPaymentMethod: buyer.preferredPaymentMethod || null,
+      lastCity: buyer.lastCity || null,
+      lastProvince: buyer.lastProvince || null,
+      // All saved addresses (for address picker dropdown)
+      addresses: buyer.addresses.map((a) => ({
+        id: a.id,
+        label: a.label,
+        address: a.address,
+        address2: a.address2,
+        city: a.city,
+        province: a.province,
+        postalCode: a.postalCode,
+        country: a.country,
+        isDefault: a.isDefault,
+      })),
+      // Convenience: first address as single object (keeps existing callers working)
       address: defaultAddress
         ? {
             address: defaultAddress.address,
@@ -132,6 +148,12 @@ export async function upsertGlobalBuyer(shopId, orderData) {
       email: orderData.email || undefined,
       totalOrdersGlobal: { increment: 1 },
       lastVerifiedAt: new Date(),
+      // Smart defaults: track last-used city/province and payment method
+      ...(orderData.city && { lastCity: orderData.city }),
+      ...(orderData.province && { lastProvince: orderData.province }),
+      ...(orderData.paymentMethod && {
+        preferredPaymentMethod: orderData.paymentMethod,
+      }),
     },
     create: {
       phone,
@@ -140,6 +162,9 @@ export async function upsertGlobalBuyer(shopId, orderData) {
       email: orderData.email || null,
       totalOrdersGlobal: 1,
       lastVerifiedAt: new Date(),
+      lastCity: orderData.city || null,
+      lastProvince: orderData.province || null,
+      preferredPaymentMethod: orderData.paymentMethod || null,
     },
   });
 
@@ -181,10 +206,16 @@ export async function upsertGlobalBuyer(shopId, orderData) {
         data: { isDefault: false },
       });
 
+      // Auto-label: "Address 1", "Address 2", etc. based on existing count
+      const addressCount = await prisma.buyerAddress.count({
+        where: { buyerId: buyer.id },
+      });
+      const autoLabel = `Address ${addressCount + 1}`;
+
       await prisma.buyerAddress.create({
         data: {
           buyerId: buyer.id,
-          label: "Home",
+          label: autoLabel,
           address: orderData.address,
           address2: orderData.address2 || null,
           city: orderData.city,

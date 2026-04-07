@@ -494,10 +494,56 @@ function shouldShowOnPage(config) {
   const pageType = detectPageType();
   const visibility = config.settings.buttonPageVisibility;
 
+  // Gate 1: page-type visibility
   if (visibility === 'disabled') return false;
-  if (visibility === 'both') return true;
-  if (visibility === 'product' && pageType === 'product') return true;
-  if (visibility === 'cart' && pageType === 'cart') return true;
+
+  let pageTypeAllowed = false;
+  if (visibility === 'both') pageTypeAllowed = true;
+  else if (visibility === 'product' && pageType === 'product') pageTypeAllowed = true;
+  else if (visibility === 'cart' && pageType === 'cart') pageTypeAllowed = true;
+
+  if (!pageTypeAllowed) return false;
+
+  // Gate 2: disable on specific products (block list takes priority check first)
+  const disableSpecific = config.settings.disableSpecificProducts;
+  if (disableSpecific) {
+    const disabledIds = config.settings.disabledProductIds || [];
+    if (disabledIds.length > 0) {
+      if (pageType === 'product') {
+        const container = document.querySelector('[data-preventify-app-embed]');
+        const currentProductId = container?.dataset?.productId;
+        if (currentProductId) {
+          const isBlocked = disabledIds.some(pid => {
+            const numericPid = String(pid).replace(/\D/g, '');
+            return numericPid === String(currentProductId);
+          });
+          if (isBlocked) return false;
+        }
+      }
+      // For cart page: let React mount, App.jsx will check cart items
+    }
+  }
+
+  // Gate 3: enable on specific products only (allow list)
+  const enableSpecific = config.settings.enableSpecificProducts;
+  if (!enableSpecific) return true; // Feature off — pass through
+
+  const specificIds = config.settings.specificProductIds || [];
+  if (specificIds.length === 0) return false; // Feature on but no products selected → hide
+
+  if (pageType === 'product') {
+    // Product page: check current product ID against the list
+    const container = document.querySelector('[data-preventify-app-embed]');
+    const currentProductId = container?.dataset?.productId;
+    if (!currentProductId) return false;
+    return specificIds.some(pid => {
+      const numericPid = String(pid).replace(/\D/g, '');
+      return numericPid === String(currentProductId);
+    });
+  }
+
+  // For cart page: cart items aren't available here yet — let React mount and App.jsx will filter
+  if (pageType === 'cart') return true;
 
   return false;
 }

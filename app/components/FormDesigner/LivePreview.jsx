@@ -1,8 +1,11 @@
+import { t } from '../../storefront/translations';
+
 export default function LivePreview({ formConfig, sections, fields, settings, currencySymbol = 'Rs.' }) {
   const visibleSections = sections.filter((s) => s.visible).sort((a, b) => a.order - b.order);
   const visibleFields = fields.filter((f) => f.visible).sort((a, b) => a.order - b.order);
 
-  const isRTL = settings?.enableRTL || false;
+  const lang = settings?.language || 'en';
+  const isRTL = settings?.enableRTL || lang === 'ar';
 
   const formStyle = {
     backgroundColor: formConfig.backgroundColor,
@@ -142,7 +145,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                   justifyContent: "center",
                 }}
               >
-                Apply
+                {t(lang, 'apply')}
               </button>
             </div>
           </div>
@@ -413,12 +416,12 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "16px", fontWeight: "400", color: "#000000" }}>
-                    <span>Subtotal</span>
+                    <span>{t(lang, 'subtotal')}</span>
                     <span style={{ fontWeight: "600" }}>{currencySymbol} 19.99</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "16px", fontWeight: "400", color: "#000000" }}>
-                    <span>Shipping</span>
-                    <span style={{ fontWeight: "600" }}>Free</span>
+                    <span>{t(lang, 'shipping')}</span>
+                    <span style={{ fontWeight: "600" }}>{t(lang, 'free')}</span>
                   </div>
                   <div
                     style={{
@@ -432,7 +435,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                       color: "#000000",
                     }}
                   >
-                    <span>Total</span>
+                    <span>{t(lang, 'total')}</span>
                     <span>{currencySymbol} 19.99</span>
                   </div>
                 </div>
@@ -442,7 +445,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingMethod":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "8px", fontSize: "16px", fontWeight: "700" }}>Shipping Options</h3>
+                <h3 style={{ marginBottom: "8px", fontSize: "16px", fontWeight: "700" }}>{t(lang, 'shippingOptions')}</h3>
                 <label style={{
                   display: "flex",
                   alignItems: "center",
@@ -454,9 +457,9 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <input type="radio" checked disabled style={{ width: "16px", height: "16px", accentColor: "#000" }} />
-                    <span style={{ fontSize: "16px", color: "#000000" }}>Free shipping</span>
+                    <span style={{ fontSize: "16px", color: "#000000" }}>{t(lang, 'freeShipping')}</span>
                   </div>
-                  <span style={{ fontSize: "16px", fontWeight: "700", color: "#000000" }}>Free</span>
+                  <span style={{ fontSize: "16px", fontWeight: "700", color: "#000000" }}>{t(lang, 'free')}</span>
                 </label>
               </div>
             );
@@ -464,7 +467,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingAddress":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "700" }}>Enter your shipping address</h3>
+                <h3 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "700" }}>{t(lang, 'enterShippingAddress')}</h3>
                 {visibleFields
                   .filter((f) => f.section === "shipping-address")
                   .map(renderField)}
@@ -545,7 +548,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
               return null;
           }
         })()}
-        COMPLETE ORDER - {currencySymbol} 19.99
+        {t(lang, 'completeOrder')} - {currencySymbol} 19.99
       </button>
 
       {/* Pay with Card Button */}
@@ -574,7 +577,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
             <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
             <line x1="1" y1="10" x2="23" y2="10"></line>
           </svg>
-          <span>{settings?.cardButtonText || 'PAY WITH CARD'}</span>
+          <span>{settings?.cardButtonText && settings.cardButtonText !== 'PAY WITH CARD' ? settings.cardButtonText : t(lang, 'payWithCard')}</span>
         </button>
       )}
     </div>

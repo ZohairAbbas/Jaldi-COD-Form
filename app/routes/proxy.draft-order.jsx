@@ -1,5 +1,6 @@
 import { getShopByDomain, isUserBlocked } from "../lib/db.server";
 import { normalizePrice } from "../lib/constants";
+import { upsertGlobalBuyer } from "../lib/buyer.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -283,6 +284,26 @@ export const action = async ({ request }) => {
       phoneLast4: (customerInfo.phone || '').replace(/[^\d]/g, '').slice(-4),
       shop: data.shop,
     }));
+
+    // Update buyer's preferred payment method to "card" (non-blocking)
+    if (customerInfo.phone) {
+      upsertGlobalBuyer(shop.id, {
+        phone: customerInfo.phone,
+        firstName: customerInfo.firstName,
+        lastName: customerInfo.lastName,
+        email: customerInfo.email,
+        address: address.address,
+        address2: address.address2,
+        city: address.city,
+        province: address.province,
+        postalCode: address.postalCode,
+        country: address.country,
+        countryCode: data.countryCode || "PAK",
+        paymentMethod: "card",
+      }).catch((err) =>
+        console.error("[draft-order] Failed to update global buyer:", err)
+      );
+    }
 
     return Response.json({
       success: true,

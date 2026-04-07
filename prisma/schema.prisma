@@ -101,6 +101,14 @@ model Settings {
   cardDiscountValue    Float    @default(0)
   allowDiscountOnBundles Boolean @default(true)
   enableOTP            Boolean  @default(false)
+  enableSmartCheckout  Boolean  @default(false)
+  language             String   @default("en")
+  enableSpecificProducts Boolean @default(false)
+  specificProductIds   Json     @default("[]")
+  specificProductTitles Json    @default("[]")
+  disableSpecificProducts Boolean @default(false)
+  disabledProductIds   Json     @default("[]")
+  disabledProductTitles Json    @default("[]")
   enableUserBlocking   Boolean  @default(false)
   blockedUserMessage   String   @default("You are not allowed to place orders. Please contact support.")
   shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -435,18 +443,21 @@ model OTPSession {
 // ============================================
 
 model GlobalBuyer {
-  id                 String             @id @default(cuid())
-  phone              String             @unique
-  firstName          String?
-  lastName           String?
-  email              String?
-  whatsappVerified   Boolean            @default(false)
-  totalOrdersGlobal  Int                @default(0)
-  lastVerifiedAt     DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  addresses          BuyerAddress[]
-  shopProfiles       ShopBuyerProfile[]
+  id                     String             @id @default(cuid())
+  phone                  String             @unique
+  firstName              String?
+  lastName               String?
+  email                  String?
+  whatsappVerified       Boolean            @default(false)
+  totalOrdersGlobal      Int                @default(0)
+  lastVerifiedAt         DateTime?
+  preferredPaymentMethod String?            // "cod" | "card" — last used payment method
+  lastCity               String?            // Last used city for smart defaults
+  lastProvince           String?            // Last used province for smart defaults
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  addresses              BuyerAddress[]
+  shopProfiles           ShopBuyerProfile[]
 
   @@index([phone])
 }
@@ -584,4 +595,21 @@ model Bundle {
   @@index([shopId])
   @@index([shopId, status])
   @@index([priority])
+}
+
+// ============================================
+// DEVICE FINGERPRINTING (One-Tap Checkout)
+// ============================================
+
+model DeviceFingerprint {
+  id            String   @id @default(cuid())
+  fingerprintId String   // ThumbmarkJS hash
+  phone         String   // Normalized phone (e.g., +923240310716)
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([fingerprintId, phone])
+  @@index([fingerprintId])
+  @@index([phone])
 }
