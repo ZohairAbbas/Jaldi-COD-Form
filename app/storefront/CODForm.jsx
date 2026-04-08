@@ -1077,9 +1077,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       return;
     }
 
-    // OTP disabled — submit directly
+    // OTP disabled or skipped for trusted buyer — submit directly
+    // Determine why OTP was skipped so we can still tag the order correctly
+    const bypassTag = config.settings?.enableOTP
+      ? 'trusted_buyer_verified'   // OTP enabled but bypassed for trusted+fingerprint-matched buyer
+      : undefined;                 // OTP disabled entirely — no verification tag
+
     try {
-      await onSubmit(orderData);
+      await onSubmit({ ...orderData, verificationMethod: bypassTag });
       // Order succeeded — register device for future one-tap checkout
       registerDeviceAfterOrder(orderData.phone, orderData.firstName);
     } catch (error) {
@@ -1263,10 +1268,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         return;
       }
 
+      const cardBypassTag = config.settings?.enableOTP ? 'trusted_buyer_verified' : undefined;
       const response = await fetch(`${appPath}proxy/draft-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cardPayload),
+        body: JSON.stringify({ ...cardPayload, verificationMethod: cardBypassTag }),
       });
 
       const result = await response.json();

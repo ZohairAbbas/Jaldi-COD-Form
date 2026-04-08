@@ -28,7 +28,12 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <link rel="stylesheet" href="{{ 'preventify.css' | asset_url }}?v={{ 'now' | date: '%s' }}">
 <script>
-  window.PREVENTIFY_APP_PATH = '{{ block.settings.app_path | default: "/apps/preventify/" }}';
+  {% assign raw_app_path = block.settings.app_path | default: "/apps/preventify/" %}
+  {% if raw_app_path contains 'staging' %}
+    window.PREVENTIFY_APP_PATH = '/apps/preventify-staging/';
+  {% else %}
+    window.PREVENTIFY_APP_PATH = '/apps/preventify/';
+  {% endif %}
   {% if template.name == 'product' %}
   window.PREVENTIFY_VARIANT_INVENTORY = {
     {% for variant in product.variants %}
@@ -44,7 +49,7 @@
   <div id="preventify-app-embed"
        data-preventify-app-embed
        data-shop="{{ shop.permanent_domain }}"
-       data-app-path="{{ block.settings.app_path | default: '/apps/preventify/' }}"
+       data-app-path="{% if raw_app_path contains 'staging' %}/apps/preventify-staging/{% else %}/apps/preventify/{% endif %}"
        data-page-type="{{ template.name }}"
        {% if template.name == 'product' %}
          data-product-id="{{ product.id }}"
