@@ -44,6 +44,23 @@ export const action = async ({ request }) => {
     const body = await request.json();
     console.log("[WA Webhook] POST received:", JSON.stringify(body, null, 2));
 
+    // Forward to Financify if the message is for their phone number
+    const financifyPhoneNumberId = process.env.FINANCIFY_PHONE_NUMBER_ID;
+    const financifyWebhookUrl = process.env.FINANCIFY_WEBHOOK_URL;
+    const incomingPhoneNumberId = body.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+
+    if (financifyPhoneNumberId && incomingPhoneNumberId === financifyPhoneNumberId) {
+      console.log("[WA Webhook] Forwarding to Financify:", incomingPhoneNumberId);
+      if (financifyWebhookUrl) {
+        await fetch(financifyWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+      return Response.json({ status: "forwarded" });
+    }
+
     // Extract message from webhook payload
     const messageData = extractWebhookMessage(body);
     console.log("[WA Webhook] Extracted message:", messageData);
