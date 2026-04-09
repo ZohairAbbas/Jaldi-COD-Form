@@ -7,12 +7,40 @@
 
 import { Link } from 'react-router';
 
-export default function BillingBanner({ subscription, planUsage }) {
+export default function BillingBanner({ subscription, planUsage, isNavigatingToBilling }) {
+  // Determine which banner would show (to get the correct status tone for loading state)
+  const getBannerStatus = () => {
+    if (planUsage?.usageStatus === 'exceeded') return 'critical';
+    if (planUsage?.usageStatus === 'warning') return 'warning';
+    if (!subscription) return null;
+    const { status, trialEndsAt, cancelAtPeriodEnd } = subscription;
+    if (status === 'active' && !cancelAtPeriodEnd) return null;
+    if (status === 'trialing' && trialEndsAt) {
+      const daysLeft = Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24));
+      if (daysLeft > 0) return 'info';
+    }
+    if (status === 'expired' || (status === 'trialing' && new Date() > new Date(trialEndsAt))) return 'critical';
+    if (status === 'cancelled') return 'critical';
+    if (status === 'past_due') return 'critical';
+    return null;
+  };
+
+  const bannerStatus = getBannerStatus();
+
+  // While navigating to billing, replace entire banner content with loading message
+  if (isNavigatingToBilling && bannerStatus) {
+    return (
+      <s-banner tone={bannerStatus} style={{ marginBottom: '16px' }}>
+        <s-text>Redirecting to billing page...</s-text>
+      </s-banner>
+    );
+  }
+
   // Order usage warnings (checked first - most actionable)
   if (planUsage && planUsage.usageStatus === 'exceeded') {
     return (
       <s-banner
-        status="critical"
+        tone="critical"
         style={{ marginBottom: '16px' }}
       >
         <s-text>
@@ -30,7 +58,7 @@ export default function BillingBanner({ subscription, planUsage }) {
   if (planUsage && planUsage.usageStatus === 'warning') {
     return (
       <s-banner
-        status="warning"
+        tone="warning"
         style={{ marginBottom: '16px' }}
       >
         <s-text>
@@ -65,7 +93,7 @@ export default function BillingBanner({ subscription, planUsage }) {
     if (daysLeft > 0) {
       return (
         <s-banner
-          status="info"
+          tone="info"
           style={{ marginBottom: '16px' }}
         >
           <s-text>
@@ -84,7 +112,7 @@ export default function BillingBanner({ subscription, planUsage }) {
   if (status === 'expired' || (status === 'trialing' && new Date() > new Date(trialEndsAt))) {
     return (
       <s-banner
-        status="critical"
+        tone="critical"
         style={{ marginBottom: '16px' }}
       >
         <s-text>
@@ -103,28 +131,13 @@ export default function BillingBanner({ subscription, planUsage }) {
     const daysLeft = Math.ceil(
       (new Date(currentPeriodEnd) - new Date()) / (1000 * 60 * 60 * 24)
     );
-
-    return (
-      <s-banner
-        status="warning"
-        style={{ marginBottom: '16px' }}
-      >
-        <s-text>
-          Your subscription will end in <strong>{daysLeft} days</strong>.{' '}
-          <Link to="/app/billing">
-            <s-link>Reactivate subscription</s-link>
-          </Link>{' '}
-          to continue using the app.
-        </s-text>
-      </s-banner>
-    );
   }
 
   // Cancelled
   if (status === 'cancelled') {
     return (
       <s-banner
-        status="critical"
+        tone="critical"
         style={{ marginBottom: '16px' }}
       >
         <s-text>
@@ -142,7 +155,7 @@ export default function BillingBanner({ subscription, planUsage }) {
   if (status === 'past_due') {
     return (
       <s-banner
-        status="critical"
+        tone="critical"
         style={{ marginBottom: '16px' }}
       >
         <s-text>

@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useFetcher } from "react-router";
+import { useLoaderData, Link, useFetcher, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getDashboardStats, getMonthlyOrderCount } from "../lib/db.server";
@@ -140,6 +140,8 @@ export const loader = async ({ request }) => {
 export default function Index() {
   const { stats, themeAppEmbedStatus, shop, setupProgress, planUsage } = useLoaderData();
   const fetcher = useFetcher();
+  const navigation = useNavigation();
+  const isNavigatingToBilling = navigation.state === 'loading' && navigation.location?.pathname === '/app/billing';
   const [welcomeVisible, setWelcomeVisible] = useState(!setupProgress.welcomeDismissed);
 
   // App embed UUID from extension config
@@ -295,16 +297,17 @@ export default function Index() {
                 <span style={{ fontWeight: 600, fontSize: '14px' }}>Your Plan</span>
               </div>
               <Link to="/app/billing" style={{ textDecoration: 'none' }}>
-                <button style={{
+                <button disabled={isNavigatingToBilling} style={{
                   backgroundColor: 'white',
                   color: '#303030',
                   border: '1px solid #c9cccf',
                   padding: '6px 12px',
                   borderRadius: '6px',
                   fontSize: '13px',
-                  cursor: 'pointer'
+                  cursor: isNavigatingToBilling ? 'wait' : 'pointer',
+                  opacity: isNavigatingToBilling ? 0.7 : 1,
                 }}>
-                  Manage Plan
+                  {isNavigatingToBilling ? 'Loading...' : 'Manage Plan'}
                 </button>
               </Link>
             </div>

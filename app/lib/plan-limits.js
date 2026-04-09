@@ -8,26 +8,23 @@
 
 export const PLAN_LIMITS = {
   Free: {
-    monthlyOrderLimit: 23,
+    monthlyOrderLimit: 200,
     features: [
-      '60 orders/month',
+      '200 orders/month',
       'COD form customization',
       'Upsells & Downsells',
-      'Quantity Offers',
+      'Bundle Offers',
       'Multi-Currency',
       'Multi-Pixels',
-      'Basic Fraud Protection',
+      'Fraud Protection',
       'Analytics & Insights',
-      'Email support',
     ],
   },
   Basic: {
-    monthlyOrderLimit: 500,
+    monthlyOrderLimit: 1000,
     features: [
-      '500 orders/month',
+      '1000 orders/month',
       'All Free plan features',
-      'Quantity Offers on Product Page',
-      'Advanced Fraud Protection',
       'OTP Verification',
       '24/7 Live Chat Support',
     ],
@@ -37,9 +34,6 @@ export const PLAN_LIMITS = {
     features: [
       'Unlimited orders',
       'All Basic plan features',
-      'Bundle/Quantity Breaks',
-      'User Blocking',
-      'Advanced Tax Settings',
       'Priority Support',
     ],
   },

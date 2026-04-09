@@ -130,7 +130,7 @@ export default function FieldConfigModal({
           </s-stack>
 
           {formData.isCore && (
-            <s-banner status="info">
+            <s-banner tone="info">
               <s-text>This is a core field and cannot be deleted. You can customize the label and placeholder.</s-text>
             </s-banner>
           )}

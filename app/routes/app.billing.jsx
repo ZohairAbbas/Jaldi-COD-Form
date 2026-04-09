@@ -4,7 +4,7 @@
  * Manage subscription, view plans, and handle billing
  */
 
-import { useLoaderData, Form, useActionData, redirect } from 'react-router';
+import { useLoaderData, Form, useActionData, redirect, useNavigation } from 'react-router';
 import { useEffect } from 'react';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
@@ -149,6 +149,11 @@ export default function BillingPage() {
   } = useLoaderData();
   const actionData = useActionData();
   const app = useAppBridge();
+  const navigation = useNavigation();
+
+  const isSubmitting = navigation.state === 'submitting';
+  const submittingAction = isSubmitting ? navigation.formData?.get('action') : null;
+  const submittingPlanId = isSubmitting ? navigation.formData?.get('planId') : null;
 
   const hasActiveSubscription =
     subscription &&
@@ -183,13 +188,13 @@ export default function BillingPage() {
     <s-page heading="Billing & Subscription">
       {/* Success/Error Messages */}
       {chargeApproved && (
-        <s-banner status="success" style={{ marginBottom: '16px' }}>
+        <s-banner tone="success" style={{ marginBottom: '16px' }}>
           Subscription charge approved successfully! Your plan is now active.
         </s-banner>
       )}
 
       {actionData?.success && !actionData?.confirmationUrl && !chargeApproved && (
-        <s-banner status="success" style={{ marginBottom: '16px' }}>
+        <s-banner tone="success" style={{ marginBottom: '16px' }}>
           {actionData.cancelled
             ? 'Subscription cancelled successfully'
             : 'Subscription updated successfully'}
@@ -197,13 +202,13 @@ export default function BillingPage() {
       )}
 
       {actionData?.confirmationUrl && (
-        <s-banner status="info" style={{ marginBottom: '16px' }}>
+        <s-banner tone="info" style={{ marginBottom: '16px' }}>
           Redirecting to Shopify to approve the subscription charge...
         </s-banner>
       )}
 
       {actionData?.error && (
-        <s-banner status="critical" style={{ marginBottom: '16px' }}>
+        <s-banner tone="critical" style={{ marginBottom: '16px' }}>
           Error: {actionData.error}
         </s-banner>
       )}
@@ -276,12 +281,14 @@ export default function BillingPage() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <Form method="post">
                   <input type="hidden" name="action" value="sync" />
-                  <button type="submit" style={{
+                  <button type="submit" disabled={submittingAction === 'sync'} style={{
                     backgroundColor: 'white', color: '#303030',
                     border: '1px solid #c9cccf', padding: '6px 12px',
-                    borderRadius: '6px', fontSize: '13px', cursor: 'pointer',
+                    borderRadius: '6px', fontSize: '13px',
+                    cursor: submittingAction === 'sync' ? 'wait' : 'pointer',
+                    opacity: submittingAction === 'sync' ? 0.7 : 1,
                   }}>
-                    Sync Status
+                    {submittingAction === 'sync' ? 'Syncing...' : 'Sync Status'}
                   </button>
                 </Form>
               </div>
@@ -289,12 +296,14 @@ export default function BillingPage() {
                 <Form method="post">
                   <input type="hidden" name="action" value="cancel" />
                   <input type="hidden" name="immediately" value="false" />
-                  <button type="submit" style={{
+                  <button type="submit" disabled={submittingAction === 'cancel'} style={{
                     backgroundColor: 'white', color: '#d72c0d',
                     border: '1px solid #d72c0d', padding: '6px 12px',
-                    borderRadius: '6px', fontSize: '13px', cursor: 'pointer',
+                    borderRadius: '6px', fontSize: '13px',
+                    cursor: submittingAction === 'cancel' ? 'wait' : 'pointer',
+                    opacity: submittingAction === 'cancel' ? 0.7 : 1,
                   }}>
-                    Cancel Subscription
+                    {submittingAction === 'cancel' ? 'Cancelling...' : 'Cancel Subscription'}
                   </button>
                 </Form>
               )}
@@ -409,14 +418,16 @@ export default function BillingPage() {
                     <Form method="post">
                       <input type="hidden" name="action" value="subscribe" />
                       <input type="hidden" name="planId" value={plan.id} />
-                      <button type="submit" style={{
+                      <button type="submit" disabled={submittingAction === 'subscribe' && submittingPlanId === plan.id} style={{
                         width: '100%', padding: '10px 20px',
-                        backgroundColor: '#303030', color: '#fff',
+                        backgroundColor: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? '#505050' : '#303030',
+                        color: '#fff',
                         border: 'none', borderRadius: '8px',
                         fontSize: '14px', fontWeight: 600,
-                        cursor: 'pointer',
+                        cursor: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 'wait' : 'pointer',
+                        opacity: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 0.7 : 1,
                       }}>
-                        Select plan
+                        {(submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 'Processing...' : 'Select plan'}
                       </button>
                     </Form>
                   )}

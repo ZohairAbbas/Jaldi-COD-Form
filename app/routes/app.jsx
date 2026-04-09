@@ -1,4 +1,4 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useRouteError, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
@@ -50,6 +50,8 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey, shop, subscription, planUsage, ENV, user } = useLoaderData();
+  const navigation = useNavigation();
+  const isNavigatingToBilling = navigation.state === 'loading' && navigation.location?.pathname === '/app/billing';
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -69,7 +71,7 @@ export default function App() {
           <s-link href="/app/billing">Billing</s-link>
         </s-app-nav>
         <div style={{ padding: '16px' }}>
-          <BillingBanner subscription={subscription} planUsage={planUsage} />
+          <BillingBanner subscription={subscription} planUsage={planUsage} isNavigatingToBilling={isNavigatingToBilling} />
           <Outlet />
         </div>
       </MixpanelProvider>
