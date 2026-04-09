@@ -428,7 +428,7 @@ export function trackSnapchatPurchase(orderData, currency = 'PKR') {
     return;
   }
 
-  const { items, total, orderNumber } = orderData;
+  const { items, total, orderNumber, email, phone, firstName, lastName } = orderData;
 
   const eventData = {
     currency: currency,
@@ -436,6 +436,10 @@ export function trackSnapchatPurchase(orderData, currency = 'PKR') {
     transaction_id: orderNumber,
     item_ids: items.map(item => item.variantId || item.id),
     number_items: items.length,
+    ...(email && { user_email: email }),
+    ...(phone && { user_phone_number: phone }),
+    ...(firstName && { firstname: firstName }),
+    ...(lastName && { lastname: lastName }),
   };
 
   pixelConfig.snapchat.forEach(pixel => {
