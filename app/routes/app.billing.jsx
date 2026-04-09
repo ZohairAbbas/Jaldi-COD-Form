@@ -4,11 +4,11 @@
  * Manage subscription, view plans, and handle billing
  */
 
-import { useLoaderData, Form, useActionData, redirect } from 'react-router';
+import { useLoaderData, Form, useActionData, redirect, useNavigation } from 'react-router';
 import { useEffect } from 'react';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
-import { getOrCreateShop } from '../lib/db.server';
+import { getOrCreateShop, getMonthlyOrderCount } from '../lib/db.server';
 import {
   getOrCreateCustomer,
   getSubscription,
@@ -19,6 +19,7 @@ import {
 } from '../lib/mantle.server';
 import { trackServerEvent } from '../lib/mixpanel.server';
 import { BILLING_EVENTS } from '../lib/analytics-events';
+import { PLAN_LIMITS, getPlanLimit, getUsagePercentage, getUsageStatus } from '../lib/plan-limits';
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -30,7 +31,6 @@ export const loader = async ({ request }) => {
 
   if (chargeApproved) {
     console.log('[Billing] Charge approved, syncing subscription status');
-    // Sync subscription status after charge approval
     try {
       await syncSubscriptionStatus(shop, session.accessToken);
     } catch (error) {
@@ -52,6 +52,11 @@ export const loader = async ({ request }) => {
   // Get available plans (pass shop and accessToken)
   const plans = await getPlans(shop, session.accessToken);
 
+  // Get monthly usage
+  const monthlyOrderCount = await getMonthlyOrderCount(shop.id);
+  const currentPlanName = subscription?.planName || 'Free';
+  const planLimit = getPlanLimit(currentPlanName);
+
   // Track page view
   trackServerEvent(shop.shopifyDomain, 'Billing Page Viewed', {
     has_subscription: !!subscription,
@@ -66,8 +71,13 @@ export const loader = async ({ request }) => {
     },
     subscription,
     customer,
-    plans,
+    plans: (plans || []).sort((a, b) => (a.price || 0) - (b.price || 0)),
     chargeApproved,
+    monthlyOrderCount,
+    currentPlanName,
+    planLimit,
+    usagePercentage: getUsagePercentage(monthlyOrderCount, planLimit),
+    usageStatus: getUsageStatus(monthlyOrderCount, planLimit),
   };
 };
 
@@ -90,7 +100,6 @@ export const action = async ({ request }) => {
 
       // For Flex Billing, always expect a confirmation URL
       if (result.confirmationUrl) {
-        // Return the URL for client-side redirect using App Bridge
         return {
           success: true,
           confirmationUrl: result.confirmationUrl,
@@ -112,13 +121,10 @@ export const action = async ({ request }) => {
 
       await cancelSubscription(shop, session.accessToken, immediately);
 
-      // Track cancellation
       trackServerEvent(
         shop.shopifyDomain,
         BILLING_EVENTS.SUBSCRIPTION_CANCELLED,
-        {
-          immediately,
-        }
+        { immediately }
       );
 
       return { success: true, cancelled: true };
@@ -137,9 +143,17 @@ export const action = async ({ request }) => {
 };
 
 export default function BillingPage() {
-  const { shop, subscription, customer, plans, chargeApproved } = useLoaderData();
+  const {
+    shop, subscription, customer, plans, chargeApproved,
+    monthlyOrderCount, currentPlanName, planLimit, usagePercentage, usageStatus,
+  } = useLoaderData();
   const actionData = useActionData();
   const app = useAppBridge();
+  const navigation = useNavigation();
+
+  const isSubmitting = navigation.state === 'submitting';
+  const submittingAction = isSubmitting ? navigation.formData?.get('action') : null;
+  const submittingPlanId = isSubmitting ? navigation.formData?.get('planId') : null;
 
   const hasActiveSubscription =
     subscription &&
@@ -150,8 +164,6 @@ export default function BillingPage() {
   useEffect(() => {
     if (actionData?.confirmationUrl) {
       console.log('[Billing] Redirecting to confirmation URL:', actionData.confirmationUrl);
-      // Redirect the entire page to the Shopify charge approval URL
-      // Using window.top.location to break out of iframe if needed
       if (window.top) {
         window.top.location.href = actionData.confirmationUrl;
       } else {
@@ -160,17 +172,29 @@ export default function BillingPage() {
     }
   }, [actionData]);
 
+  // Get features for a plan - prefer local config, fall back to Mantle
+  const getPlanDisplayFeatures = (plan) => {
+    const localFeatures = PLAN_LIMITS[plan.name]?.features || [];
+    return localFeatures.length > 0 ? localFeatures : (plan.features || []);
+  };
+
+  const isCurrentPlan = (plan) => subscription?.planId === plan.id;
+
+  const progressBarColor =
+    usageStatus === 'exceeded' ? '#d72c0d' :
+    usageStatus === 'warning' ? '#ffc453' : '#2a9d5c';
+
   return (
     <s-page heading="Billing & Subscription">
       {/* Success/Error Messages */}
       {chargeApproved && (
-        <s-banner status="success" style={{ marginBottom: '16px' }}>
-          🎉 Subscription charge approved successfully! Your plan is now active.
+        <s-banner tone="success" style={{ marginBottom: '16px' }}>
+          Subscription charge approved successfully! Your plan is now active.
         </s-banner>
       )}
 
       {actionData?.success && !actionData?.confirmationUrl && !chargeApproved && (
-        <s-banner status="success" style={{ marginBottom: '16px' }}>
+        <s-banner tone="success" style={{ marginBottom: '16px' }}>
           {actionData.cancelled
             ? 'Subscription cancelled successfully'
             : 'Subscription updated successfully'}
@@ -178,177 +202,262 @@ export default function BillingPage() {
       )}
 
       {actionData?.confirmationUrl && (
-        <s-banner status="info" style={{ marginBottom: '16px' }}>
+        <s-banner tone="info" style={{ marginBottom: '16px' }}>
           Redirecting to Shopify to approve the subscription charge...
         </s-banner>
       )}
 
       {actionData?.error && (
-        <s-banner status="critical" style={{ marginBottom: '16px' }}>
+        <s-banner tone="critical" style={{ marginBottom: '16px' }}>
           Error: {actionData.error}
         </s-banner>
       )}
 
-      {/* Current Subscription Section */}
-      <s-section heading="Current Subscription">
-        {subscription ? (
-          <s-box
-            padding="large"
-            borderWidth="base"
-            borderRadius="base"
-            background="subdued"
-          >
-            <s-stack direction="block" gap="base">
-              <s-stack direction="inline" gap="base" align="space-between">
-                <div>
-                  <s-text variant="heading-lg">
-                    {subscription.planName || 'No Plan'}
-                  </s-text>
-                  <s-text variant="body-sm" tone="subdued">
-                    Status:{' '}
-                    <s-badge
-                      tone={
-                        subscription.status === 'active'
-                          ? 'success'
-                          : subscription.status === 'trialing'
-                          ? 'info'
-                          : 'critical'
-                      }
-                    >
+      {/* Current Plan Usage Summary */}
+      <s-section>
+        <s-card>
+          <div style={{ padding: '20px 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '13px', color: '#6b7177', marginBottom: '4px' }}>Current Plan</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '20px', fontWeight: 600 }}>{currentPlanName}</span>
+                  {subscription && (
+                    <s-badge tone={
+                      subscription.status === 'active' ? 'success' :
+                      subscription.status === 'trialing' ? 'info' : 'critical'
+                    }>
                       {subscription.status}
                     </s-badge>
-                  </s-text>
+                  )}
                 </div>
+                {subscription?.trialEndsAt && subscription.status === 'trialing' && (
+                  <div style={{ fontSize: '13px', color: '#6b7177' }}>
+                    Trial ends: {new Date(subscription.trialEndsAt).toLocaleDateString()}
+                  </div>
+                )}
+                {subscription?.currentPeriodEnd && subscription.status === 'active' && (
+                  <div style={{ fontSize: '13px', color: '#6b7177' }}>
+                    Next billing: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                  </div>
+                )}
+                {subscription?.cancelAtPeriodEnd && (
+                  <div style={{ fontSize: '13px', color: '#d72c0d', marginTop: '4px' }}>
+                    Subscription will cancel on {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '13px', color: '#6b7177', marginBottom: '4px' }}>Monthly orders</div>
+                <div style={{ fontSize: '20px', fontWeight: 600 }}>
+                  {monthlyOrderCount} / {planLimit === null ? 'Unlimited' : planLimit.toLocaleString()}
+                </div>
+                {planLimit !== null && (
+                  <div style={{ fontSize: '12px', color: '#6b7177' }}>{usagePercentage}%</div>
+                )}
+              </div>
+            </div>
 
+            {/* Progress bar */}
+            {planLimit !== null && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{
+                  width: '100%', height: '8px',
+                  backgroundColor: '#e3e3e3', borderRadius: '4px', overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: `${Math.min(usagePercentage, 100)}%`,
+                    height: '100%',
+                    backgroundColor: progressBarColor,
+                    borderRadius: '4px',
+                    transition: 'width 0.3s ease',
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Sync + Cancel row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e3e3e3' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <Form method="post">
                   <input type="hidden" name="action" value="sync" />
-                  <s-button variant="tertiary" type="submit">
-                    Sync Status
-                  </s-button>
+                  <button type="submit" disabled={submittingAction === 'sync'} style={{
+                    backgroundColor: 'white', color: '#303030',
+                    border: '1px solid #c9cccf', padding: '6px 12px',
+                    borderRadius: '6px', fontSize: '13px',
+                    cursor: submittingAction === 'sync' ? 'wait' : 'pointer',
+                    opacity: submittingAction === 'sync' ? 0.7 : 1,
+                  }}>
+                    {submittingAction === 'sync' ? 'Syncing...' : 'Sync Status'}
+                  </button>
                 </Form>
-              </s-stack>
-
-              {subscription.trialEndsAt && subscription.status === 'trialing' && (
-                <s-text>
-                  Trial ends:{' '}
-                  {new Date(subscription.trialEndsAt).toLocaleDateString()}
-                </s-text>
-              )}
-
-              {subscription.currentPeriodEnd && subscription.status === 'active' && (
-                <s-text>
-                  Next billing date:{' '}
-                  {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-                </s-text>
-              )}
-
-              {subscription.cancelAtPeriodEnd && (
-                <s-text tone="critical">
-                  Subscription will cancel on{' '}
-                  {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-                </s-text>
-              )}
-
+              </div>
               {hasActiveSubscription && (
                 <Form method="post">
                   <input type="hidden" name="action" value="cancel" />
                   <input type="hidden" name="immediately" value="false" />
-                  <s-button variant="primary" tone="critical" type="submit">
-                    Cancel Subscription
-                  </s-button>
+                  <button type="submit" disabled={submittingAction === 'cancel'} style={{
+                    backgroundColor: 'white', color: '#d72c0d',
+                    border: '1px solid #d72c0d', padding: '6px 12px',
+                    borderRadius: '6px', fontSize: '13px',
+                    cursor: submittingAction === 'cancel' ? 'wait' : 'pointer',
+                    opacity: submittingAction === 'cancel' ? 0.7 : 1,
+                  }}>
+                    {submittingAction === 'cancel' ? 'Cancelling...' : 'Cancel Subscription'}
+                  </button>
                 </Form>
               )}
-            </s-stack>
-          </s-box>
-        ) : (
-          <s-box padding="large" style={{ textAlign: 'center' }}>
-            <s-text tone="subdued">No active subscription</s-text>
-          </s-box>
-        )}
+            </div>
+          </div>
+        </s-card>
       </s-section>
 
-      {/* Available Plans */}
+      {/* Plan Cards */}
       {plans && plans.length > 0 && (
-        <s-section heading="Available Plans" style={{ marginTop: '24px' }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '16px',
-            }}
-          >
-            {plans.map((plan) => (
-              <s-box
-                key={plan.id}
-                padding="large"
-                borderWidth="base"
-                borderRadius="base"
-                background={
-                  subscription?.planId === plan.id ? 'success' : 'subdued'
-                }
-              >
-                <s-stack direction="block" gap="base">
-                  <s-text variant="heading-lg">{plan.name}</s-text>
+        <s-section>
+          <div style={{ marginBottom: '16px' }}>
+            <span style={{ fontSize: '16px', fontWeight: 600 }}>Available Plans</span>
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${Math.min(plans.length, 3)}, 1fr)`,
+            gap: '16px',
+          }}>
+            {plans.map((plan) => {
+              const isCurrent = isCurrentPlan(plan);
+              const features = getPlanDisplayFeatures(plan);
+              const orderLimit = PLAN_LIMITS[plan.name]?.monthlyOrderLimit;
 
-                  {plan.description && (
-                    <s-text variant="body-sm" tone="subdued">
-                      {plan.description}
-                    </s-text>
+              return (
+                <div
+                  key={plan.id}
+                  style={{
+                    border: isCurrent ? '2px solid #2a9d5c' : '1px solid #e3e3e3',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    backgroundColor: '#fff',
+                    position: 'relative',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    boxShadow: isCurrent ? '0 0 0 1px #2a9d5c' : 'none',
+                  }}
+                >
+                  {/* Current Plan badge */}
+                  {isCurrent && (
+                    <div style={{
+                      position: 'absolute', top: '-12px', left: '50%',
+                      transform: 'translateX(-50%)',
+                      backgroundColor: '#2a9d5c', color: '#fff',
+                      padding: '2px 14px', borderRadius: '12px',
+                      fontSize: '12px', fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      Current Plan
+                    </div>
                   )}
 
-                  <s-text variant="heading-xl">
-                    ${plan.presentmentAmount || plan.price || 0}
-                    {plan.interval && (
-                      <s-text variant="body-sm">
-                        /{plan.interval === 'EVERY_30_DAYS' ? 'month' : plan.recurringInterval || 'month'}
-                      </s-text>
-                    )}
-                  </s-text>
+                  {/* Plan name */}
+                  <div style={{ fontSize: '18px', fontWeight: 600, marginBottom: '4px' }}>
+                    {plan.name}
+                  </div>
 
-                  {plan.features && plan.features.length > 0 && (
-                    <s-unordered-list>
-                      {plan.features.map((feature, idx) => (
-                        <s-list-item key={idx}>{feature}</s-list-item>
-                      ))}
-                    </s-unordered-list>
+                  {/* Price */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <span style={{ fontSize: '32px', fontWeight: 700 }}>
+                      ${plan.presentmentAmount || plan.price || 0}
+                    </span>
+                    <span style={{ fontSize: '14px', color: '#6b7177' }}> /month</span>
+                  </div>
+
+                  {/* Order limit highlight */}
+                  {orderLimit !== undefined && (
+                    <div style={{
+                      backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+                      borderRadius: '6px', padding: '8px 12px',
+                      marginBottom: '20px', fontSize: '13px',
+                      fontWeight: 500, color: '#166534',
+                      textAlign: 'center',
+                    }}>
+                      {orderLimit === null ? 'Unlimited orders' : `${orderLimit.toLocaleString()} orders/month`}
+                    </div>
                   )}
 
-                  {subscription?.planId !== plan.id && (
+                  {/* Feature list with checkmarks */}
+                  <div style={{ flex: 1, marginBottom: '20px' }}>
+                    {features.map((feature, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'flex-start',
+                        gap: '8px', marginBottom: '10px',
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                          style={{ flexShrink: 0, marginTop: '2px' }}>
+                          <path d="M13.3 4.3L6 11.6L2.7 8.3" stroke="#2a9d5c"
+                            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span style={{ fontSize: '13px', color: '#303030', lineHeight: '1.4' }}>
+                          {feature}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Action button */}
+                  {isCurrent ? (
+                    <div style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#f3f4f6',
+                      borderRadius: '8px',
+                      color: '#6b7177',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      textAlign: 'center',
+                    }}>
+                      Current Plan
+                    </div>
+                  ) : (
                     <Form method="post">
                       <input type="hidden" name="action" value="subscribe" />
                       <input type="hidden" name="planId" value={plan.id} />
-                      <s-button variant="primary" type="submit">
-                        {subscription ? 'Switch to this plan' : 'Subscribe'}
-                      </s-button>
+                      <button type="submit" disabled={submittingAction === 'subscribe' && submittingPlanId === plan.id} style={{
+                        width: '100%', padding: '10px 20px',
+                        backgroundColor: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? '#505050' : '#303030',
+                        color: '#fff',
+                        border: 'none', borderRadius: '8px',
+                        fontSize: '14px', fontWeight: 600,
+                        cursor: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 'wait' : 'pointer',
+                        opacity: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 0.7 : 1,
+                      }}>
+                        {(submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 'Processing...' : 'Select plan'}
+                      </button>
                     </Form>
                   )}
-
-                  {subscription?.planId === plan.id && (
-                    <s-badge tone="success">Current Plan</s-badge>
-                  )}
-                </s-stack>
-              </s-box>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </s-section>
       )}
 
       {/* Billing Info */}
-      <s-section heading="Billing Information" style={{ marginTop: '24px' }}>
-        <s-box padding="base" borderWidth="base" borderRadius="base">
-          <s-stack direction="block" gap="base">
-            <s-text variant="body-sm">
-              Billing is securely managed through Shopify. All charges will
-              appear on your Shopify invoice.
-            </s-text>
-
+      <s-section>
+        <s-card>
+          <div style={{ padding: '16px 20px' }}>
+            <div style={{ fontSize: '13px', color: '#6b7177', marginBottom: '8px' }}>
+              Payments are processed through Shopify Billing. All charges will appear on your Shopify invoice.
+            </div>
+            <div style={{ fontSize: '13px', color: '#6b7177', marginBottom: '8px' }}>
+              Switching plans does not reset the monthly order count. Used orders continue counting toward the new plan limit.
+            </div>
+            <div style={{ fontSize: '13px', color: '#6b7177' }}>
+              Cancel anytime by switching to the free plan or uninstalling the app.
+            </div>
             {customer && (
-              <s-text variant="body-sm" tone="subdued">
+              <div style={{ fontSize: '12px', color: '#8c9196', marginTop: '12px' }}>
                 Customer ID: {customer.id}
-              </s-text>
+              </div>
             )}
-          </s-stack>
-        </s-box>
+          </div>
+        </s-card>
       </s-section>
     </s-page>
   );
