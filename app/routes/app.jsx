@@ -22,6 +22,7 @@ export const loader = async ({ request }) => {
 
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    isAdmin: session.shop === process.env.ADMIN_SHOP,
     shop: {
       id: shop.id,
       shopifyDomain: shop.shopifyDomain,
@@ -49,7 +50,7 @@ export const loader = async ({ request }) => {
 };
 
 export default function App() {
-  const { apiKey, shop, subscription, planUsage, ENV, user } = useLoaderData();
+  const { apiKey, shop, subscription, planUsage, ENV, user, isAdmin } = useLoaderData();
   const navigation = useNavigation();
   const isNavigatingToBilling = navigation.state === 'loading' && navigation.location?.pathname === '/app/billing';
 
@@ -69,6 +70,7 @@ export default function App() {
           <s-link href="/app/shipping-rates">Shipping Rates</s-link>
           <s-link href="/app/analytics">Analytics</s-link>
           <s-link href="/app/billing">Billing</s-link>
+          {isAdmin && <s-link href="/app/monitor">Monitor</s-link>}
         </s-app-nav>
         <div style={{ padding: '16px' }}>
           <BillingBanner subscription={subscription} planUsage={planUsage} isNavigatingToBilling={isNavigatingToBilling} />
