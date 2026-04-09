@@ -4,6 +4,51 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
+// Returns midnight of the current day in the configured timezone, as a UTC Date
+function startOfDayInTZ(tz) {
+  const now = new Date();
+  // Get year/month/day in target timezone
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now);
+  const y = parts.find(p => p.type === "year").value;
+  const m = parts.find(p => p.type === "month").value;
+  const d = parts.find(p => p.type === "day").value;
+  // Construct midnight in that timezone, get UTC equivalent
+  return new Date(`${y}-${m}-${d}T00:00:00`);
+}
+
+// Returns first day of the current month at midnight in the configured timezone
+function startOfMonthInTZ(tz) {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit",
+  }).formatToParts(now);
+  const y = parts.find(p => p.type === "year").value;
+  const m = parts.find(p => p.type === "month").value;
+  return new Date(`${y}-${m}-01T00:00:00`);
+}
+
+// Returns start of current week (Monday) at midnight in the configured timezone
+function startOfWeekInTZ(tz) {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit", weekday: "short",
+  }).formatToParts(now);
+  const y = parts.find(p => p.type === "year").value;
+  const m = parts.find(p => p.type === "month").value;
+  const d = parseInt(parts.find(p => p.type === "day").value);
+  const weekday = parts.find(p => p.type === "weekday").value; // Mon, Tue, ...
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayIndex = weekdays.indexOf(weekday);
+  const diff = dayIndex === 0 ? -6 : 1 - dayIndex; // Monday = start
+  const monday = new Date(`${y}-${m}-${String(d + diff).padStart(2, "0")}T00:00:00`);
+  return monday;
+}
+
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
 
@@ -11,31 +56,25 @@ export const loader = async ({ request }) => {
     throw new Response("Forbidden", { status: 403 });
   }
 
+  const tz = process.env.ADMIN_TIMEZONE || "UTC";
   const url = new URL(request.url);
   const period = url.searchParams.get("period") || "month";
 
-  const now = new Date();
   let dateFrom;
   if (period === "24h") {
-    dateFrom = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    dateFrom = startOfDayInTZ(tz);
   } else if (period === "week") {
-    // Start of current week (Monday)
-    const day = now.getDay(); // 0 = Sunday
-    const diff = (day === 0 ? -6 : 1 - day);
-    dateFrom = new Date(now);
-    dateFrom.setDate(now.getDate() + diff);
-    dateFrom.setHours(0, 0, 0, 0);
+    dateFrom = startOfWeekInTZ(tz);
   } else if (period === "month") {
-    dateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+    dateFrom = startOfMonthInTZ(tz);
   } else if (period === "30") {
     dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   } else {
     dateFrom = new Date("2020-01-01");
   }
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfDay = startOfDayInTZ(tz);
+  const firstOfMonth = startOfMonthInTZ(tz);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   // Fixed summary stats (not period-dependent)
