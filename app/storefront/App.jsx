@@ -1476,6 +1476,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           items: orderData.items,
           total: result.total || orderData.total,
           orderNumber: result.shopifyOrderNumber,
+          email: orderData.email,
+          phone: orderData.phone,
+          firstName: orderData.firstName,
+          lastName: orderData.lastName,
         }, currency);
 
         // Track TikTok events (PlaceAnOrder and CompletePayment)

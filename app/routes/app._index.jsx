@@ -1,7 +1,9 @@
-import { useLoaderData, Link, useFetcher } from "react-router";
+import { useLoaderData, Link, useFetcher, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { getOrCreateShop, getDashboardStats } from "../lib/db.server";
+import { getOrCreateShop, getDashboardStats, getMonthlyOrderCount } from "../lib/db.server";
+import { getSubscription } from "../lib/mantle.server";
+import { getPlanLimit, getUsagePercentage, getUsageStatus } from "../lib/plan-limits";
 import { getCurrencyCode } from "../lib/constants";
 import { useState } from "react";
 
@@ -108,6 +110,12 @@ export const loader = async ({ request }) => {
     setupGuideDismissed: false,
   };
 
+  // Fetch subscription and monthly usage for plan card
+  const subscription = await getSubscription(shop.id);
+  const monthlyOrderCount = await getMonthlyOrderCount(shop.id);
+  const currentPlanName = subscription?.planName || 'Free';
+  const planLimit = getPlanLimit(currentPlanName);
+
   return {
     shop: {
       domain: shop.shopifyDomain,
@@ -118,12 +126,22 @@ export const loader = async ({ request }) => {
     stats,
     themeAppEmbedStatus,
     setupProgress,
+    planUsage: {
+      planName: currentPlanName,
+      monthlyOrderCount,
+      planLimit,
+      usagePercentage: getUsagePercentage(monthlyOrderCount, planLimit),
+      usageStatus: getUsageStatus(monthlyOrderCount, planLimit),
+      subscriptionStatus: subscription?.status || 'none',
+    },
   };
 };
 
 export default function Index() {
-  const { stats, themeAppEmbedStatus, shop, setupProgress } = useLoaderData();
+  const { stats, themeAppEmbedStatus, shop, setupProgress, planUsage } = useLoaderData();
   const fetcher = useFetcher();
+  const navigation = useNavigation();
+  const isNavigatingToBilling = navigation.state === 'loading' && navigation.location?.pathname === '/app/billing';
   const [welcomeVisible, setWelcomeVisible] = useState(!setupProgress.welcomeDismissed);
 
   // App embed UUID from extension config
@@ -290,6 +308,94 @@ export default function Index() {
             <a href={themeEditorUrl} target="_blank" rel="noopener noreferrer">
               <s-button>Open Theme</s-button>
             </a>
+          </div>
+        </s-card>
+      </s-section>
+
+      {/* Plan Usage Card */}
+      <s-section>
+        <s-card>
+          <div style={{ padding: '20px 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                  <path d="M2 7h16" stroke="currentColor" strokeWidth="1.5"/>
+                </svg>
+                <span style={{ fontWeight: 600, fontSize: '14px' }}>Your Plan</span>
+              </div>
+              <Link to="/app/billing" style={{ textDecoration: 'none' }}>
+                <button disabled={isNavigatingToBilling} style={{
+                  backgroundColor: 'white',
+                  color: '#303030',
+                  border: '1px solid #c9cccf',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  cursor: isNavigatingToBilling ? 'wait' : 'pointer',
+                  opacity: isNavigatingToBilling ? 0.7 : 1,
+                }}>
+                  {isNavigatingToBilling ? 'Loading...' : 'Manage Plan'}
+                </button>
+              </Link>
+            </div>
+
+            {/* Plan name + status */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 600 }}>{planUsage.planName}</span>
+              <s-badge tone={
+                planUsage.subscriptionStatus === 'active' ? 'success' :
+                planUsage.subscriptionStatus === 'trialing' ? 'info' : 'default'
+              }>
+                {planUsage.subscriptionStatus === 'active' ? 'Active' :
+                 planUsage.subscriptionStatus === 'trialing' ? 'Trial' :
+                 planUsage.subscriptionStatus === 'none' ? 'Free' : 'Inactive'}
+              </s-badge>
+            </div>
+
+            {/* Monthly usage */}
+            <div style={{ marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '13px', color: '#6b7177' }}>Orders used this month</span>
+                <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                  {planUsage.monthlyOrderCount} / {planUsage.planLimit === null ? 'Unlimited' : planUsage.planLimit.toLocaleString()}
+                </span>
+              </div>
+
+              {/* Progress bar (only for limited plans) */}
+              {planUsage.planLimit !== null && (
+                <div style={{
+                  width: '100%',
+                  height: '8px',
+                  backgroundColor: '#e3e3e3',
+                  borderRadius: '4px',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: `${Math.min(planUsage.usagePercentage, 100)}%`,
+                    height: '100%',
+                    backgroundColor:
+                      planUsage.usageStatus === 'exceeded' ? '#d72c0d' :
+                      planUsage.usageStatus === 'warning' ? '#ffc453' :
+                      '#2a9d5c',
+                    borderRadius: '4px',
+                    transition: 'width 0.3s ease',
+                  }} />
+                </div>
+              )}
+            </div>
+
+            {/* Usage note */}
+            <div style={{ fontSize: '12px', color: '#6b7177' }}>
+              {planUsage.planLimit === null
+                ? 'Unlimited orders on your current plan.'
+                : planUsage.usageStatus === 'exceeded'
+                ? 'You have exceeded your monthly order limit. Consider upgrading your plan.'
+                : planUsage.usageStatus === 'warning'
+                ? `${planUsage.usagePercentage}% used - approaching your monthly limit.`
+                : `${planUsage.usagePercentage}% used. The order limit resets on the 1st of each month.`
+              }
+            </div>
           </div>
         </s-card>
       </s-section>

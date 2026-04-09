@@ -1496,6 +1496,22 @@ export async function getDashboardStats(shopId) {
   };
 }
 
+/**
+ * Get monthly order count for a shop (1st of current month to now).
+ * Used for plan usage tracking.
+ */
+export async function getMonthlyOrderCount(shopId) {
+  const now = new Date();
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  return await prisma.order.count({
+    where: {
+      shopId,
+      createdAt: { gte: firstOfMonth },
+    },
+  });
+}
+
 // ============================================
 // BLOCKED USER / FRAUD PREVENTION FUNCTIONS
 // ============================================
