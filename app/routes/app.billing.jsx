@@ -180,13 +180,17 @@ export default function BillingPage() {
   // Check if switching to this plan is a downgrade that loses remaining paid time
   const isDowngradeWithRemainingTime = (plan) => {
     if (!subscription) return false;
-    // Must have remaining paid time (active with cancelAtPeriodEnd, or just active with a future period end)
-    const hasPaidTimeRemaining = subscription.status === 'active' && subscription.currentPeriodEnd && new Date(subscription.currentPeriodEnd) > new Date();
+    // Must be active with remaining paid time
+    const hasPaidTimeRemaining =
+      subscription.status === 'active' &&
+      subscription.currentPeriodEnd &&
+      new Date(subscription.currentPeriodEnd) > new Date();
     if (!hasPaidTimeRemaining) return false;
-    // Target plan must be cheaper than current plan
-    const currentPlanPrice = plans.find(p => p.id === subscription.planId)?.price || 0;
-    const targetPlanPrice = plan.price || 0;
-    return targetPlanPrice < currentPlanPrice;
+    // Use presentmentAmount from Mantle plan objects (plan.price doesn't exist)
+    const currentPlan = plans.find(p => p.id === subscription.planId);
+    const currentAmount = currentPlan?.presentmentAmount ?? 0;
+    const targetAmount = plan.presentmentAmount ?? 0;
+    return targetAmount < currentAmount;
   };
 
   const handlePlanSelect = (plan) => {
