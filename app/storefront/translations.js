@@ -267,5 +267,10 @@ export const fieldTranslations = {
 };
 
 export function t(language, key) {
+  if (language === 'bilingual') {
+    const en = translations.en[key] || key;
+    const ar = translations.ar[key];
+    return ar ? `${en} (${ar})` : en;
+  }
   return translations[language]?.[key] || translations.en[key] || key;
 }

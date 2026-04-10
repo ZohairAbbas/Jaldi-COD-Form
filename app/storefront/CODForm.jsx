@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
 import { getCurrencyCode, COUNTRIES } from '../lib/constants';
 import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } from './device-recognition';
-import { t } from './translations';
+import { t, fieldTranslations } from './translations';
 
 export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
   // Manual country selection state (for user override)
@@ -25,7 +25,15 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   
   // Language & RTL
   const lang = config.settings?.language || 'en';
-  const isRTL = config.settings?.enableRTL || lang === 'ar';
+  const isRTL = (config.settings?.enableRTL || lang === 'ar') && lang !== 'bilingual';
+
+  // Bilingual field label helper — appends Arabic inline when in bilingual mode
+  const getFieldLabel = (field) => {
+    if (lang !== 'bilingual') return field.label;
+    const enLabel = fieldTranslations.en[field.id]?.label || field.label;
+    const arLabel = fieldTranslations.ar[field.id]?.label;
+    return arLabel ? `${enLabel} ${arLabel}` : enLabel;
+  };
   const isSmartCheckout = config.settings?.enableSmartCheckout === true;
 
   const [formData, setFormData] = useState({
@@ -1402,7 +1410,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         <div key={field.id} style={{ marginBottom: '16px' }}>
           <div style={fieldRowStyle}>
             <label style={labelStyle}>
-              {field.label}
+              {getFieldLabel(field)}
             </label>
 
             {/* Input + Apply button row */}
@@ -1507,7 +1515,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           <div key={field.id} style={{ marginBottom: '0' }}>
             <div style={fieldRowStyle}>
               <label style={labelStyle}>
-                {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+                {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
               </label>
               <div style={{ flex: 1, position: 'relative' }}>
                 <div style={inputGroupStyle}>
@@ -1570,7 +1578,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             <div key={field.id} style={{ marginBottom: '0' }}>
               <div style={fieldRowStyle}>
                 <label style={labelStyle}>
-                  {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+                  {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
                 </label>
                 <div style={{ flex: 1 }}>
                   <div style={inputGroupStyle}>
@@ -1594,7 +1602,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           <div key={field.id} style={{ marginBottom: '0' }}>
             <div style={fieldRowStyle}>
               <label style={labelStyle}>
-                {field.label} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+                {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
               </label>
               <div style={{ flex: 1 }}>
                 <div style={inputGroupStyle}>
@@ -1843,7 +1851,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           letterSpacing: '0.5px',
           color: '#000',
         }}>
-          {config.formConfig.formTitle}
+          {lang === 'bilingual' && config.formConfig.formTitle === 'CASH ON DELIVERY'
+            ? 'CASH ON DELIVERY (الدفع عند الاستلام)'
+            : config.formConfig.formTitle}
         </h2>
       </div>
 
