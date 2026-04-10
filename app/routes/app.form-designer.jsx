@@ -53,8 +53,8 @@ export default function FormDesigner() {
   };
 
   const handleLanguageChange = (newLang) => {
-    setSettings((prev) => ({ ...prev, language: newLang }));
-    // Auto-translate field labels/placeholders
+    setSettings((prev) => ({ ...prev, language: newLang, ...(newLang === 'bilingual' ? { enableRTL: false } : {}) }));
+    // Auto-translate field labels/placeholders (skip for bilingual — both languages show at runtime)
     const langFields = fieldTranslations[newLang];
     if (langFields) {
       setFields((prev) =>
@@ -287,6 +287,7 @@ export default function FormDesigner() {
                     {[
                       { code: "en", label: "English", flag: "🇬🇧" },
                       { code: "ar", label: "العربية (Arabic)", flag: "🇸🇦" },
+                      { code: "bilingual", label: "Bilingual EN+AR", flag: "🌐" },
                     ].map((lang) => (
                       <button
                         key={lang.code}

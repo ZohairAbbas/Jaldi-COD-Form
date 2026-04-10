@@ -1,11 +1,18 @@
-import { t } from '../../storefront/translations';
+import { t, fieldTranslations } from '../../storefront/translations';
 
 export default function LivePreview({ formConfig, sections, fields, settings, currencySymbol = 'Rs.' }) {
   const visibleSections = sections.filter((s) => s.visible).sort((a, b) => a.order - b.order);
   const visibleFields = fields.filter((f) => f.visible).sort((a, b) => a.order - b.order);
 
   const lang = settings?.language || 'en';
-  const isRTL = settings?.enableRTL || lang === 'ar';
+  const isRTL = (settings?.enableRTL || lang === 'ar') && lang !== 'bilingual';
+
+  const getFieldLabel = (field) => {
+    if (lang !== 'bilingual') return field.label;
+    const enLabel = fieldTranslations.en[field.id]?.label || field.label;
+    const arLabel = fieldTranslations.ar[field.id]?.label;
+    return arLabel ? `${enLabel} ${arLabel}` : enLabel;
+  };
 
   const formStyle = {
     backgroundColor: formConfig.backgroundColor,
@@ -114,7 +121,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
         <div key={field.id} style={{ marginBottom: "16px" }}>
           <div style={fieldRowStyle}>
             <label style={labelStyle}>
-              {field.label}
+              {getFieldLabel(field)}
             </label>
             <div style={{ display: "flex", gap: "8px", flex: 1 }}>
               <div style={inputGroupStyle}>
@@ -159,7 +166,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           <div key={field.id} style={{ marginBottom: "0" }}>
             <div style={fieldRowStyle}>
               <label style={labelStyle}>
-                {field.label} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
+                {getFieldLabel(field)} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
               </label>
               <div style={{ flex: 1 }}>
                 <div style={inputGroupStyle}>
@@ -185,7 +192,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           <div key={field.id} style={{ marginBottom: "0" }}>
             <div style={fieldRowStyle}>
               <label style={labelStyle}>
-                {field.label} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
+                {getFieldLabel(field)} {field.required && <span style={{ color: "#EF4444" }}>*</span>}
               </label>
               <div style={{ flex: 1 }}>
                 <div style={inputGroupStyle}>
@@ -279,7 +286,11 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
 
   return (
     <div style={formStyle}>
-      <h2 style={{ marginTop: 0, marginBottom: "24px", fontWeight: "900" }}>{formConfig.formTitle}</h2>
+      <h2 style={{ marginTop: 0, marginBottom: "24px", fontWeight: "900" }}>
+        {lang === 'bilingual' && formConfig.formTitle === 'CASH ON DELIVERY'
+          ? 'CASH ON DELIVERY (الدفع عند الاستلام)'
+          : formConfig.formTitle}
+      </h2>
 
       {visibleSections.map((section) => {
         switch (section.type) {

@@ -253,6 +253,7 @@ export async function subscribeToPlan(shop, planId, sessionToken) {
         planId: subscribedPlanId,
         planName: subscribedPlanName,
         status: customer.subscription?.status || 'active',
+        cancelAtPeriodEnd: false,
         currentPeriodEnd: customer.subscription?.currentPeriodEnd
           ? new Date(customer.subscription.currentPeriodEnd)
           : null,
