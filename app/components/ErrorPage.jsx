@@ -54,7 +54,7 @@ export default function ErrorPage({ title, subtitle }) {
       {/* Buttons */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 32 }}>
         <button
-          onClick={() => { window.location.href = '/app'; }}
+          onClick={() => { history.back(); }}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -73,7 +73,7 @@ export default function ErrorPage({ title, subtitle }) {
             <path d="M1 7L7 1l6 6" stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M2 6v6h4V8h2v4h4V6" stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Go to Dashboard
+          Go Back
         </button>
       </div>
 

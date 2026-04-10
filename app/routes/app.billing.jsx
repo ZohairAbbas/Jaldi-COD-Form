@@ -4,8 +4,8 @@
  * Manage subscription, view plans, and handle billing
  */
 
-import { useLoaderData, Form, useActionData, redirect, useNavigation } from 'react-router';
-import { useEffect } from 'react';
+import { useLoaderData, Form, useActionData, redirect, useNavigation, useSubmit } from 'react-router';
+import { useEffect, useState, useRef } from 'react';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
 import { getOrCreateShop, getMonthlyOrderCount } from '../lib/db.server';
@@ -172,13 +172,66 @@ export default function BillingPage() {
     }
   }, [actionData]);
 
+  // Downgrade confirmation modal state
+  const submit = useSubmit();
+  const [showDowngradeModal, setShowDowngradeModal] = useState(false);
+  const [pendingDowngradePlan, setPendingDowngradePlan] = useState(null);
+
+  // Check if switching to this plan is a downgrade that loses remaining paid time
+  const isDowngradeWithRemainingTime = (plan) => {
+    if (!subscription) return false;
+    // Must have remaining paid time (active with cancelAtPeriodEnd, or just active with a future period end)
+    const hasPaidTimeRemaining = subscription.status === 'active' && subscription.currentPeriodEnd && new Date(subscription.currentPeriodEnd) > new Date();
+    if (!hasPaidTimeRemaining) return false;
+    // Target plan must be cheaper than current plan
+    const currentPlanPrice = plans.find(p => p.id === subscription.planId)?.price || 0;
+    const targetPlanPrice = plan.price || 0;
+    return targetPlanPrice < currentPlanPrice;
+  };
+
+  const handlePlanSelect = (plan) => {
+    if (isDowngradeWithRemainingTime(plan)) {
+      setPendingDowngradePlan(plan);
+      setShowDowngradeModal(true);
+    } else {
+      // Direct submit
+      const formData = new FormData();
+      formData.set('action', 'subscribe');
+      formData.set('planId', plan.id);
+      submit(formData, { method: 'post' });
+    }
+  };
+
+  const confirmDowngrade = () => {
+    if (pendingDowngradePlan) {
+      const formData = new FormData();
+      formData.set('action', 'subscribe');
+      formData.set('planId', pendingDowngradePlan.id);
+      submit(formData, { method: 'post' });
+      setShowDowngradeModal(false);
+      setPendingDowngradePlan(null);
+    }
+  };
+
+  const cancelDowngrade = () => {
+    setShowDowngradeModal(false);
+    setPendingDowngradePlan(null);
+  };
+
   // Get features for a plan - prefer local config, fall back to Mantle
   const getPlanDisplayFeatures = (plan) => {
     const localFeatures = PLAN_LIMITS[plan.name]?.features || [];
     return localFeatures.length > 0 ? localFeatures : (plan.features || []);
   };
 
-  const isCurrentPlan = (plan) => subscription?.planId === plan.id;
+  const isCurrentPlan = (plan) => {
+    // If merchant has an active/trialing paid subscription, match by planId
+    if (subscription?.planId && ['active', 'trialing'].includes(subscription.status)) {
+      return subscription.planId === plan.id;
+    }
+    // Otherwise (no subscription, cancelled, expired), Free plan is current
+    return plan.price === 0 || plan.name === 'Free';
+  };
 
   const progressBarColor =
     usageStatus === 'exceeded' ? '#d72c0d' :
@@ -415,10 +468,11 @@ export default function BillingPage() {
                       Current Plan
                     </div>
                   ) : (
-                    <Form method="post">
-                      <input type="hidden" name="action" value="subscribe" />
-                      <input type="hidden" name="planId" value={plan.id} />
-                      <button type="submit" disabled={submittingAction === 'subscribe' && submittingPlanId === plan.id} style={{
+                    <button
+                      type="button"
+                      onClick={() => handlePlanSelect(plan)}
+                      disabled={submittingAction === 'subscribe' && submittingPlanId === plan.id}
+                      style={{
                         width: '100%', padding: '10px 20px',
                         backgroundColor: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? '#505050' : '#303030',
                         color: '#fff',
@@ -426,10 +480,10 @@ export default function BillingPage() {
                         fontSize: '14px', fontWeight: 600,
                         cursor: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 'wait' : 'pointer',
                         opacity: (submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 0.7 : 1,
-                      }}>
-                        {(submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 'Processing...' : 'Select plan'}
-                      </button>
-                    </Form>
+                      }}
+                    >
+                      {(submittingAction === 'subscribe' && submittingPlanId === plan.id) ? 'Processing...' : 'Select plan'}
+                    </button>
                   )}
                 </div>
               );
@@ -459,6 +513,64 @@ export default function BillingPage() {
           </div>
         </s-card>
       </s-section>
+      {/* Downgrade Confirmation Modal */}
+      {showDowngradeModal && pendingDowngradePlan && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '12px',
+            padding: '24px', maxWidth: '480px', width: '90%',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2L1 18h18L10 2z" fill="#ffc453" stroke="#b98900" strokeWidth="1"/>
+                <path d="M10 8v4M10 14v1" stroke="#b98900" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <span style={{ fontSize: '16px', fontWeight: 600 }}>Downgrade to {pendingDowngradePlan.name}?</span>
+            </div>
+
+            <p style={{ fontSize: '14px', color: '#303030', lineHeight: '1.6', margin: '0 0 8px 0' }}>
+              Your current <strong>{subscription?.planName}</strong> plan is paid until{' '}
+              <strong>{new Date(subscription?.currentPeriodEnd).toLocaleDateString()}</strong>.
+            </p>
+            <p style={{ fontSize: '14px', color: '#6b7177', lineHeight: '1.6', margin: '0 0 20px 0' }}>
+              By switching to <strong>{pendingDowngradePlan.name}</strong> now, you will lose your remaining paid days and your order limit will change to{' '}
+              <strong>{PLAN_LIMITS[pendingDowngradePlan.name]?.monthlyOrderLimit === null ? 'Unlimited' : `${PLAN_LIMITS[pendingDowngradePlan.name]?.monthlyOrderLimit?.toLocaleString()} orders/month`}</strong>.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={cancelDowngrade}
+                style={{
+                  padding: '8px 16px', backgroundColor: 'white',
+                  color: '#303030', border: '1px solid #c9cccf',
+                  borderRadius: '8px', fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                Keep current plan
+              </button>
+              <button
+                type="button"
+                onClick={confirmDowngrade}
+                style={{
+                  padding: '8px 16px', backgroundColor: '#d72c0d',
+                  color: '#fff', border: 'none',
+                  borderRadius: '8px', fontSize: '14px', fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Downgrade now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </s-page>
   );
 }
