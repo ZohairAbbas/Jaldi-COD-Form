@@ -1,0 +1,52 @@
+=============================================================
+PREVENTIFY — SHOPIFY APP STORE LISTING COPY
+=============================================================
+
+APP NAME
+--------
+Preventify: COD Form & Upsells
+
+
+TAGLINE (~70 chars)
+-------------------
+Boost COD conversions with 1-Click form, Upsells, OTP & Fraud Protection
+
+
+DESCRIPTION HEADLINE
+--------------------
+Create a 1-Click COD Order Form with Upsells, Downsells & Fraud Protection to increase conversions and AOV
+
+
+DESCRIPTION PARAGRAPH
+---------------------
+With Preventify, customers order instantly using a 1-Click Cash on Delivery form — as a popup or embedded on the page — without going through Shopify Checkout. Build customizable COD forms with Pre-purchase Upsells, One-Tick Upsells, Post-purchase Upsells, Downsells, and Quantity Bundles to increase AOV. Reduce fake orders with OTP phone verification via SMS or WhatsApp. Track events with Facebook, TikTok, and Snapchat pixels. Recover lost sales with abandoned checkout tracking. Multi-currency support via Shopify Markets and Bucks. Optimized for Pakistan, UAE, Saudi Arabia, and the wider South Asia & Middle East region.
+
+
+FEATURE BULLETS (5)
+-------------------
+• Fully customizable COD order form (Popup/Embedded) with multi-currency & RTL support
+• Pre-purchase, Post-purchase & One-Tick Upsells, Downsells & Quantity Bundles
+• Reduce fake orders with OTP phone verification via SMS & WhatsApp
+• Track events with Facebook, TikTok & Snapchat pixels + server-side Conversions API
+• Fraud protection with buyer risk scoring, device fingerprinting & blocklist management
+
+
+WORKS WITH
+----------
+Shopify Admin, Pumper Bundles, Bundler App, Shopify Markets, Bucks
+
+
+CATEGORIES
+----------
+• Pay later
+• Upsell and cross-sell
+
+
+SEO KEYWORDS (naturally embedded in copy)
+-----------------------------------------
+COD order form, Cash on Delivery, 1-Click checkout, Upsells, Downsells,
+OTP verification, fake order prevention, COD Pakistan, COD UAE, COD Saudi Arabia,
+AOV, abandoned checkout, Facebook pixel, TikTok pixel, Snapchat pixel,
+multi-currency, Shopify Markets, fraud protection, RTL support
+
+=============================================================
