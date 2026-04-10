@@ -509,7 +509,7 @@ async function handleSubscriptionCancellation(data) {
 
   await prisma.subscription.update({
     where: { shopId: shop.id },
-    data: { status: 'cancelled' },
+    data: { status: 'cancelled', planId: null, planName: null },
   });
 }
 
@@ -524,7 +524,7 @@ async function handleSubscriptionExpiration(data) {
 
   await prisma.subscription.update({
     where: { shopId: shop.id },
-    data: { status: 'expired' },
+    data: { status: 'expired', planId: null, planName: null },
   });
 }
 

@@ -1,10 +1,11 @@
-import { Outlet, useLoaderData, useRouteError, useNavigation } from "react-router";
+import { Outlet, useLoaderData, useRouteError, useNavigation, isRouteErrorResponse } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import ErrorPage from "../components/ErrorPage";
 import { getOrCreateShop, getMonthlyOrderCount } from "../lib/db.server";
 import { getSubscription } from "../lib/mantle.server";
-import { getPlanLimit, getUsagePercentage, getUsageStatus } from "../lib/plan-limits";
+import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import MixpanelProvider from "../components/MixpanelProvider";
 import BillingBanner from "../components/BillingBanner";
 
@@ -17,7 +18,7 @@ export const loader = async ({ request }) => {
 
   // Compute plan usage for billing banner
   const monthlyOrderCount = await getMonthlyOrderCount(shop.id);
-  const planName = subscription?.planName || 'Free';
+  const planName = getEffectivePlanName(subscription);
   const planLimit = getPlanLimit(planName);
 
   return {
@@ -83,7 +84,12 @@ export default function App() {
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  if (isRouteErrorResponse(error)) {
+    if (error.status === 404) return <ErrorPage title="Page Not Found" subtitle="The page you're looking for doesn't exist or has been moved." />;
+    if (error.status === 403) return <ErrorPage title="Access Denied" subtitle="You don't have permission to view this page." />;
+  }
+  return boundary.error(error);
 }
 
 export const headers = (headersArgs) => {

@@ -3,7 +3,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getDashboardStats, getMonthlyOrderCount } from "../lib/db.server";
 import { getSubscription } from "../lib/mantle.server";
-import { getPlanLimit, getUsagePercentage, getUsageStatus } from "../lib/plan-limits";
+import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import { getCurrencyCode } from "../lib/constants";
 import { useState } from "react";
 
@@ -113,7 +113,7 @@ export const loader = async ({ request }) => {
   // Fetch subscription and monthly usage for plan card
   const subscription = await getSubscription(shop.id);
   const monthlyOrderCount = await getMonthlyOrderCount(shop.id);
-  const currentPlanName = subscription?.planName || 'Free';
+  const currentPlanName = getEffectivePlanName(subscription);
   const planLimit = getPlanLimit(currentPlanName);
 
   return {

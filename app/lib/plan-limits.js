@@ -80,3 +80,14 @@ export function getUsageStatus(currentCount, limit) {
 export function getPlanFeatures(planName) {
   return PLAN_LIMITS[planName]?.features ?? [];
 }
+
+/**
+ * Get the effective plan name based on subscription status.
+ * Treats cancelled/expired subscriptions as Free plan.
+ */
+export function getEffectivePlanName(subscription) {
+  if (!subscription) return DEFAULT_PLAN_NAME;
+  const { status, planName } = subscription;
+  if (['cancelled', 'expired'].includes(status)) return DEFAULT_PLAN_NAME;
+  return planName || DEFAULT_PLAN_NAME;
+}

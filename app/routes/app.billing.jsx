@@ -19,7 +19,7 @@ import {
 } from '../lib/mantle.server';
 import { trackServerEvent } from '../lib/mixpanel.server';
 import { BILLING_EVENTS } from '../lib/analytics-events';
-import { PLAN_LIMITS, getPlanLimit, getUsagePercentage, getUsageStatus } from '../lib/plan-limits';
+import { PLAN_LIMITS, getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from '../lib/plan-limits';
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -54,7 +54,7 @@ export const loader = async ({ request }) => {
 
   // Get monthly usage
   const monthlyOrderCount = await getMonthlyOrderCount(shop.id);
-  const currentPlanName = subscription?.planName || 'Free';
+  const currentPlanName = getEffectivePlanName(subscription);
   const planLimit = getPlanLimit(currentPlanName);
 
   // Track page view
@@ -243,7 +243,7 @@ export default function BillingPage() {
                 )}
                 {subscription?.cancelAtPeriodEnd && (
                   <div style={{ fontSize: '13px', color: '#d72c0d', marginTop: '4px' }}>
-                    Subscription will cancel on {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                    Subscription will cancel on {new Date(subscription.currentPeriodEnd).toLocaleDateString()}. You will be moved to the Free plan after this date.
                   </div>
                 )}
               </div>
