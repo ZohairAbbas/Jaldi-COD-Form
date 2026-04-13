@@ -36,7 +36,7 @@ export async function createWhatsAppLoginSession(phone) {
     },
   });
 
-  if (recentSessions >= 5) {
+  if (recentSessions >= 15) {
     throw new Error("Too many verification requests. Please try again later.");
   }
 
