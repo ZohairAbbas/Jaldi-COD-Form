@@ -18,7 +18,7 @@ async function fetchShopInfo(shopifyDomain, accessToken) {
           'X-Shopify-Access-Token': accessToken,
         },
         body: JSON.stringify({
-          query: `{ shop { name billingAddress { countryCodeV2 } shopAddress { countryCodeV2 } } }`,
+          query: `{ shop { name billingAddress { countryCodeV2 } } }`,
         }),
       }
     );
@@ -30,9 +30,7 @@ async function fetchShopInfo(shopifyDomain, accessToken) {
 
     const data = await response.json();
     const shopData = data?.data?.shop;
-    // shopAddress is the newer field (replaces deprecated billingAddress)
-    const shopifyCountryCode = shopData?.shopAddress?.countryCodeV2
-      || shopData?.billingAddress?.countryCodeV2;
+    const shopifyCountryCode = shopData?.billingAddress?.countryCodeV2;
     const name = shopData?.name || null;
 
     if (shopifyCountryCode) {
