@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLoaderData, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -128,7 +128,7 @@ export const loader = async ({ request }) => {
     }),
     // All shops
     db.shop.findMany({
-      select: { id: true, shopifyDomain: true, createdAt: true, subscription: { select: { planName: true, status: true } } },
+      select: { id: true, shopifyDomain: true, name: true, createdAt: true, subscription: { select: { planName: true, status: true } } },
     }),
     // Settings for all shops
     db.settings.findMany({
@@ -337,7 +337,7 @@ export const loader = async ({ request }) => {
   const lastOrderMap = Object.fromEntries(lastOrderByShop.map(r => [r.shopId, r._max.createdAt]));
   const aovByShopMap = Object.fromEntries(aovByShop.map(r => [r.shopId, r._avg.total || 0]));
   const cancelledByShopMap = Object.fromEntries(cancelledByShop.map(r => [r.shopId, r._count.id]));
-  const last7Map = Object.fromEntries(ordersLast7ByShop.map(r => [r.shopId, r._count.id]));
+  const last7Set = new Set(ordersLast7ByShop.map(r => r.shopId));
 
   // Payment method per shop map: shopId -> { cod: N, card: N }
   const paymentByShopMap = {};
@@ -373,7 +373,7 @@ export const loader = async ({ request }) => {
       ? (Date.now() - new Date(lastOrder).getTime()) / (1000 * 60 * 60 * 24)
       : 999;
     const hasRecentOrders = daysSinceLastOrder <= 30 ? 1 : 0;
-    const hasVeryRecentOrders = daysSinceLastOrder <= 7 ? 1 : 0;
+    const hasVeryRecentOrders = last7Set.has(shopId) ? 1 : 0;
     const featuresRatio = getFeaturesCount(shopId) / TOTAL_FEATURES;
     const cancelledCount = cancelledByShopMap[shopId] || 0;
     const noCancellations = orderCount > 0 && cancelledCount === 0 ? 0.5 : 0;
@@ -388,6 +388,7 @@ export const loader = async ({ request }) => {
     return {
       shopId: row.shopId,
       shopifyDomain: shop.shopifyDomain || "Unknown",
+      shopName: shop.name || null,
       planName: shop.subscription?.planName || "Free",
       planStatus: shop.subscription?.status || "none",
       orderCount,
@@ -408,6 +409,7 @@ export const loader = async ({ request }) => {
       rows.push({
         shopId: shop.id,
         shopifyDomain: shop.shopifyDomain,
+        shopName: shop.name || null,
         planName: shop.subscription?.planName || "Free",
         planStatus: shop.subscription?.status || "none",
         orderCount: 0,
@@ -430,6 +432,7 @@ export const loader = async ({ request }) => {
     return {
       shopId: shop.id,
       shopifyDomain: shop.shopifyDomain,
+      shopName: shop.name || null,
       features: {
         otp: !!s.enableOTP,
         bundles: !!(bundlesMap[shop.id]),
@@ -567,6 +570,64 @@ function Dot({ on }) {
       backgroundColor: on ? "#10b981" : "#e5e7eb",
       display: "inline-block",
     }} />
+  );
+}
+
+// Wraps a horizontally-scrollable table with a mirrored scrollbar on top
+function StickyScrollTable({ children }) {
+  const topBarRef = useRef(null);
+  const innerRef = useRef(null);
+  const phantomRef = useRef(null);
+  const isSyncing = useRef(false);
+
+  useEffect(() => {
+    const topBar = topBarRef.current;
+    const inner = innerRef.current;
+    const phantom = phantomRef.current;
+    if (!topBar || !inner || !phantom) return;
+
+    // Set phantom width to match scrollable content
+    const syncPhantomWidth = () => {
+      phantom.style.width = inner.scrollWidth + "px";
+    };
+    syncPhantomWidth();
+
+    const onTopScroll = () => {
+      if (isSyncing.current) return;
+      isSyncing.current = true;
+      inner.scrollLeft = topBar.scrollLeft;
+      isSyncing.current = false;
+    };
+    const onInnerScroll = () => {
+      if (isSyncing.current) return;
+      isSyncing.current = true;
+      topBar.scrollLeft = inner.scrollLeft;
+      isSyncing.current = false;
+    };
+
+    topBar.addEventListener("scroll", onTopScroll);
+    inner.addEventListener("scroll", onInnerScroll);
+    const ro = new ResizeObserver(syncPhantomWidth);
+    ro.observe(inner);
+
+    return () => {
+      topBar.removeEventListener("scroll", onTopScroll);
+      inner.removeEventListener("scroll", onInnerScroll);
+      ro.disconnect();
+    };
+  }, []);
+
+  return (
+    <>
+      {/* Top scrollbar mirror */}
+      <div ref={topBarRef} style={{ overflowX: "auto", overflowY: "hidden", height: "12px", marginBottom: "2px" }}>
+        <div ref={phantomRef} style={{ height: "1px" }} />
+      </div>
+      {/* Actual scrollable content */}
+      <div ref={innerRef} style={{ overflowX: "auto" }}>
+        {children}
+      </div>
+    </>
   );
 }
 
@@ -925,7 +986,7 @@ export default function MonitorPage() {
 
       {/* Feature Adoption Heatmap section */}
       <Section title="Feature Adoption Heatmap" subtitle="Which features each store has enabled — sorted by feature count">
-        <div style={{ overflowX: "auto" }}>
+        <StickyScrollTable>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
             <thead>
               <tr style={{ backgroundColor: "#f9fafb" }}>
@@ -947,8 +1008,9 @@ export default function MonitorPage() {
                 const enabledCount = Object.values(row.features).filter(Boolean).length;
                 return (
                   <tr key={row.shopId} style={{ borderBottom: i < heatmapRows.length - 1 ? "1px solid #f3f4f6" : "none" }}>
-                    <td style={{ padding: "8px 12px", color: "#374151", fontWeight: "500", whiteSpace: "nowrap", position: "sticky", left: 0, backgroundColor: "white", zIndex: 1 }}>
-                      {row.shopifyDomain.replace(".myshopify.com", "")}
+                    <td style={{ padding: "8px 12px", whiteSpace: "nowrap", position: "sticky", left: 0, backgroundColor: "white", zIndex: 1 }}>
+                      <div style={{ fontWeight: "500", color: "#374151" }}>{row.shopName || row.shopifyDomain.replace(".myshopify.com", "")}</div>
+                      {row.shopName && <div style={{ fontSize: "10px", color: "#9ca3af" }}>{row.shopifyDomain.replace(".myshopify.com", "")}</div>}
                     </td>
                     {featureCols.map(col => (
                       <td key={col.key} style={{ padding: "8px 10px", textAlign: "center" }}>
@@ -987,7 +1049,7 @@ export default function MonitorPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </StickyScrollTable>
       </Section>
 
       {/* Per-store table */}
@@ -1000,7 +1062,7 @@ export default function MonitorPage() {
             Stores ({rows.length}) — {periodLabel}
           </span>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <StickyScrollTable>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead>
               <tr style={{ backgroundColor: "#f9fafb" }}>
@@ -1033,8 +1095,9 @@ export default function MonitorPage() {
                         title: `Score: ${row.healthScore.toFixed(1)}`,
                       }} title={`Health score: ${row.healthScore.toFixed(1)}`} />
                     </td>
-                    <td style={{ padding: "12px 16px", color: "#111827", fontWeight: "500", whiteSpace: "nowrap" }}>
-                      {row.shopifyDomain}
+                    <td style={{ padding: "12px 16px", whiteSpace: "nowrap" }}>
+                      <div style={{ fontWeight: "500", color: "#111827" }}>{row.shopName || row.shopifyDomain}</div>
+                      {row.shopName && <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "1px" }}>{row.shopifyDomain}</div>}
                     </td>
                     <td style={{ padding: "12px 16px", color: "#374151" }}>{row.planName}</td>
                     <td style={{ padding: "12px 16px" }}>
@@ -1088,7 +1151,7 @@ export default function MonitorPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </StickyScrollTable>
       </div>
     </s-page>
   );

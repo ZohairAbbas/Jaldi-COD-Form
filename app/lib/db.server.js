@@ -7,7 +7,7 @@ import { CORE_FIELD_IDS, COUNTRIES, mapShopifyCountryCode } from "./constants.js
  * @param {string} accessToken - Shopify Admin API access token
  * @returns {string} Our internal country code (e.g., "GBR", "PAK")
  */
-async function fetchShopCountry(shopifyDomain, accessToken) {
+async function fetchShopInfo(shopifyDomain, accessToken) {
   try {
     const response = await fetch(
       `https://${shopifyDomain}/admin/api/2025-01/graphql.json`,
@@ -18,31 +18,33 @@ async function fetchShopCountry(shopifyDomain, accessToken) {
           'X-Shopify-Access-Token': accessToken,
         },
         body: JSON.stringify({
-          query: `{ shop { billingAddress { countryCodeV2 } shopAddress { countryCodeV2 } } }`,
+          query: `{ shop { name billingAddress { countryCodeV2 } shopAddress { countryCodeV2 } } }`,
         }),
       }
     );
 
     if (!response.ok) {
-      console.error(`[Preventify] Failed to fetch shop country: ${response.status}`);
-      return 'PAK';
+      console.error(`[Preventify] Failed to fetch shop info: ${response.status}`);
+      return { country: 'PAK', name: null };
     }
 
     const data = await response.json();
+    const shopData = data?.data?.shop;
     // shopAddress is the newer field (replaces deprecated billingAddress)
-    const shopifyCountryCode = data?.data?.shop?.shopAddress?.countryCodeV2
-      || data?.data?.shop?.billingAddress?.countryCodeV2;
+    const shopifyCountryCode = shopData?.shopAddress?.countryCodeV2
+      || shopData?.billingAddress?.countryCodeV2;
+    const name = shopData?.name || null;
 
     if (shopifyCountryCode) {
       const mapped = mapShopifyCountryCode(shopifyCountryCode);
       console.log(`[Preventify] Detected shop country: ${shopifyCountryCode} -> ${mapped}`);
-      return mapped;
+      return { country: mapped, name };
     }
 
-    return 'PAK';
+    return { country: 'PAK', name };
   } catch (error) {
-    console.error('[Preventify] Error fetching shop country:', error.message);
-    return 'PAK';
+    console.error('[Preventify] Error fetching shop info:', error.message);
+    return { country: 'PAK', name: null };
   }
 }
 
@@ -60,14 +62,15 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
   });
 
   if (!shop) {
-    // Detect the shop's actual country from Shopify Admin API
-    const detectedCountry = await fetchShopCountry(shopifyDomain, accessToken);
+    // Detect the shop's actual country and name from Shopify Admin API
+    const { country: detectedCountry, name: shopName } = await fetchShopInfo(shopifyDomain, accessToken);
 
     try {
       shop = await prisma.shop.create({
         data: {
           shopifyDomain,
           accessToken,
+          name: shopName,
           country: detectedCountry,
           setupProgress: {
             step1Completed: false,
@@ -117,20 +120,23 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       });
     }
 
-    // Auto-detect country for shops still using the old PAK default
-    if (shop.country === 'PAK') {
-      const detectedCountry = await fetchShopCountry(shopifyDomain, accessToken);
-      if (detectedCountry !== 'PAK') {
+    // Auto-detect country and name for shops that need it
+    if (shop.country === 'PAK' || !shop.name) {
+      const { country: detectedCountry, name: shopName } = await fetchShopInfo(shopifyDomain, accessToken);
+      const updateData = {};
+      if (detectedCountry !== 'PAK') updateData.country = detectedCountry;
+      if (shopName && !shop.name) updateData.name = shopName;
+      if (Object.keys(updateData).length > 0) {
         shop = await prisma.shop.update({
           where: { shopifyDomain },
-          data: { country: detectedCountry },
+          data: updateData,
           include: {
             settings: true,
             formConfig: true,
             upsells: true,
           },
         });
-        console.log(`[Preventify] Updated ${shopifyDomain} country from PAK to ${detectedCountry}`);
+        console.log(`[Preventify] Updated ${shopifyDomain}:`, updateData);
       }
     }
 
