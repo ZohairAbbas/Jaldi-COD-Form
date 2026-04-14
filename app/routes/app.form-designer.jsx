@@ -47,6 +47,7 @@ export default function FormDesigner() {
   const [editingField, setEditingField] = useState(null);
   const [selectedFieldCategory, setSelectedFieldCategory] = useState(null);
   const [selectedShopifyFieldId, setSelectedShopifyFieldId] = useState(null);
+  const [selectedPresetType, setSelectedPresetType] = useState(null);
 
   const handleSettingsUpdate = (updates) => {
     setSettings((prev) => ({ ...prev, ...updates }));
@@ -116,9 +117,10 @@ export default function FormDesigner() {
     setFieldTypeModalOpen(true);
   };
 
-  const handleFieldTypeSelect = (category, shopifyFieldId = null) => {
+  const handleFieldTypeSelect = (category, shopifyFieldId = null, presetType = null) => {
     setSelectedFieldCategory(category);
     setSelectedShopifyFieldId(shopifyFieldId);
+    setSelectedPresetType(presetType);
     setFieldTypeModalOpen(false);
     setIsModalOpen(true);
   };
@@ -552,10 +554,12 @@ export default function FormDesigner() {
           setIsModalOpen(false);
           setSelectedFieldCategory(null);
           setSelectedShopifyFieldId(null);
+          setSelectedPresetType(null);
         }}
         onSave={handleSaveField}
         fieldCategory={selectedFieldCategory}
         shopifyFieldId={selectedShopifyFieldId}
+        presetType={selectedPresetType}
       />
     </>
   );

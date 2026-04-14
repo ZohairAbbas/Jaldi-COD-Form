@@ -7,7 +7,8 @@ export default function FieldConfigModal({
   onClose,
   onSave,
   fieldCategory,
-  shopifyFieldId
+  shopifyFieldId,
+  presetType
 }) {
   const [formData, setFormData] = useState({
     id: "",
@@ -48,7 +49,7 @@ export default function FieldConfigModal({
       // Adding new custom field
       setFormData({
         id: `custom-${Date.now()}`,
-        type: "text",
+        type: presetType || "text",
         label: "",
         placeholder: "",
         required: false,
@@ -58,7 +59,15 @@ export default function FieldConfigModal({
         order: 999,
         fieldCategory: "custom",
         isCore: false,
-        isDeletable: true
+        isDeletable: true,
+        ...(presetType === "whatsapp" && {
+          whatsappNumber: "",
+          whatsappMessage: "Hello! I would like to buy this product: {url} Can you help me?",
+          whatsappBgColor: "#25d366",
+          whatsappTextColor: "#ffffff",
+          whatsappFontSize: 16,
+          label: "Order by WhatsApp",
+        }),
       });
     } else {
       // Reset for new field (fallback)
@@ -77,7 +86,7 @@ export default function FieldConfigModal({
         isDeletable: true
       });
     }
-  }, [field, isOpen, fieldCategory, shopifyFieldId]);
+  }, [field, isOpen, fieldCategory, shopifyFieldId, presetType]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -158,6 +167,7 @@ export default function FieldConfigModal({
                     <option value="quantity">Quantity Selector</option>
                     <option value="title">Title/Text</option>
                     <option value="image">Image/GIF</option>
+                    <option value="whatsapp">WhatsApp Button</option>
                   </select>
                 </s-stack>
               )}
@@ -231,19 +241,96 @@ export default function FieldConfigModal({
                 </s-stack>
               )}
 
-              {/* Required Checkbox - Disabled for core fields */}
-              <s-stack direction="inline" gap="small" align="center">
-                <input
-                  type="checkbox"
-                  checked={formData.required}
-                  onChange={(e) => handleChange("required", e.target.checked)}
-                  id="required-checkbox"
-                  disabled={formData.isCore}
-                />
-                <label htmlFor="required-checkbox">
-                  <s-text>Required field {formData.isCore && "(Cannot be changed for core fields)"}</s-text>
-                </label>
-              </s-stack>
+              {/* WhatsApp Button Fields */}
+              {formData.type === "whatsapp" && (
+                <>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">WhatsApp Number</s-text>
+                    <input
+                      type="text"
+                      value={formData.whatsappNumber || ""}
+                      onChange={(e) => handleChange("whatsappNumber", e.target.value)}
+                      placeholder="+1234567890"
+                      style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%" }}
+                    />
+                    <s-text tone="subdued">Include country code (e.g. +1234567890)</s-text>
+                  </s-stack>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">WhatsApp Message</s-text>
+                    <textarea
+                      value={formData.whatsappMessage || ""}
+                      onChange={(e) => handleChange("whatsappMessage", e.target.value)}
+                      placeholder="Hello! I would like to buy this product: {url} Can you help me?"
+                      rows={3}
+                      style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%", resize: "vertical" }}
+                    />
+                    <s-text tone="subdued">Use {"{url}"} to insert the customer's page URL</s-text>
+                  </s-stack>
+                  <s-stack direction="inline" gap="base">
+                    <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                      <s-text variant="heading-sm">Background Color</s-text>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <input
+                          type="color"
+                          value={formData.whatsappBgColor || "#25d366"}
+                          onChange={(e) => handleChange("whatsappBgColor", e.target.value)}
+                          style={{ width: "40px", height: "32px", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer" }}
+                        />
+                        <input
+                          type="text"
+                          value={formData.whatsappBgColor || "#25d366"}
+                          onChange={(e) => handleChange("whatsappBgColor", e.target.value)}
+                          style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", flex: 1 }}
+                        />
+                      </div>
+                    </s-stack>
+                    <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                      <s-text variant="heading-sm">Text Color</s-text>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <input
+                          type="color"
+                          value={formData.whatsappTextColor || "#ffffff"}
+                          onChange={(e) => handleChange("whatsappTextColor", e.target.value)}
+                          style={{ width: "40px", height: "32px", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer" }}
+                        />
+                        <input
+                          type="text"
+                          value={formData.whatsappTextColor || "#ffffff"}
+                          onChange={(e) => handleChange("whatsappTextColor", e.target.value)}
+                          style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", flex: 1 }}
+                        />
+                      </div>
+                    </s-stack>
+                  </s-stack>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">Font Size (px)</s-text>
+                    <input
+                      type="number"
+                      value={formData.whatsappFontSize || 16}
+                      onChange={(e) => handleChange("whatsappFontSize", parseInt(e.target.value) || 16)}
+                      min={10}
+                      max={32}
+                      style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100px" }}
+                    />
+                  </s-stack>
+                </>
+              )}
+
+              {/* Required Checkbox - Disabled for core fields, hidden for whatsapp */}
+              {formData.type !== "whatsapp" && (
+                <s-stack direction="inline" gap="small" align="center">
+                  <input
+                    type="checkbox"
+                    checked={formData.required}
+                    onChange={(e) => handleChange("required", e.target.checked)}
+                    id="required-checkbox"
+                    disabled={formData.isCore}
+                  />
+                  <label htmlFor="required-checkbox">
+                    <s-text>Required field {formData.isCore && "(Cannot be changed for core fields)"}</s-text>
+                  </label>
+                </s-stack>
+              )}
 
               {/* Visible Checkbox */}
               <s-stack direction="inline" gap="small" align="center">
