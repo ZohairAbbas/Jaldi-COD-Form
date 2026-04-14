@@ -116,9 +116,10 @@ export async function verifyWhatsAppLoginMessage(senderPhone) {
   // Mark buyer as globally verified + whatsappVerified
   try {
     await markBuyerVerified(normalized);
-    await prisma.globalBuyer.update({
+    await prisma.globalBuyer.upsert({
       where: { phone: normalized },
-      data: { whatsappVerified: true },
+      update: { whatsappVerified: true },
+      create: { phone: normalized, whatsappVerified: true },
     });
   } catch (err) {
     // Buyer might not exist yet — that's OK
