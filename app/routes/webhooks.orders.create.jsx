@@ -5,6 +5,25 @@ export const action = async ({ request }) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
 
   try {
+    // Mark abandoned cart as recovered if this order completed a draft order invoice
+    // Runs for ALL orders (before the card-checkout filter) to catch COD recoveries too
+    if (payload.draft_order_id) {
+      const draftOrderGid = `gid://shopify/DraftOrder/${payload.draft_order_id}`;
+      const abandonedCart = await db.abandonedCart.findFirst({
+        where: { shopifyDraftOrderId: draftOrderGid },
+      });
+      if (abandonedCart && !abandonedCart.recovered) {
+        await db.abandonedCart.update({
+          where: { id: abandonedCart.id },
+          data: {
+            recovered: true,
+            recoveredAt: new Date(),
+            recoveredOrderId: String(payload.id),
+          },
+        });
+      }
+    }
+
     // Check if order has our cart attributes indicating it came from Pay with Card
     const noteAttributes = payload.note_attributes || [];
     const preventifySource = noteAttributes.find(

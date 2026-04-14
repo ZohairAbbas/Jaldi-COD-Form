@@ -10,5 +10,22 @@ export const action = async ({ request }) => {
     await db.session.deleteMany({ where: { shop } });
   }
 
+  // Mark all unprocessed abandoned carts so the cron stops retrying them
+  try {
+    const shopData = await db.shop.findUnique({ where: { shopifyDomain: shop } });
+    if (shopData) {
+      await db.abandonedCart.updateMany({
+        where: { shopId: shopData.id, shopifyDraftOrderId: null },
+        data: {
+          shopifyDraftOrderId: "APP_UNINSTALLED",
+          lastError: "App uninstalled",
+          lastFailedAt: new Date(),
+        },
+      });
+    }
+  } catch (err) {
+    console.error("Failed to mark abandoned carts on uninstall:", err.message);
+  }
+
   return new Response();
 };

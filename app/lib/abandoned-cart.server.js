@@ -1,3 +1,5 @@
+import { isValidPhoneNumber } from 'libphonenumber-js';
+
 // Validate email format
 function isValidEmail(email) {
   if (!email || typeof email !== 'string') return false;
@@ -5,11 +7,14 @@ function isValidEmail(email) {
   return emailRegex.test(email.trim());
 }
 
-// Validate phone - lenient validation (minimum 7 digits after stripping non-digits)
+// Validate phone using libphonenumber-js for proper E.164 validation
 function isValidPhone(phone) {
   if (!phone || typeof phone !== 'string') return false;
-  const digitsOnly = phone.replace(/\D/g, '');
-  return digitsOnly.length >= 7;
+  try {
+    return isValidPhoneNumber(phone);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -107,6 +112,25 @@ export async function createDraftOrderForAbandonedCart(admin, abandonedCart, sho
     }
 
     const response = await admin.graphql(mutation, { variables });
+
+    // Detect invalid API token (uninstalled shop)
+    if (response.status === 401) {
+      return {
+        success: false,
+        invalidToken: true,
+        error: "401 Unauthorized: Invalid API token",
+      };
+    }
+
+    // Guard against non-JSON responses (Shopify 5xx, rate limit HTML pages)
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      return {
+        success: false,
+        error: `Non-JSON response from Shopify (${response.status})`,
+      };
+    }
+
     const data = await response.json();
 
     if (data.errors) {

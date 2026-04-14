@@ -206,6 +206,7 @@ async function handleCreateDraftOrders(request) {
         where: {
           shopifyDraftOrderId: null,
           recovered: false,
+          retryCount: { lt: 3 },
         },
         include: { shop: true },
       });
@@ -276,22 +277,54 @@ async function handleCreateDraftOrders(request) {
           results.skipped++;
           results.byShop[shopDomain].skipped++;
         } else {
+          const errorMsg = draftOrderResult.error || "Unknown error";
+
+          if (draftOrderResult.invalidToken === true) {
+            // Mark ALL pending carts for this shop — invalid/revoked access token
+            await db.abandonedCart.updateMany({
+              where: { shopId: cart.shopId, shopifyDraftOrderId: null },
+              data: {
+                shopifyDraftOrderId: "INVALID_TOKEN",
+                lastError: errorMsg,
+                lastFailedAt: new Date(),
+              },
+            });
+          } else {
+            await db.abandonedCart.update({
+              where: { id: cart.id },
+              data: {
+                retryCount: { increment: 1 },
+                lastFailedAt: new Date(),
+                lastError: errorMsg,
+              },
+            });
+          }
+
           results.failed++;
           results.byShop[shopDomain].failed++;
           results.errors.push({
             cartId: cart.id,
             shop: shopDomain,
-            error: draftOrderResult.error,
+            error: errorMsg,
           });
         }
       } catch (error) {
         console.error(`Failed to create draft order for cart ${cart.id}:`, error);
+        const errorMsg = error.message || "Exception during draft order creation";
+        await db.abandonedCart.update({
+          where: { id: cart.id },
+          data: {
+            retryCount: { increment: 1 },
+            lastFailedAt: new Date(),
+            lastError: errorMsg,
+          },
+        });
         results.failed++;
         results.byShop[shopDomain].failed++;
         results.errors.push({
           cartId: cart.id,
           shop: shopDomain,
-          error: error.message,
+          error: errorMsg,
         });
       }
     }
@@ -380,40 +413,29 @@ async function handleSessionTrack(request) {
     const validEmail = isValidEmail(email) ? email.trim() : null;
     const validPhone = isValidPhone(phone) ? phone.trim() : null;
 
-    const existingSession = await db.orderSession.findUnique({
+    await db.orderSession.upsert({
       where: { sessionId },
+      update: {
+        userEmail: validEmail || undefined,
+        userPhone: validPhone || undefined,
+        cartItems: JSON.stringify(cartItems),
+        totalAmount: totalAmount || 0,
+        formData: formData ? JSON.stringify(formData) : undefined,
+        lastActivityAt: new Date(),
+      },
+      create: {
+        shopId: shopData.id,
+        sessionId,
+        userEmail: validEmail,
+        userPhone: validPhone,
+        cartItems: JSON.stringify(cartItems),
+        totalAmount: totalAmount || 0,
+        formData: formData ? JSON.stringify(formData) : null,
+        status: "active",
+      },
     });
 
-    if (existingSession) {
-      await db.orderSession.update({
-        where: { sessionId },
-        data: {
-          userEmail: validEmail || existingSession.userEmail,
-          userPhone: validPhone || existingSession.userPhone,
-          cartItems: JSON.stringify(cartItems),
-          totalAmount: totalAmount || 0,
-          formData: formData ? JSON.stringify(formData) : existingSession.formData,
-          lastActivityAt: new Date(),
-        },
-      });
-
-      return Response.json({ success: true, action: "updated" });
-    } else {
-      await db.orderSession.create({
-        data: {
-          shopId: shopData.id,
-          sessionId,
-          userEmail: validEmail,
-          userPhone: validPhone,
-          cartItems: JSON.stringify(cartItems),
-          totalAmount: totalAmount || 0,
-          formData: formData ? JSON.stringify(formData) : null,
-          status: "active",
-        },
-      });
-
-      return Response.json({ success: true, action: "created" });
-    }
+    return Response.json({ success: true });
   } catch (error) {
     console.error("Session tracking error:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });
