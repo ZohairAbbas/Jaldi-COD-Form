@@ -1,7 +1,7 @@
 import { Outlet, useLoaderData, useRouteError, useNavigation, isRouteErrorResponse } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { authenticate } from "../shopify.server";
+import { authenticate, registerWebhooks } from "../shopify.server";
 import ErrorPage from "../components/ErrorPage";
 import { getOrCreateShop, getMonthlyOrderCount } from "../lib/db.server";
 import { getSubscription } from "../lib/mantle.server";
@@ -11,6 +11,9 @@ import BillingBanner from "../components/BillingBanner";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
+
+  // TEMP: Backfill orders/create webhook for existing installs. Remove after 2026-04-22.
+  await registerWebhooks({ session });
 
   // Get shop and subscription data for billing banner and analytics
   const shop = await getOrCreateShop(session.shop, session.accessToken);
