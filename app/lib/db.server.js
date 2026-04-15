@@ -118,11 +118,10 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       });
     }
 
-    // Auto-detect country and name for shops that need it
-    if (shop.country === 'PAK' || !shop.name) {
-      const { country: detectedCountry, name: shopName } = await fetchShopInfo(shopifyDomain, accessToken);
+    // Backfill shop name if missing — never auto-update country (country is set once at creation)
+    if (!shop.name) {
+      const { name: shopName } = await fetchShopInfo(shopifyDomain, accessToken);
       const updateData = {};
-      if (detectedCountry !== 'PAK') updateData.country = detectedCountry;
       if (shopName && !shop.name) updateData.name = shopName;
       if (Object.keys(updateData).length > 0) {
         shop = await prisma.shop.update({
