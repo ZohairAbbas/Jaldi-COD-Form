@@ -308,6 +308,7 @@ export const action = async ({ request }) => {
         };
 
         // Fire purchase event to all enabled CAPI pixels
+        console.log(`[Pixel] Firing CAPI Purchase for ${orderData.shop}, ${pixels.length} pixels: ${pixels.map(p => `${p.type}:${p.pixelId}`).join(', ')}`);
         firePurchaseEvent(pixels, {
           orderId: dbOrder.id,
           orderNumber: shopifyResult.orderNumber,

@@ -85,15 +85,28 @@ export async function sendFacebookCAPIEvent(pixel, eventData) {
     const apiVersion = 'v18.0';
     const url = `https://graph.facebook.com/${apiVersion}/${pixel.pixelId}/events`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    console.log(`[CAPI] Sending ${eventName} to pixel ${pixel.pixelId}`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const result = await response.json();
+
+    console.log(`[CAPI] ${eventName} response: ${response.status}`, result);
 
     // Log the event
     await logPixelEvent({
@@ -196,6 +209,64 @@ export async function firePurchaseEvent(pixels, orderData) {
           currency: currency || getCurrencyCode(),
           num_items: items.length,
           order_id: orderNumber,
+          ...utmData,
+        },
+      };
+
+      return sendFacebookCAPIEvent(pixel, {
+        ...eventData,
+        testEventCode: pixel.testMode ? pixel.testEventCode : null,
+      });
+    })
+  );
+
+  return results;
+}
+
+/**
+ * Fire InitiateCheckout event to all enabled CAPI pixels
+ */
+export async function fireInitiateCheckoutEvent(pixels, checkoutData) {
+  const {
+    items,
+    total,
+    currency,
+    eventId,
+    eventSourceUrl,
+    clientIpAddress,
+    clientUserAgent,
+    fbc,
+    fbp,
+    fbclid,
+    utmData,
+  } = checkoutData;
+
+  const capiPixels = pixels.filter(p => p.type === 'facebook_capi' && p.enabled && p.enableInitiateCheckout);
+
+  if (capiPixels.length === 0) {
+    return [];
+  }
+
+  const results = await Promise.all(
+    capiPixels.map(pixel => {
+      const eventData = {
+        eventName: 'InitiateCheckout',
+        eventId: eventId || generateEventId(),
+        eventTime: Math.floor(Date.now() / 1000),
+        eventSourceUrl: eventSourceUrl || '',
+        userData: {
+          clientIpAddress,
+          clientUserAgent,
+          fbc,
+          fbp,
+          fbclid,
+        },
+        customData: {
+          content_ids: items.map(item => item.variantId || item.id),
+          content_type: 'product',
+          value: total,
+          currency: currency || getCurrencyCode(),
+          num_items: items.length,
           ...utmData,
         },
       };

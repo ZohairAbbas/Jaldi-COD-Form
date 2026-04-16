@@ -1184,6 +1184,7 @@ export async function getEnabledPixels(shopId) {
       type: true,
       pixelId: true,
       accessToken: true,
+      enabled: true,
       purchaseEvent: true,
       enableAddToCart: true,
       enableAddPaymentInfo: true,
