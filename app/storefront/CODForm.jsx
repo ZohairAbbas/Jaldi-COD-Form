@@ -135,6 +135,24 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     trackInitiateCheckout(cart, currency);
     trackSnapchatStartCheckout(cart, currency);
     trackTikTokInitiateCheckout(cart, currency);
+
+    // Fire CAPI InitiateCheckout server-side
+    try {
+      const attribution = getAttributionData();
+      fetch(`${appPath}proxy/pixel-initiate-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop: config.shopDomain,
+          items: cart.items.map(item => ({ variantId: item.variantId || item.id, id: item.id })),
+          total: cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+          currency,
+          pixelAttribution: attribution,
+        }),
+      }).catch(() => {});
+    } catch (e) {
+      // Don't block form open if CAPI call fails
+    }
   }, []); // Only run once on mount
 
   // Two-step checkout state
