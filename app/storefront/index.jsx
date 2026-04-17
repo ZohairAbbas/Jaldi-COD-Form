@@ -185,6 +185,14 @@ function getDisplayedPriceData() {
     const currencyCode = window.Shopify.currency.active;
     const exchangeRate = parseFloat(window.Shopify.currency.rate);
 
+    // Skip when rate is 1.0 — store's base currency matches active currency, no
+    // actual conversion is happening. Without this guard, the unscoped DOM price
+    // selectors below can pick up prices from unrelated page elements (menu drawer,
+    // related products) and override the correct product price in the form display.
+    // The currency symbol falls back to shopBaseCountry.currencySymbol (from COUNTRIES
+    // config), which is actually better (proper symbol like ৳ instead of code "BDT").
+    if (!exchangeRate || exchangeRate === 1) return null;
+
     // Derive currency symbol from Intl.NumberFormat — no DOM dependency.
     // Previously relied on finding a price element in the theme, which fails on custom themes
     // that use different selectors or hide price elements.
