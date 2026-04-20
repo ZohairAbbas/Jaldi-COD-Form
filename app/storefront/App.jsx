@@ -243,18 +243,18 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     // Helper to get theme built-in quantity-breaks bundle data (e.g. Shrine theme)
     const getQuantityBreaksData = () => {
       const quantityBreaksEl = document.querySelector('quantity-breaks');
-      if (!quantityBreaksEl) return null;
+      if (!quantityBreaksEl) { console.log('[Preventify Debug] QB getData: no quantity-breaks element'); return null; }
 
       // Find the selected radio input inside quantity-breaks
       const selectedRadio = quantityBreaksEl.querySelector('input[name="quantity"]:checked');
-      if (!selectedRadio) return null;
+      if (!selectedRadio) { console.log('[Preventify Debug] QB getData: no checked radio'); return null; }
 
       const quantity = parseInt(selectedRadio.value);
-      if (isNaN(quantity) || quantity < 1) return null;
+      if (isNaN(quantity) || quantity < 1) { console.log('[Preventify Debug] QB getData: invalid quantity', selectedRadio.value); return null; }
 
       // Find the label associated with the selected radio
       const label = quantityBreaksEl.querySelector(`label[for="${selectedRadio.id}"]`);
-      if (!label) return null;
+      if (!label) { console.log('[Preventify Debug] QB getData: no label for', selectedRadio.id); return null; }
 
       // Helper: get the base-currency price and display price from an element
       // If a currency converter (Bucks) has modified it, use bucks-init (original price)
@@ -277,10 +277,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
       // Get the displayed price (discounted total for this bundle option)
       const priceEl = label.querySelector('.quantity-break__price span');
-      if (!priceEl) return null;
+      if (!priceEl) { console.log('[Preventify Debug] QB getData: no .quantity-break__price span in label', label.getAttribute('for')); return null; }
 
       const priceParts = getPrices(priceEl);
-      if (!priceParts.base) return null;
+      if (!priceParts.base) { console.log('[Preventify Debug] QB getData: price parse failed', priceEl.textContent.trim()); return null; }
 
       // Get the compare/original price if available (visible when there's a discount)
       const comparePriceEl = label.querySelector('.quantity-break__compare-price span');
@@ -730,30 +730,44 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     // Helper to update product with theme quantity-breaks data
     const updateWithQuantityBreaks = async () => {
       const qbData = getQuantityBreaksData();
-      if (!qbData) return false;
+      if (!qbData) {
+        console.log('[Preventify Debug] QB updateWithQuantityBreaks: getQuantityBreaksData returned null');
+        return false;
+      }
 
       // Create a key to detect changes
       const qbKey = `${qbData.quantity}-${qbData.discountedPrice}`;
-      if (qbKey === lastKnownQuantityBreaks) return false;
+      if (qbKey === lastKnownQuantityBreaks) return false; // unchanged, skip (intentionally no log to avoid spam)
+
+      console.log('[Preventify Debug] QB CHANGE DETECTED:', { newKey: qbKey, oldKey: lastKnownQuantityBreaks, qbData });
 
       lastKnownQuantityBreaks = qbKey;
       lastKnownQuantity = qbData.quantity;
 
       // Get current variant data and merge with quantity-breaks pricing
       const variantId = getSelectedVariantId();
-      if (!variantId) return false;
+      if (!variantId) {
+        console.log('[Preventify Debug] QB update aborted: no variantId');
+        return false;
+      }
 
       try {
         const pathParts = window.location.pathname.split('/');
         const productIndex = pathParts.indexOf('products');
-        if (productIndex === -1 || !pathParts[productIndex + 1]) return false;
+        if (productIndex === -1 || !pathParts[productIndex + 1]) {
+          console.log('[Preventify Debug] QB update aborted: no product handle in URL', window.location.pathname);
+          return false;
+        }
 
         const productHandle = pathParts[productIndex + 1].split('?')[0];
         const response = await fetch(`/products/${productHandle}.js`);
         const productData = await response.json();
 
         const variant = productData.variants.find(v => v.id === parseInt(variantId));
-        if (!variant || !variant.available) return false;
+        if (!variant || !variant.available) {
+          console.log('[Preventify Debug] QB update aborted: variant not found or unavailable', { variantId, found: !!variant, available: variant?.available });
+          return false;
+        }
 
         // Check for currency converter displayed price
         const displayedPriceData = getDisplayedPriceData();
@@ -780,6 +794,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           newProductData.hasBundleDiscount = true;
         }
 
+        console.log('[Preventify Debug] QB update SUCCESS: setCurrentProduct', { quantity: newProductData.quantity, price: newProductData.price, hasBundleDiscount: newProductData.hasBundleDiscount });
+
         setCurrentProduct(newProductData);
         setCart(prevCart => {
           const cartItems = prevCart.items.filter(item => {
@@ -798,7 +814,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
     // Poll for variant changes and quantity changes every 300ms
     // This is the most reliable method since Shopify themes update the input value programmatically
+    let pollCount = 0;
     const pollInterval = setInterval(async () => {
+      pollCount++;
+      // Log poll state every ~3s (every 10th poll at 300ms interval)
+      if (pollCount % 10 === 0) {
+        const qbEl = document.querySelector('quantity-breaks');
+        const checkedRadio = qbEl?.querySelector('input[name="quantity"]:checked');
+        console.log('[Preventify Debug] QB poll heartbeat:', { pollCount, lastKnownQB: lastKnownQuantityBreaks, checkedRadioValue: checkedRadio?.value || null, activeBundleConfig: !!activeBundleConfig });
+      }
       // Skip 3rd-party bundle detection when our internal bundle widget is active
       if (activeBundleConfig) {
         // Only check for variant changes, not external bundle apps
@@ -913,6 +937,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
       if (quantityInput) {
         const newQuantity = parseInt(quantityInput.value);
+        console.log('[Preventify Debug] handleQuantityChange fired:', { inputType: quantityInput.type, inputId: quantityInput.id, newQuantity, lastKnownQuantity, inputParent: quantityInput.closest('form')?.action || 'no form parent' });
         if (!isNaN(newQuantity) && newQuantity > 0 && newQuantity !== lastKnownQuantity) {
           lastKnownQuantity = newQuantity;
           setCurrentProduct(prev => prev ? { ...prev, quantity: newQuantity } : prev);
