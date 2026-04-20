@@ -163,6 +163,7 @@ model Order {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   paymentMethod      String   @default("cod")
+  verificationMethod  String?
   shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
@@ -435,6 +436,7 @@ model OTPSession {
   verified    Boolean          @default(false)
   expiresAt   DateTime
   attempts    Int              @default(0)
+  channel    String           @default("whatsapp")
   createdAt   DateTime         @default(now())
   customerId  String?
   customer    CustomerProfile? @relation(fields: [customerId], references: [id])

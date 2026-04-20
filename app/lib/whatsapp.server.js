@@ -212,6 +212,7 @@ export async function sendWhatsAppOTP(shopId, phone) {
       phone: normalized,
       otp,
       expiresAt,
+      channel: "whatsapp",
     },
   });
 
