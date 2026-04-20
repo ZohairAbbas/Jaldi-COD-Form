@@ -530,18 +530,40 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     };
 
     // Helper to get variant ID from URL or form
+    // Find the main product form by matching the known variant ID from our container.
+    // Pages can have multiple form[action*="/cart/add"] (recommendations, recently viewed, etc.)
+    // and an unscoped querySelector returns the first in DOM order, which may be wrong.
+    const findMainProductForm = () => {
+      const knownId = container.dataset.variantId;
+      if (knownId) {
+        const forms = document.querySelectorAll('form[action*="/cart/add"]');
+        for (const form of forms) {
+          const input = form.querySelector('input[name="id"]');
+          if (input && input.value === knownId) return form;
+        }
+      }
+      return document.querySelector('form[action*="/cart/add"]');
+    };
+    let mainProductForm = findMainProductForm();
+
     const getSelectedVariantId = () => {
       // First try URL params
       const urlParams = new URLSearchParams(window.location.search);
       const urlVariantId = urlParams.get('variant');
       if (urlVariantId) return urlVariantId;
 
-      // Try hidden variant input in product form (most common)
-      const variantInput = document.querySelector('form[action*="/cart/add"] input[name="id"]');
+      // If cached form reference is stale (theme re-rendered), re-find it
+      if (mainProductForm && !document.contains(mainProductForm)) {
+        mainProductForm = findMainProductForm();
+      }
+
+      // Try hidden variant input in the main product form
+      const variantInput = mainProductForm?.querySelector('input[name="id"]');
       if (variantInput) return variantInput.value;
 
-      // Try select element
-      const variantSelect = document.querySelector('select[name="id"]');
+      // Try select element in the main product form, then global fallback
+      const variantSelect = mainProductForm?.querySelector('select[name="id"]')
+        || document.querySelector('select[name="id"]');
       if (variantSelect) return variantSelect.value;
 
       // Fallback to container data
