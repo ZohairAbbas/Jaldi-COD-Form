@@ -48,6 +48,21 @@ export const loader = async ({ request }) => {
     select: {
       total: true,
       createdAt: true,
+      verificationMethod: true,
+    },
+  });
+
+  // Get OTP sessions for analytics
+  const otpSessions = await db.oTPSession.findMany({
+    where: {
+      shopId: shop.id,
+      createdAt: { gte: daysAgo },
+    },
+    select: {
+      verified: true,
+      attempts: true,
+      expiresAt: true,
+      createdAt: true,
     },
   });
 
@@ -59,6 +74,45 @@ export const loader = async ({ request }) => {
 
   // Calculate average order value
   const avgOrderValue = ordersCount > 0 ? totalRevenue / ordersCount : 0;
+
+  // OTP stats
+  const now = new Date();
+  const otpsSent = otpSessions.length;
+  const otpsVerified = otpSessions.filter(s => s.verified).length;
+  const otpVerificationRate = otpsSent > 0 ? ((otpsVerified / otpsSent) * 100).toFixed(1) : 0;
+  const otpsExpired = otpSessions.filter(s => !s.verified && s.expiresAt < now).length;
+  const otpExpiryRate = otpsSent > 0 ? ((otpsExpired / otpsSent) * 100).toFixed(1) : 0;
+  const sessionsWithAttempts = otpSessions.filter(s => s.attempts > 0);
+  const avgOtpAttempts = sessionsWithAttempts.length > 0
+    ? (sessionsWithAttempts.reduce((sum, s) => sum + s.attempts, 0) / sessionsWithAttempts.length).toFixed(1)
+    : 0;
+
+  // Verified orders % (has verificationMethod and not "verification_skipped")
+  const verifiedOrdersCount = ordersData.filter(
+    o => o.verificationMethod && o.verificationMethod !== "verification_skipped"
+  ).length;
+  const verifiedOrdersRate = ordersCount > 0 ? ((verifiedOrdersCount / ordersCount) * 100).toFixed(1) : 0;
+
+  // Verification breakdown by method
+  const methodLabels = {
+    whatsapp_verified: "WhatsApp Login",
+    whatsapp_otp_verified: "WhatsApp OTP",
+    trusted_buyer_verified: "Trusted Buyer",
+    verification_skipped: "Skipped",
+  };
+  const breakdownMap = {};
+  ordersData.forEach(order => {
+    const key = order.verificationMethod || "no_data";
+    breakdownMap[key] = (breakdownMap[key] || 0) + 1;
+  });
+  const verificationBreakdown = Object.entries(breakdownMap)
+    .map(([key, count]) => ({
+      key,
+      label: methodLabels[key] || "No Data",
+      count,
+      percentage: ordersCount > 0 ? ((count / ordersCount) * 100).toFixed(1) : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
 
   // Prepare chart data (aggregate by day)
   const chartData = {};
@@ -96,6 +150,14 @@ export const loader = async ({ request }) => {
       conversionRate,
       avgOrderValue,
     },
+    otpStats: {
+      otpsSent,
+      otpVerificationRate,
+      verifiedOrdersRate,
+      avgOtpAttempts,
+      otpExpiryRate,
+    },
+    verificationBreakdown,
     chartData: chartDataArray,
     period,
     currencySymbol: getCurrencySymbol(shop.country),
@@ -103,7 +165,7 @@ export const loader = async ({ request }) => {
 };
 
 export default function AnalyticsPage() {
-  const { stats, chartData, period: initialPeriod, currencySymbol } = useLoaderData();
+  const { stats, otpStats, verificationBreakdown, chartData, period: initialPeriod, currencySymbol } = useLoaderData();
   const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod);
   const navigate = useNavigate();
 
@@ -459,6 +521,140 @@ export default function AnalyticsPage() {
         >
           {renderAreaChart(chartData, 'avgOrderValue', '#6366f1', true, false)}
         </MetricCard>
+      </div>
+
+      {/* OTP Verification Section */}
+      <div style={{ marginTop: "48px" }}>
+        {/* Section heading */}
+        <div style={{ marginBottom: "24px", paddingBottom: "16px", borderBottom: "1px solid #e5e7eb" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#111827", margin: "0 0 4px 0" }}>
+            OTP Verification
+          </h2>
+          <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
+            Performance of OTP verification for the selected period.
+          </p>
+        </div>
+
+        {/* OTP metrics - 3 columns row 1 */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: "24px",
+          marginBottom: "24px"
+        }}>
+          <MetricCard
+            title="OTPs Sent"
+            value={otpStats.otpsSent.toLocaleString()}
+            tooltip="Total number of OTPs sent in the selected period"
+          />
+          <MetricCard
+            title="OTP Verification Rate"
+            value={`${otpStats.otpVerificationRate}%`}
+            tooltip="Percentage of sent OTPs that were successfully verified by the customer"
+          />
+          <MetricCard
+            title="Verified Orders"
+            value={`${otpStats.verifiedOrdersRate}%`}
+            tooltip="Percentage of orders that were verified (excluding skipped)"
+          />
+        </div>
+
+        {/* OTP metrics - 2 columns row 2 */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: "24px",
+          marginBottom: "24px"
+        }}>
+          <MetricCard
+            title="Avg OTP Attempts"
+            value={otpStats.avgOtpAttempts}
+            tooltip="Average number of attempts customers make before successfully verifying"
+          />
+          <MetricCard
+            title="OTP Expiry Rate"
+            value={`${otpStats.otpExpiryRate}%`}
+            tooltip="Percentage of OTPs that expired before being verified (potential lost customers)"
+          />
+        </div>
+
+        {/* Verification Breakdown - full width table */}
+        <div style={{
+          backgroundColor: "white",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+          padding: "24px",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+            <span style={{ fontSize: "14px", fontWeight: "500", color: "#374151" }}>Verification Breakdown</span>
+            <span
+              style={{
+                fontSize: "12px",
+                color: "#9ca3af",
+                cursor: "help",
+                width: "16px",
+                height: "16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "50%",
+                backgroundColor: "#f3f4f6"
+              }}
+              title="Breakdown of orders by verification method used"
+            >
+              ?
+            </span>
+          </div>
+          {verificationBreakdown.length === 0 ? (
+            <div style={{ padding: "32px 0", textAlign: "center", color: "#6b7280", fontSize: "14px" }}>
+              No order data available for the selected period
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                  <th style={{ textAlign: "left", padding: "8px 12px", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Method</th>
+                  <th style={{ textAlign: "right", padding: "8px 12px", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Orders</th>
+                  <th style={{ textAlign: "right", padding: "8px 12px", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Percentage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {verificationBreakdown.map((row) => {
+                  const dotColors = {
+                    whatsapp_verified: "#25D366",
+                    whatsapp_otp_verified: "#8b5cf6",
+                    trusted_buyer_verified: "#06b6d4",
+                    verification_skipped: "#f59e0b",
+                    no_data: "#d1d5db",
+                  };
+                  return (
+                    <tr key={row.key} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                      <td style={{ padding: "12px 12px", fontSize: "14px", color: "#374151" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{
+                            width: "8px",
+                            height: "8px",
+                            borderRadius: "50%",
+                            backgroundColor: dotColors[row.key] || "#d1d5db",
+                            flexShrink: 0,
+                          }} />
+                          {row.label}
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 12px", fontSize: "14px", color: "#111827", fontWeight: "500", textAlign: "right" }}>
+                        {row.count.toLocaleString()}
+                      </td>
+                      <td style={{ padding: "12px 12px", fontSize: "14px", color: "#6b7280", textAlign: "right" }}>
+                        {row.percentage}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </s-page>
   );

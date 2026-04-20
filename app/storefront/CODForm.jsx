@@ -160,8 +160,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [isFingerprintMatched, setIsFingerprintMatched] = useState(false);
   const [isTransitioningStep, setIsTransitioningStep] = useState(false);
   const fingerprintRef = useRef(null);
-  const [step1SummaryOpen, setStep1SummaryOpen] = useState(() => cart.items.length <= 2);
-  const [step2SummaryOpen, setStep2SummaryOpen] = useState(false);
+  const [step1SummaryOpen, setStep1SummaryOpen] = useState(true);
+  const [step2SummaryOpen, setStep2SummaryOpen] = useState(true);
   const [shippingMethodOpen, setShippingMethodOpen] = useState(true);
 
   // Device recognition: pre-fill phone only (buyer lookup happens on "Continue" click)

@@ -194,6 +194,7 @@ export const action = async ({ request }) => {
         status: "pending",
         shopifyOrderId: shopifyResult.orderId,
         shopifyOrderNumber: shopifyResult.orderNumber,
+        verificationMethod: orderData.verificationMethod || null,
         customFields: JSON.stringify({
           ...(typeof orderData.customFields === 'string'
               ? JSON.parse(orderData.customFields || '{}')
