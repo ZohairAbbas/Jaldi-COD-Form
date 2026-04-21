@@ -18,7 +18,7 @@ async function fetchShopInfo(shopifyDomain, accessToken) {
           'X-Shopify-Access-Token': accessToken,
         },
         body: JSON.stringify({
-          query: `{ shop { name billingAddress { countryCodeV2 } } }`,
+          query: `{ shop { name email phone billingAddress { countryCodeV2 } } }`,
         }),
       }
     );
@@ -32,17 +32,19 @@ async function fetchShopInfo(shopifyDomain, accessToken) {
     const shopData = data?.data?.shop;
     const shopifyCountryCode = shopData?.billingAddress?.countryCodeV2;
     const name = shopData?.name || null;
+    const email = shopData?.email || null;
+    const phone = shopData?.phone || null;
 
     if (shopifyCountryCode) {
       const mapped = mapShopifyCountryCode(shopifyCountryCode);
       console.log(`[Preventify] Detected shop country: ${shopifyCountryCode} -> ${mapped}`);
-      return { country: mapped, name };
+      return { country: mapped, name, email, phone };
     }
 
-    return { country: 'PAK', name };
+    return { country: 'PAK', name, email, phone };
   } catch (error) {
     console.error('[Preventify] Error fetching shop info:', error.message);
-    return { country: 'PAK', name: null };
+    return { country: 'PAK', name: null, email: null, phone: null };
   }
 }
 
@@ -61,7 +63,7 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
 
   if (!shop) {
     // Detect the shop's actual country and name from Shopify Admin API
-    const { country: detectedCountry, name: shopName } = await fetchShopInfo(shopifyDomain, accessToken);
+    const { country: detectedCountry, name: shopName, email: ownerEmail, phone: ownerPhone } = await fetchShopInfo(shopifyDomain, accessToken);
 
     try {
       shop = await prisma.shop.create({
@@ -69,6 +71,8 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
           shopifyDomain,
           accessToken,
           name: shopName,
+          ownerEmail,
+          ownerPhone,
           country: detectedCountry,
           setupProgress: {
             step1Completed: false,
