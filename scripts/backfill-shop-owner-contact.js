@@ -23,13 +23,17 @@ async function fetchOwnerContact(shopifyDomain, accessToken) {
           'Content-Type': 'application/json',
           'X-Shopify-Access-Token': accessToken,
         },
-        body: JSON.stringify({ query: '{ shop { email phone } }' }),
+        body: JSON.stringify({ query: '{ shop { email billingAddress { phone } } }' }),
       }
     );
     const data = await res.json();
+    if (data?.errors || !data?.data?.shop) {
+      console.error(`  [api error] ${shopifyDomain}: ${JSON.stringify(data?.errors || data)}`);
+      return { email: null, phone: null };
+    }
     return {
       email: data?.data?.shop?.email || null,
-      phone: data?.data?.shop?.phone || null,
+      phone: data?.data?.shop?.billingAddress?.phone || null,
     };
   } catch (err) {
     console.error(`  [error] ${shopifyDomain}: ${err.message}`);
