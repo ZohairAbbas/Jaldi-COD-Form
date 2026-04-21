@@ -18,7 +18,7 @@ async function fetchShopInfo(shopifyDomain, accessToken) {
           'X-Shopify-Access-Token': accessToken,
         },
         body: JSON.stringify({
-          query: `{ shop { name email phone billingAddress { countryCodeV2 } } }`,
+          query: `{ shop { name email billingAddress { countryCodeV2 phone } } }`,
         }),
       }
     );
@@ -33,7 +33,7 @@ async function fetchShopInfo(shopifyDomain, accessToken) {
     const shopifyCountryCode = shopData?.billingAddress?.countryCodeV2;
     const name = shopData?.name || null;
     const email = shopData?.email || null;
-    const phone = shopData?.phone || null;
+    const phone = shopData?.billingAddress?.phone || null;
 
     if (shopifyCountryCode) {
       const mapped = mapShopifyCountryCode(shopifyCountryCode);
