@@ -57,6 +57,10 @@ export const loader = async ({ request }) => {
   const period = url.searchParams.get("period") || "month";
 
   let dateFrom;
+  let dateTo = null; // null = up to now
+  let customFrom = null;
+  let customTo = null;
+
   if (period === "24h") {
     dateFrom = startOfDayInTZ(tz);
   } else if (period === "week") {
@@ -65,6 +69,13 @@ export const loader = async ({ request }) => {
     dateFrom = startOfMonthInTZ(tz);
   } else if (period === "30") {
     dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  } else if (period === "custom") {
+    const fromParam = url.searchParams.get("from"); // YYYY-MM-DD
+    const toParam = url.searchParams.get("to");     // YYYY-MM-DD
+    customFrom = fromParam || null;
+    customTo = toParam || null;
+    dateFrom = fromParam ? new Date(`${fromParam}T00:00:00`) : new Date("2020-01-01");
+    if (toParam) dateTo = new Date(`${toParam}T23:59:59.999`);
   } else {
     dateFrom = new Date("2020-01-01");
   }
@@ -73,6 +84,8 @@ export const loader = async ({ request }) => {
   const firstOfMonth = startOfMonthInTZ(tz);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  // Period date filter — applies upper bound when custom range is selected
+  const periodFilter = { gte: dateFrom, ...(dateTo && { lte: dateTo }) };
 
   // ── Batch 1: Fixed summary stats ─────────────────────────────────────────
   const [ordersToday, ordersThisMonth, totalShops, activeShopIds] = await Promise.all([
@@ -110,6 +123,7 @@ export const loader = async ({ request }) => {
     otpVerified,
     abandonedCartTotal,
     abandonedCartRecovered,
+    abandonedCartNonRecoverable,
     lastOrderByShop,
     aovData,
     aovByShop,
@@ -117,13 +131,13 @@ export const loader = async ({ request }) => {
     ordersLast7ByShop,
   ] = await Promise.all([
     // Chart data
-    db.order.findMany({ where: { createdAt: { gte: dateFrom } }, select: { createdAt: true } }),
+    db.order.findMany({ where: { createdAt: periodFilter }, select: { createdAt: true } }),
     // Orders per shop
     db.order.groupBy({
       by: ["shopId"],
       _count: { id: true },
       _sum: { total: true },
-      where: { createdAt: { gte: dateFrom } },
+      where: { createdAt: periodFilter },
       orderBy: { _count: { id: "desc" } },
     }),
     // All shops
@@ -161,49 +175,50 @@ export const loader = async ({ request }) => {
     // Payment method split (platform-wide, period-filtered)
     db.order.groupBy({
       by: ["paymentMethod"],
-      where: { createdAt: { gte: dateFrom } },
+      where: { createdAt: periodFilter },
       _count: { id: true },
       _sum: { total: true },
     }),
     // Payment method per shop (period-filtered)
     db.order.groupBy({
       by: ["shopId", "paymentMethod"],
-      where: { createdAt: { gte: dateFrom } },
+      where: { createdAt: periodFilter },
       _count: { id: true },
     }),
     // Order status distribution (period-filtered)
     db.order.groupBy({
       by: ["status"],
-      where: { createdAt: { gte: dateFrom } },
+      where: { createdAt: periodFilter },
       _count: { id: true },
     }),
     // Session funnel (period-filtered)
     db.orderSession.groupBy({
       by: ["status"],
-      where: { startedAt: { gte: dateFrom } },
+      where: { startedAt: periodFilter },
       _count: { id: true },
     }),
     // OTP stats (period-filtered)
-    db.oTPSession.count({ where: { createdAt: { gte: dateFrom } } }),
-    db.oTPSession.count({ where: { createdAt: { gte: dateFrom }, verified: true } }),
+    db.oTPSession.count({ where: { createdAt: periodFilter } }),
+    db.oTPSession.count({ where: { createdAt: periodFilter, verified: true } }),
     // Abandoned cart recovery (period-filtered)
-    db.abandonedCart.count({ where: { abandonedAt: { gte: dateFrom } } }),
-    db.abandonedCart.count({ where: { abandonedAt: { gte: dateFrom }, recovered: true } }),
+    db.abandonedCart.count({ where: { abandonedAt: periodFilter } }),
+    db.abandonedCart.count({ where: { abandonedAt: periodFilter, recovered: true } }),
+    db.abandonedCart.count({ where: { abandonedAt: periodFilter, shopifyDraftOrderId: "SKIPPED_NO_CONTACT" } }),
     // Last order per shop (all-time)
     db.order.groupBy({ by: ["shopId"], _max: { createdAt: true } }),
     // AOV (platform-wide, period-filtered)
-    db.order.aggregate({ where: { createdAt: { gte: dateFrom } }, _avg: { total: true }, _count: { id: true } }),
+    db.order.aggregate({ where: { createdAt: periodFilter }, _avg: { total: true }, _count: { id: true } }),
     // AOV per shop (period-filtered)
     db.order.groupBy({
       by: ["shopId"],
-      where: { createdAt: { gte: dateFrom } },
+      where: { createdAt: periodFilter },
       _avg: { total: true },
       _count: { id: true },
     }),
     // Cancelled orders per shop (period-filtered)
     db.order.groupBy({
       by: ["shopId"],
-      where: { createdAt: { gte: dateFrom }, status: "cancelled" },
+      where: { createdAt: periodFilter, status: "cancelled" },
       _count: { id: true },
     }),
     // Orders in last 7 days per shop (for health score)
@@ -221,7 +236,7 @@ export const loader = async ({ request }) => {
 
   if (canParseItems) {
     const ordersWithItems = await db.order.findMany({
-      where: { createdAt: { gte: dateFrom } },
+      where: { createdAt: periodFilter },
       select: { shopId: true, items: true, total: true },
     });
     for (const order of ordersWithItems) {
@@ -320,7 +335,8 @@ export const loader = async ({ request }) => {
   const cancellationRate = totalOrdersInPeriod > 0 ? ((cancelledOrders / totalOrdersInPeriod) * 100).toFixed(1) : "0.0";
 
   const otpVerificationRate = otpTotal > 0 ? ((otpVerified / otpTotal) * 100).toFixed(1) : "0.0";
-  const cartRecoveryRate = abandonedCartTotal > 0 ? ((abandonedCartRecovered / abandonedCartTotal) * 100).toFixed(1) : "0.0";
+  const recoverableCarts = abandonedCartTotal - abandonedCartNonRecoverable;
+  const cartRecoveryRate = recoverableCarts > 0 ? ((abandonedCartRecovered / recoverableCarts) * 100).toFixed(1) : "0.0";
 
   // Platform-wide upsell/downsell stats
   const platformUpsellImpressions = upsellsByShop.reduce((s, r) => s + (r._sum.impressions || 0), 0);
@@ -459,6 +475,8 @@ export const loader = async ({ request }) => {
     chartData,
     rows,
     period,
+    customFrom,
+    customTo,
     conversionMetrics: {
       conversionRate,
       abandonmentRate,
@@ -474,7 +492,7 @@ export const loader = async ({ request }) => {
       },
       sessionFunnel: { total: totalSessions, completed: completedSessions, abandoned: abandonedSessions },
       otpStats: { total: otpTotal, verified: otpVerified, rate: otpVerificationRate },
-      abandonedCartRecovery: { total: abandonedCartTotal, recovered: abandonedCartRecovered, rate: cartRecoveryRate },
+      abandonedCartRecovery: { total: abandonedCartTotal, recovered: abandonedCartRecovered, nonRecoverable: abandonedCartNonRecoverable, recoverable: recoverableCarts, rate: cartRecoveryRate },
       bundleStats: {
         storesCount: bundlesByShop.length,
         ordersCount: canParseItems ? platformBundleOrders : null,
@@ -632,13 +650,20 @@ function StickyScrollTable({ children }) {
 }
 
 export default function MonitorPage() {
-  const { summary, chartData, rows, period: initialPeriod, conversionMetrics, heatmapRows, totalFeatures } = useLoaderData();
+  const { summary, chartData, rows, period: initialPeriod, customFrom: initialFrom, customTo: initialTo, conversionMetrics, heatmapRows, totalFeatures } = useLoaderData();
   const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod);
+  const [customFrom, setCustomFrom] = useState(initialFrom || "");
+  const [customTo, setCustomTo] = useState(initialTo || "");
   const navigate = useNavigate();
 
   const handlePeriodChange = (newPeriod) => {
     setSelectedPeriod(newPeriod);
-    navigate(`/app/monitor?period=${newPeriod}`);
+    if (newPeriod !== "custom") navigate(`/app/monitor?period=${newPeriod}`);
+  };
+
+  const applyCustomRange = () => {
+    if (!customFrom || !customTo) return;
+    navigate(`/app/monitor?period=custom&from=${customFrom}&to=${customTo}`);
   };
 
   const formatCurrency = (amount) =>
@@ -751,13 +776,15 @@ export default function MonitorPage() {
     );
   };
 
-  const periodLabel = {
-    "24h": "last 24 hours",
-    week: "this week",
-    month: "this month",
-    "30": "last 30 days",
-    all: "all time",
-  }[selectedPeriod] || selectedPeriod;
+  const periodLabel = selectedPeriod === "custom" && customFrom && customTo
+    ? `${customFrom} → ${customTo}`
+    : ({
+        "24h": "last 24 hours",
+        week: "this week",
+        month: "this month",
+        "30": "last 30 days",
+        all: "all time",
+      }[selectedPeriod] || selectedPeriod);
 
   const { paymentSplit, sessionFunnel: sf, otpStats, abandonedCartRecovery: acr,
     bundleStats, upsellStats, downsellStats } = conversionMetrics;
@@ -791,28 +818,66 @@ export default function MonitorPage() {
         <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
           Platform-wide metrics across all stores. Visible to admin only.
         </p>
-        <div style={{ display: "inline-flex", backgroundColor: "#f3f4f6", borderRadius: "8px", padding: "4px", gap: "4px" }}>
-          {[
-            { value: "24h", label: "Today" },
-            { value: "week", label: "This week" },
-            { value: "month", label: "This month" },
-            { value: "30", label: "Last 30 days" },
-            { value: "all", label: "All time" },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => handlePeriodChange(opt.value)}
-              style={{
-                padding: "8px 14px", border: "none", borderRadius: "6px",
-                fontSize: "13px", fontWeight: "500", cursor: "pointer", transition: "all 0.15s ease",
-                backgroundColor: selectedPeriod === opt.value ? "white" : "transparent",
-                color: selectedPeriod === opt.value ? "#111827" : "#6b7280",
-                boxShadow: selectedPeriod === opt.value ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" }}>
+          <div style={{ display: "inline-flex", backgroundColor: "#f3f4f6", borderRadius: "8px", padding: "4px", gap: "4px" }}>
+            {[
+              { value: "24h", label: "Today" },
+              { value: "week", label: "This week" },
+              { value: "month", label: "This month" },
+              { value: "30", label: "Last 30 days" },
+              { value: "all", label: "All time" },
+              { value: "custom", label: "Custom" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handlePeriodChange(opt.value)}
+                style={{
+                  padding: "8px 14px", border: "none", borderRadius: "6px",
+                  fontSize: "13px", fontWeight: "500", cursor: "pointer", transition: "all 0.15s ease",
+                  backgroundColor: selectedPeriod === opt.value ? "white" : "transparent",
+                  color: selectedPeriod === opt.value ? "#111827" : "#6b7280",
+                  boxShadow: selectedPeriod === opt.value ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {selectedPeriod === "custom" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={e => setCustomFrom(e.target.value)}
+                style={{
+                  padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px",
+                  fontSize: "13px", color: "#111827", backgroundColor: "white",
+                }}
+              />
+              <span style={{ fontSize: "13px", color: "#6b7280" }}>to</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={e => setCustomTo(e.target.value)}
+                style={{
+                  padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px",
+                  fontSize: "13px", color: "#111827", backgroundColor: "white",
+                }}
+              />
+              <button
+                onClick={applyCustomRange}
+                disabled={!customFrom || !customTo}
+                style={{
+                  padding: "6px 14px", border: "none", borderRadius: "6px",
+                  fontSize: "13px", fontWeight: "600", cursor: customFrom && customTo ? "pointer" : "not-allowed",
+                  backgroundColor: customFrom && customTo ? "#111827" : "#e5e7eb",
+                  color: customFrom && customTo ? "white" : "#9ca3af",
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -916,6 +981,9 @@ export default function MonitorPage() {
               <>
                 <MiniBar label="Abandoned" value={acr.total} max={acr.total} color="#f59e0b" count={acr.total} />
                 <MiniBar label="Recovered" value={acr.recovered} max={acr.total} color="#10b981" count={acr.recovered} extra={`${acr.rate}%`} />
+                {acr.nonRecoverable > 0 && (
+                  <MiniBar label="Non-recoverable" value={acr.nonRecoverable} max={acr.total} color="#9ca3af" count={acr.nonRecoverable} extra="No contact" />
+                )}
               </>
             )}
           </div>
