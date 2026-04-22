@@ -1,7 +1,8 @@
 import db from "../db.server";
 import { createDraftOrderForAbandonedCart } from "../lib/abandoned-cart.server";
 
-const ABANDONED_THRESHOLD_MINUTES = 15;
+
+const ABANDONED_THRESHOLD_MINUTES = 10;
 const CRON_SECRET = process.env.CRON_SECRET;
 
 /**
