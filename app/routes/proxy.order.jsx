@@ -282,6 +282,18 @@ export const action = async ({ request }) => {
             completedAt: new Date(),
           },
         });
+
+        // Mark abandoned cart as recovered if one exists for this session
+        await prisma.abandonedCart.updateMany({
+          where: {
+            sessionId: orderData.sessionId,
+            recovered: false,
+          },
+          data: {
+            recovered: true,
+            recoveredAt: new Date(),
+          },
+        });
       } catch (sessionError) {
         console.error("Failed to mark session as completed:", sessionError);
       }
