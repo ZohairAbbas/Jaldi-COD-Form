@@ -38,6 +38,8 @@ model Shop {
   enableMultiCountry Boolean         @default(false)
   supportedCountries Json            @default("[]")
   setupProgress      Json?           @default("{\"step1Completed\": false, \"step2Completed\": false, \"welcomeDismissed\": false, \"setupGuideDismissed\": false}")
+  themeEmbedEnabled  Boolean?
+  themeEmbedCheckedAt DateTime?
   abandonedCarts     AbandonedCart[]
   downsells          Downsell[]
   formConfig         FormConfig?
@@ -165,12 +167,18 @@ model Order {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   paymentMethod      String   @default("cod")
+  fulfillmentStatus  String?    // Raw Shopify FulfillmentDisplayStatus value
+  deliveryOutcome    String?    // Mapped: "delivered" | "returned" | "cancelled" | "in_transit" | "unfulfilled"
+  fulfillmentSyncedAt DateTime? // Last time cron checked this order
+  riskLevel          String?    // "LOW" | "MEDIUM" | "HIGH" | null (set at creation)
   verificationMethod  String?
   shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([status])
   @@index([createdAt])
+  @@index([deliveryOutcome])
+  @@index([phone])
 }
 
 model OrderSession {
@@ -463,6 +471,12 @@ model GlobalBuyer {
   preferredPaymentMethod String?            // "cod" | "card" — last used payment method
   lastCity               String?            // Last used city for smart defaults
   lastProvince           String?            // Last used province for smart defaults
+  deliveredOrdersGlobal  Int                @default(0)
+  rtoOrdersGlobal        Int                @default(0)
+  cancelledOrdersGlobal  Int                @default(0)
+  rtoRateGlobal          Float              @default(0)
+  riskScoreGlobal        String             @default("UNKNOWN")  // "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"
+  lastRiskCalculatedAt   DateTime?
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
   addresses              BuyerAddress[]
@@ -621,4 +635,12 @@ model DeviceFingerprint {
   @@unique([fingerprintId, phone])
   @@index([fingerprintId])
   @@index([phone])
+}
+
+model FulfillmentSyncCursor {
+  id           String   @id @default(cuid())
+  shopId       String   @unique
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

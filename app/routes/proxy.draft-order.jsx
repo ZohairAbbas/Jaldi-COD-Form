@@ -1,6 +1,7 @@
 import { getShopByDomain, isUserBlocked } from "../lib/db.server";
 import { normalizePrice } from "../lib/constants";
 import { upsertGlobalBuyer } from "../lib/buyer.server";
+import { getRiskDataForOrder } from "../lib/risk.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -58,6 +59,14 @@ export const action = async ({ request }) => {
     const items = data.items || [];
     const customerInfo = data.customerInfo || {};
     const address = data.address || {};
+
+    // Risk scoring (non-blocking — always allow order)
+    let riskData = null;
+    try {
+      riskData = await getRiskDataForOrder(customerInfo.phone || data.phone);
+    } catch (err) {
+      console.error("Risk scoring failed (non-blocking):", err);
+    }
 
     // Build line items for draft order
     const lineItems = items.map(item => {
@@ -159,11 +168,23 @@ export const action = async ({ request }) => {
     // Build draft order input
     const draftOrderInput = {
       lineItems: lineItems,
-      tags: ["preventify_cod_form", "draft_order_for_card_checkout", data.verificationMethod].filter(Boolean),
-      note: "Pay with Card - Preventify COD Form",
+      tags: [
+        "preventify_cod_form",
+        "draft_order_for_card_checkout",
+        data.verificationMethod,
+        riskData?.riskLevel === "HIGH" ? "preventify-high-risk" : null,
+        riskData?.riskLevel === "MEDIUM" ? "preventify-medium-risk" : null,
+        riskData?.riskLevel === "LOW" ? "preventify-trusted-buyer" : null,
+      ].filter(Boolean),
+      note: riskData && riskData.riskLevel !== "UNKNOWN"
+        ? `Pay with Card - Preventify COD Form\nPreventify Risk: ${riskData.riskLevel} — ${riskData.riskNote}`
+        : "Pay with Card - Preventify COD Form",
       customAttributes: [
         { key: "_preventify_source", value: "card_checkout" },
         { key: "_preventify_shop", value: data.shop },
+        ...(riskData && riskData.riskLevel !== "UNKNOWN" ? [
+          { key: "_preventify_risk_level", value: riskData.riskLevel },
+        ] : []),
       ],
       // Shopify Markets: create draft order in the presentment currency.
       // Only set when presentmentCurrencyCode is provided (i.e., Shopify Markets is active).

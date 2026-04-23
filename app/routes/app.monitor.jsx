@@ -55,6 +55,7 @@ export const loader = async ({ request }) => {
   const tz = process.env.ADMIN_TIMEZONE || "UTC";
   const url = new URL(request.url);
   const period = url.searchParams.get("period") || "month";
+  const showAll = url.searchParams.get("showAll") === "1";
 
   let dateFrom;
   let dateTo = null; // null = up to now
@@ -142,7 +143,7 @@ export const loader = async ({ request }) => {
     }),
     // All shops
     db.shop.findMany({
-      select: { id: true, shopifyDomain: true, name: true, createdAt: true, subscription: { select: { planName: true, status: true } } },
+      select: { id: true, shopifyDomain: true, name: true, createdAt: true, themeEmbedEnabled: true, themeEmbedCheckedAt: true, subscription: { select: { planName: true, status: true } } },
     }),
     // Settings for all shops
     db.settings.findMany({
@@ -396,6 +397,21 @@ export const loader = async ({ request }) => {
     return hasRecentOrders + hasVeryRecentOrders + featuresRatio + noCancellations;
   };
 
+  const getStoreStatus = (shopId, orderCount, joinedAt) => {
+    const lastOrder = lastOrderMap[shopId];
+    const daysSinceLastOrder = lastOrder
+      ? (Date.now() - new Date(lastOrder).getTime()) / (1000 * 60 * 60 * 24)
+      : 999;
+    const daysSinceJoined = joinedAt
+      ? (Date.now() - new Date(joinedAt).getTime()) / (1000 * 60 * 60 * 24)
+      : 999;
+    if (orderCount === 0 && daysSinceJoined <= 7) return "new";
+    if (orderCount === 0) return "never_used";
+    if (daysSinceLastOrder <= 14) return "active";
+    if (daysSinceLastOrder <= 60) return "dormant";
+    return "inactive";
+  };
+
   // Build rows
   const shopMap = Object.fromEntries(shops.map(s => [s.id, s]));
   const rows = ordersByShop.map(row => {
@@ -416,6 +432,8 @@ export const loader = async ({ request }) => {
       lastOrderAt: lastOrderMap[row.shopId] ? new Date(lastOrderMap[row.shopId]).toISOString().split("T")[0] : null,
       featuresCount: getFeaturesCount(row.shopId),
       healthScore: getHealthScore(row.shopId, orderCount),
+      storeStatus: getStoreStatus(row.shopId, orderCount, shop.createdAt),
+      themeEmbedEnabled: shop.themeEmbedEnabled ?? null,
     };
   });
 
@@ -437,6 +455,8 @@ export const loader = async ({ request }) => {
         lastOrderAt: lastOrderMap[shop.id] ? new Date(lastOrderMap[shop.id]).toISOString().split("T")[0] : null,
         featuresCount: getFeaturesCount(shop.id),
         healthScore: getHealthScore(shop.id, 0),
+        storeStatus: getStoreStatus(shop.id, 0, shop.createdAt),
+        themeEmbedEnabled: shop.themeEmbedEnabled ?? null,
       });
     }
   }
@@ -449,6 +469,7 @@ export const loader = async ({ request }) => {
       shopId: shop.id,
       shopifyDomain: shop.shopifyDomain,
       shopName: shop.name || null,
+      storeStatus: getStoreStatus(shop.id, (ordersByShop.find(r => r.shopId === shop.id)?._count.id || 0), shop.createdAt),
       features: {
         otp: !!s.enableOTP,
         bundles: !!(bundlesMap[shop.id]),
@@ -517,6 +538,7 @@ export const loader = async ({ request }) => {
     },
     heatmapRows,
     totalFeatures: TOTAL_FEATURES,
+    showAll,
   };
 };
 
@@ -650,7 +672,7 @@ function StickyScrollTable({ children }) {
 }
 
 export default function MonitorPage() {
-  const { summary, chartData, rows, period: initialPeriod, customFrom: initialFrom, customTo: initialTo, conversionMetrics, heatmapRows, totalFeatures } = useLoaderData();
+  const { summary, chartData, rows, period: initialPeriod, customFrom: initialFrom, customTo: initialTo, conversionMetrics, heatmapRows, totalFeatures, showAll } = useLoaderData();
   const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod);
   const [customFrom, setCustomFrom] = useState(initialFrom || "");
   const [customTo, setCustomTo] = useState(initialTo || "");
@@ -785,6 +807,11 @@ export default function MonitorPage() {
         "30": "last 30 days",
         all: "all time",
       }[selectedPeriod] || selectedPeriod);
+
+  const ACTIVE_STATUSES = ["active", "dormant", "new"];
+  const filteredRows = showAll ? rows : rows.filter(r => ACTIVE_STATUSES.includes(r.storeStatus));
+  const filteredHeatmapRows = showAll ? heatmapRows : heatmapRows.filter(r => ACTIVE_STATUSES.includes(r.storeStatus));
+  const hiddenCount = rows.length - filteredRows.length;
 
   const { paymentSplit, sessionFunnel: sf, otpStats, abandonedCartRecovery: acr,
     bundleStats, upsellStats, downsellStats } = conversionMetrics;
@@ -1072,13 +1099,17 @@ export default function MonitorPage() {
               </tr>
             </thead>
             <tbody>
-              {heatmapRows.map((row, i) => {
+              {filteredHeatmapRows.map((row, i) => {
                 const enabledCount = Object.values(row.features).filter(Boolean).length;
+                const statusDotColor = { active: "#10b981", dormant: "#f59e0b", inactive: "#ef4444", never_used: "#d1d5db", new: "#3b82f6" }[row.storeStatus] || "#d1d5db";
                 return (
-                  <tr key={row.shopId} style={{ borderBottom: i < heatmapRows.length - 1 ? "1px solid #f3f4f6" : "none" }}>
+                  <tr key={row.shopId} style={{ borderBottom: i < filteredHeatmapRows.length - 1 ? "1px solid #f3f4f6" : "none" }}>
                     <td style={{ padding: "8px 12px", whiteSpace: "nowrap", position: "sticky", left: 0, backgroundColor: "white", zIndex: 1 }}>
-                      <div style={{ fontWeight: "500", color: "#374151" }}>{row.shopName || row.shopifyDomain.replace(".myshopify.com", "")}</div>
-                      {row.shopName && <div style={{ fontSize: "10px", color: "#9ca3af" }}>{row.shopifyDomain.replace(".myshopify.com", "")}</div>}
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <div style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: statusDotColor, flexShrink: 0 }} title={row.storeStatus} />
+                        <div style={{ fontWeight: "500", color: "#374151" }}>{row.shopName || row.shopifyDomain.replace(".myshopify.com", "")}</div>
+                      </div>
+                      {row.shopName && <div style={{ fontSize: "10px", color: "#9ca3af", marginLeft: "13px" }}>{row.shopifyDomain.replace(".myshopify.com", "")}</div>}
                     </td>
                     {featureCols.map(col => (
                       <td key={col.key} style={{ padding: "8px 10px", textAlign: "center" }}>
@@ -1099,16 +1130,16 @@ export default function MonitorPage() {
                 );
               })}
               {/* Summary footer row */}
-              {heatmapRows.length > 0 && (
+              {filteredHeatmapRows.length > 0 && (
                 <tr style={{ backgroundColor: "#f9fafb", borderTop: "2px solid #e5e7eb" }}>
                   <td style={{ padding: "8px 12px", fontWeight: "600", color: "#374151", fontSize: "11px", position: "sticky", left: 0, backgroundColor: "#f9fafb" }}>
-                    {heatmapRows.length} stores
+                    {filteredHeatmapRows.length}{!showAll && heatmapRows.length > filteredHeatmapRows.length ? ` of ${heatmapRows.length}` : ""} stores
                   </td>
                   {featureCols.map(col => {
-                    const count = heatmapRows.filter(r => r.features[col.key]).length;
+                    const count = filteredHeatmapRows.filter(r => r.features[col.key]).length;
                     return (
                       <td key={col.key} style={{ padding: "8px 10px", textAlign: "center", fontSize: "11px", color: "#6b7280" }}>
-                        {count}/{heatmapRows.length}
+                        {count}/{filteredHeatmapRows.length}
                       </td>
                     );
                   })}
@@ -1125,16 +1156,30 @@ export default function MonitorPage() {
         backgroundColor: "white", borderRadius: "12px", border: "1px solid #e5e7eb",
         overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
       }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: "14px", fontWeight: "600", color: "#111827" }}>
-            Stores ({rows.length}) — {periodLabel}
+            Stores — {periodLabel}
+            {" "}
+            <span style={{ fontWeight: "400", color: "#6b7280", fontSize: "13px" }}>
+              {showAll ? `${rows.length} total` : `${filteredRows.length} active${hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}`}
+            </span>
           </span>
+          <button
+            onClick={() => {
+              const params = new URLSearchParams(window.location.search);
+              if (showAll) params.delete("showAll"); else params.set("showAll", "1");
+              navigate(`?${params.toString()}`);
+            }}
+            style={{ fontSize: "12px", color: "#6b7280", background: "none", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "4px 10px", cursor: "pointer" }}
+          >
+            {showAll ? "Active only" : "Show all"}
+          </button>
         </div>
         <StickyScrollTable>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead>
               <tr style={{ backgroundColor: "#f9fafb" }}>
-                {["Health", "Store", "Plan", "Status", "Orders", "Revenue", "AOV", "COD / Card", "Last Order", "Features", "Joined"].map((h) => (
+                {["Health", "Store", "Status", "Orders", "Revenue", "AOV", "COD / Card", "Last Order", "App Embed", "Features", "Joined"].map((h) => (
                   <th key={h} style={{
                     padding: "10px 16px", textAlign: "left", fontWeight: "600",
                     color: "#6b7280", fontSize: "12px", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap",
@@ -1145,14 +1190,21 @@ export default function MonitorPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => {
+              {filteredRows.map((row, i) => {
                 const daysSince = row.lastOrderAt
                   ? (Date.now() - new Date(row.lastOrderAt).getTime()) / (1000 * 60 * 60 * 24)
                   : 999;
                 const lastOrderColor = daysSince > 30 ? "#ef4444" : daysSince > 7 ? "#f59e0b" : "#10b981";
+                const storeStatusConfig = {
+                  active:     { label: "Active",      bg: "#d1fae5", color: "#065f46" },
+                  dormant:    { label: "Dormant",     bg: "#fef3c7", color: "#92400e" },
+                  inactive:   { label: "Inactive",    bg: "#fee2e2", color: "#991b1b" },
+                  never_used: { label: "Never used",  bg: "#f3f4f6", color: "#6b7280" },
+                  new:        { label: "New",         bg: "#dbeafe", color: "#1e40af" },
+                }[row.storeStatus] || { label: row.storeStatus, bg: "#f3f4f6", color: "#6b7280" };
                 return (
                   <tr key={row.shopId} style={{
-                    borderBottom: i < rows.length - 1 ? "1px solid #f3f4f6" : "none",
+                    borderBottom: i < filteredRows.length - 1 ? "1px solid #f3f4f6" : "none",
                     backgroundColor: "white",
                   }}>
                     <td style={{ padding: "12px 16px" }}>
@@ -1160,22 +1212,21 @@ export default function MonitorPage() {
                         width: "10px", height: "10px", borderRadius: "50%",
                         backgroundColor: healthColor(row.healthScore),
                         display: "inline-block",
-                        title: `Score: ${row.healthScore.toFixed(1)}`,
                       }} title={`Health score: ${row.healthScore.toFixed(1)}`} />
                     </td>
                     <td style={{ padding: "12px 16px", whiteSpace: "nowrap" }}>
                       <div style={{ fontWeight: "500", color: "#111827" }}>{row.shopName || row.shopifyDomain}</div>
                       {row.shopName && <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "1px" }}>{row.shopifyDomain}</div>}
+                      <div style={{ fontSize: "11px", color: planStatusColor(row.planStatus), marginTop: "1px" }}>{row.planName} · {row.planStatus}</div>
                     </td>
-                    <td style={{ padding: "12px 16px", color: "#374151" }}>{row.planName}</td>
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{
                         display: "inline-block", padding: "2px 8px", borderRadius: "9999px",
                         fontSize: "11px", fontWeight: "500",
-                        backgroundColor: `${planStatusColor(row.planStatus)}20`,
-                        color: planStatusColor(row.planStatus),
+                        backgroundColor: storeStatusConfig.bg,
+                        color: storeStatusConfig.color,
                       }}>
-                        {row.planStatus}
+                        {storeStatusConfig.label}
                       </span>
                     </td>
                     <td style={{ padding: "12px 16px", color: "#374151", fontWeight: "500" }}>
@@ -1197,6 +1248,15 @@ export default function MonitorPage() {
                         <span style={{ color: "#9ca3af" }}>Never</span>
                       )}
                     </td>
+                    <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                      {row.themeEmbedEnabled === true ? (
+                        <span style={{ color: "#10b981", fontWeight: "600" }}>✓</span>
+                      ) : row.themeEmbedEnabled === false ? (
+                        <span style={{ color: "#ef4444" }}>✗</span>
+                      ) : (
+                        <span style={{ color: "#d1d5db" }}>—</span>
+                      )}
+                    </td>
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{
                         display: "inline-block", padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600",
@@ -1210,7 +1270,7 @@ export default function MonitorPage() {
                   </tr>
                 );
               })}
-              {rows.length === 0 && (
+              {filteredRows.length === 0 && (
                 <tr>
                   <td colSpan={11} style={{ padding: "40px", textAlign: "center", color: "#9ca3af" }}>
                     No data available

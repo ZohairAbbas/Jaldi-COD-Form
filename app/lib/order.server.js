@@ -13,7 +13,7 @@ const COUNTRY_NAME_TO_CODE = {
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod, riskData } = orderData;
 
   // Clean phone number (remove all non-digit characters except +)
   const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
@@ -132,6 +132,9 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     if (oneTickDiscount > 0 || recoveryDiscountAmount > 0 || userDiscountAmount > 0) {
       orderNote += `\nActual Total: ${currencySymbol}${total.toFixed(2)}`;
     }
+    if (riskData && riskData.riskLevel !== "UNKNOWN") {
+      orderNote += `\nPreventify Risk: ${riskData.riskLevel} — ${riskData.riskNote}`;
+    }
 
     // Prepare REST API order payload
     const restOrder = {
@@ -142,7 +145,13 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       billing_address: restBillingAddress,
       financial_status: "pending",
       note: orderNote,
-      tags: ["preventify_cod_form", verificationMethod].filter(Boolean).join(", "),
+      tags: [
+        "preventify_cod_form",
+        verificationMethod,
+        riskData?.riskLevel === "HIGH" ? "preventify-high-risk" : null,
+        riskData?.riskLevel === "MEDIUM" ? "preventify-medium-risk" : null,
+        riskData?.riskLevel === "LOW" ? "preventify-trusted-buyer" : null,
+      ].filter(Boolean).join(", "),
       // Shopify Markets: set order currency to the presentment (customer-facing) currency.
       // Only set when presentmentCurrencyCode is provided (i.e., Shopify Markets is active).
       // For non-Markets stores this is undefined and Shopify uses the shop's base currency.
@@ -193,6 +202,11 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
               };
             })
           : []),
+        // Add risk intelligence data
+        ...(riskData && riskData.riskLevel !== "UNKNOWN" ? [{
+          name: "_preventify_risk_level",
+          value: riskData.riskLevel,
+        }] : []),
         // Add UTM attribution data to note_attributes
         ...Object.entries(utmData)
           .filter(([, value]) => value)

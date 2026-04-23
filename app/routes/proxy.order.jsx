@@ -6,6 +6,7 @@ import prisma from "../db.server";
 import { upsertCustomerProfile } from "../lib/sms.server";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { sendWhatsAppReply } from "../lib/whatsapp.server";
+import { getRiskDataForOrder } from "../lib/risk.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -63,6 +64,14 @@ export const action = async ({ request }) => {
           fieldErrors: {},
         }, { status: 403 });
       }
+    }
+
+    // Risk scoring (non-blocking — always allow order)
+    let riskData = null;
+    try {
+      riskData = await getRiskDataForOrder(orderData.phone);
+    } catch (err) {
+      console.error("Risk scoring failed (non-blocking):", err);
     }
 
     // Calculate totals from items if not provided
@@ -142,6 +151,7 @@ export const action = async ({ request }) => {
         countryCode: orderData.countryCode, // Country code for currency symbol lookup
         presentmentCurrencyCode: orderData.presentmentCurrencyCode, // Shopify Markets currency
         verificationMethod: orderData.verificationMethod, // WhatsApp verification tag
+        riskData, // Risk intelligence data for tags/notes
       },
       shop.shopifyDomain // Pass shop domain for REST API call
     );
@@ -192,6 +202,7 @@ export const action = async ({ request }) => {
         shipping: shippingCost,
         total: calculatedTotal,
         status: "pending",
+        riskLevel: riskData?.riskLevel || null,
         shopifyOrderId: shopifyResult.orderId,
         shopifyOrderNumber: shopifyResult.orderNumber,
         verificationMethod: orderData.verificationMethod || null,

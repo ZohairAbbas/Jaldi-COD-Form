@@ -7,6 +7,7 @@ const CRON_SECRET = process.env.CRON_SECRET || 'elIpvaUVOuHiIeNEqSTGcMainhXqFgHT
 const locks = {
   abandonedCarts: false,
   draftOrders: false,
+  fulfillmentSync: false,
 };
 
 async function runJob(jobName, endpoint) {
@@ -73,6 +74,14 @@ cron.schedule('*/2 * * * *', () => {
   timezone: 'Asia/Karachi'
 });
 
+// Job 3: Fulfillment Sync - Every 3 hours
+cron.schedule('0 */3 * * *', () => {
+  runJob('fulfillmentSync', '/proxy/cron-fulfillment-sync');
+}, {
+  scheduled: true,
+  timezone: 'Asia/Karachi'
+});
+
 // ============================================
 // STARTUP
 // ============================================
@@ -85,6 +94,7 @@ console.log(`Cron Secret: ${CRON_SECRET ? 'Configured' : 'Not configured (local 
 console.log('Jobs:');
 console.log('  - Abandoned cart detection: Every 5 minutes');
 console.log('  - Draft order creation: Every 30 minutes');
+console.log('  - Fulfillment sync: Every 3 hours');
 console.log('========================================');
 
 // Run jobs immediately on startup for testing (optional - comment out in production)

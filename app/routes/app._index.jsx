@@ -2,6 +2,7 @@ import { useLoaderData, Link, useFetcher, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getDashboardStats, getMonthlyOrderCount } from "../lib/db.server";
+import db from "../db.server";
 import { getSubscription } from "../lib/mantle.server";
 import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import { getCurrencyCode } from "../lib/constants";
@@ -101,6 +102,15 @@ export const loader = async ({ request }) => {
   } catch (error) {
     console.error("Error fetching theme app embed status:", error);
   }
+
+  // Persist embed status to DB (fire and forget — uses result already fetched above)
+  db.shop.update({
+    where: { id: shop.id },
+    data: {
+      themeEmbedEnabled: themeAppEmbedStatus.enabled,
+      themeEmbedCheckedAt: new Date(),
+    },
+  }).catch(err => console.error("Failed to persist themeEmbedEnabled:", err));
 
   // Get setup progress or initialize with defaults
   const setupProgress = shop.setupProgress || {
