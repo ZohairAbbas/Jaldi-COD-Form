@@ -70,6 +70,7 @@ export default function App() {
           <s-link href="/app/sales-booster">Sales Booster</s-link>
           <s-link href="/app/shipping-rates">Shipping Rates</s-link>
           <s-link href="/app/analytics">Analytics</s-link>
+          <s-link href="/app/risk-dashboard">COD Intelligence</s-link>
           <s-link href="/app/billing">Billing</s-link>
           {isAdmin && <s-link href="/app/monitor">Monitor</s-link>}
         </s-app-nav>

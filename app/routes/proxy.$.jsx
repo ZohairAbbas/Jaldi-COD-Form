@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { createDraftOrderForAbandonedCart } from "../lib/abandoned-cart.server";
+import { syncShopFulfillments } from "../lib/fulfillment-sync.server";
 
 const ABANDONED_THRESHOLD_MINUTES = 15;
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -18,6 +19,8 @@ export const action = async ({ request, params }) => {
       return handleCreateDraftOrders(request);
     case "session-track":
       return handleSessionTrack(request);
+    case "cron-fulfillment-sync":
+      return handleFulfillmentSync(request);
     case "cron-health":
       return handleCronHealth(request);
     default:
@@ -442,6 +445,94 @@ async function handleSessionTrack(request) {
   }
 }
 
+// Handler for fulfillment sync (risk intelligence)
+async function handleFulfillmentSync(request) {
+  if (request.method !== "POST") {
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  if (!verifyCronSecret(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startTime = Date.now();
+  await logCronJob("fulfillment-sync", "started");
+
+  try {
+    // Get all shops with active orders that need syncing
+    const shopsWithPendingOrders = await db.shop.findMany({
+      where: {
+        orders: {
+          some: {
+            shopifyOrderId: { not: null },
+            OR: [
+              { deliveryOutcome: null },
+              { deliveryOutcome: { notIn: ["delivered", "returned", "cancelled"] } },
+            ],
+            createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+        },
+      },
+      select: {
+        id: true,
+        shopifyDomain: true,
+        accessToken: true,
+      },
+    });
+
+    const results = {
+      shopsProcessed: 0,
+      totalProcessed: 0,
+      totalUpdated: 0,
+      totalErrors: 0,
+      byShop: {},
+    };
+
+    for (const shop of shopsWithPendingOrders) {
+      try {
+        const shopResult = await syncShopFulfillments(shop.id, shop.shopifyDomain, shop.accessToken);
+        results.shopsProcessed++;
+        results.totalProcessed += shopResult.processed;
+        results.totalUpdated += shopResult.updated;
+        results.totalErrors += shopResult.errors;
+        results.byShop[shop.shopifyDomain] = shopResult;
+      } catch (err) {
+        console.error(`[fulfillment-sync] Shop ${shop.shopifyDomain} failed:`, err);
+        results.totalErrors++;
+        results.byShop[shop.shopifyDomain] = { error: err.message };
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    await logCronJob("fulfillment-sync", "completed", {
+      message: `Synced ${results.totalUpdated} orders across ${results.shopsProcessed} shops`,
+      processed: results.totalProcessed,
+      errors: results.totalErrors,
+      duration,
+    });
+
+    return Response.json({
+      success: true,
+      message: `Synced ${results.totalUpdated} orders across ${results.shopsProcessed} shops`,
+      results,
+      duration: `${duration}ms`,
+    });
+  } catch (error) {
+    console.error("Fulfillment sync error:", error);
+
+    const duration = Date.now() - startTime;
+    await logCronJob("fulfillment-sync", "failed", {
+      message: error.message,
+      duration,
+    });
+
+    return Response.json(
+      { success: false, error: error.message || "Failed to sync fulfillments" },
+      { status: 500 }
+    );
+  }
+}
+
 // Health check endpoint
 async function handleCronHealth(request) {
   try {
@@ -456,19 +547,25 @@ async function handleCronHealth(request) {
     const lastDraftJob = recentLogs.find(
       (l) => l.jobName === "draft-orders-creation" && l.status === "completed"
     );
+    const lastFulfillmentJob = recentLogs.find(
+      (l) => l.jobName === "fulfillment-sync" && l.status === "completed"
+    );
 
     // Check if jobs are running on schedule
     const now = new Date();
     const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
     const sixtyMinutesAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
 
     const abandonedJobHealthy = lastAbandonedJob &&
       new Date(lastAbandonedJob.createdAt) > tenMinutesAgo;
     const draftJobHealthy = lastDraftJob &&
       new Date(lastDraftJob.createdAt) > sixtyMinutesAgo;
+    const fulfillmentJobHealthy = lastFulfillmentJob &&
+      new Date(lastFulfillmentJob.createdAt) > fourHoursAgo;
 
     return Response.json({
-      status: abandonedJobHealthy && draftJobHealthy ? "healthy" : "degraded",
+      status: abandonedJobHealthy && draftJobHealthy && fulfillmentJobHealthy ? "healthy" : "degraded",
       jobs: {
         abandonedCartsDetection: {
           lastRun: lastAbandonedJob?.createdAt || null,
@@ -481,6 +578,12 @@ async function handleCronHealth(request) {
           lastStatus: lastDraftJob?.status || "never_run",
           lastProcessed: lastDraftJob?.processed || 0,
           healthy: draftJobHealthy || false,
+        },
+        fulfillmentSync: {
+          lastRun: lastFulfillmentJob?.createdAt || null,
+          lastStatus: lastFulfillmentJob?.status || "never_run",
+          lastProcessed: lastFulfillmentJob?.processed || 0,
+          healthy: fulfillmentJobHealthy || false,
         },
       },
       recentLogs: recentLogs.slice(0, 10),
@@ -506,6 +609,7 @@ export const loader = async ({ params }) => {
     availableEndpoints: [
       "cron-abandoned-carts",
       "abandoned-carts-create-draft",
+      "cron-fulfillment-sync",
       "session-track",
       "cron-health",
     ],
