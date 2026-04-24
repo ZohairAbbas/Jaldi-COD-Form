@@ -848,6 +848,116 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      {/* PayFast Setting */}
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>PayFast (Online Payment)</s-heading>
+          <s-paragraph>
+            Enable PayFast to let customers pay online directly from the Preventify form using their debit/credit card. Enter your PayFast Merchant ID and Secured Key from your PayFast merchant dashboard.
+          </s-paragraph>
+
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.payfastEnabled || false}
+              onChange={(e) => handleUpdate({ payfastEnabled: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+              <s-text variant="heading-sm">Enable PayFast payments</s-text>
+              <s-text variant="body-sm" tone="subdued">
+                When enabled, a "Pay with PayFast" button will appear below the COD button. Customers can pay online using their card without leaving your store.
+              </s-text>
+            </s-stack>
+          </label>
+
+          {settings.payfastEnabled && (
+            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+              <s-stack direction="block" gap="base">
+                <div>
+                  <s-text variant="heading-sm">PayFast Merchant ID</s-text>
+                  <input
+                    type="text"
+                    value={settings.payfastMerchantId || ""}
+                    onChange={(e) => handleUpdate({ payfastMerchantId: e.target.value })}
+                    placeholder="Enter your PayFast Merchant ID"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #ccc", marginTop: "6px", fontSize: "14px", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <s-text variant="heading-sm">PayFast Secured Key</s-text>
+                  <input
+                    type="password"
+                    value={settings.payfastSecuredKey || ""}
+                    onChange={(e) => handleUpdate({ payfastSecuredKey: e.target.value })}
+                    placeholder="Enter your PayFast Secured Key"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #ccc", marginTop: "6px", fontSize: "14px", boxSizing: "border-box" }}
+                  />
+                </div>
+
+                <div style={{ borderTop: "1px solid #e0e0e0", paddingTop: "12px" }}>
+                  <s-text variant="heading-sm">Button Customization</s-text>
+                </div>
+
+                <div>
+                  <s-text variant="body-sm" tone="subdued">Button Text</s-text>
+                  <input
+                    type="text"
+                    value={settings.payfastButtonText || "PAY WITH PAYFAST"}
+                    onChange={(e) => handleUpdate({ payfastButtonText: e.target.value })}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #ccc", marginTop: "6px", fontSize: "14px", boxSizing: "border-box" }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: "120px" }}>
+                    <s-text variant="body-sm" tone="subdued">Button Color</s-text>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+                      <input
+                        type="color"
+                        value={settings.payfastButtonBgColor || "#00B140"}
+                        onChange={(e) => handleUpdate({ payfastButtonBgColor: e.target.value })}
+                        style={{ width: "36px", height: "36px", border: "none", padding: "0", cursor: "pointer", borderRadius: "4px" }}
+                      />
+                      <span style={{ fontSize: "13px", color: "#666" }}>{settings.payfastButtonBgColor || "#00B140"}</span>
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: "120px" }}>
+                    <s-text variant="body-sm" tone="subdued">Text Color</s-text>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+                      <input
+                        type="color"
+                        value={settings.payfastButtonTextColor || "#FFFFFF"}
+                        onChange={(e) => handleUpdate({ payfastButtonTextColor: e.target.value })}
+                        style={{ width: "36px", height: "36px", border: "none", padding: "0", cursor: "pointer", borderRadius: "4px" }}
+                      />
+                      <span style={{ fontSize: "13px", color: "#666" }}>{settings.payfastButtonTextColor || "#FFFFFF"}</span>
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: "120px" }}>
+                    <s-text variant="body-sm" tone="subdued">Font Size (px)</s-text>
+                    <input
+                      type="number"
+                      value={settings.payfastButtonFontSize || 14}
+                      onChange={(e) => handleUpdate({ payfastButtonFontSize: parseInt(e.target.value) || 14 })}
+                      min="10"
+                      max="24"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #ccc", marginTop: "6px", fontSize: "14px", boxSizing: "border-box" }}
+                    />
+                  </div>
+                </div>
+
+                <s-box padding="base" borderWidth="base" borderRadius="base" background="info-subdued">
+                  <s-text variant="body-sm">
+                    ℹ️ Your PayFast credentials are stored securely and never exposed to the storefront. Obtain your Merchant ID and Secured Key from your PayFast merchant dashboard.
+                  </s-text>
+                </s-box>
+              </s-stack>
+            </s-box>
+          )}
+        </s-stack>
+      </s-section>
+
       {/* Discount on Bundles Setting */}
       <s-section>
         <s-stack direction="block" gap="base">

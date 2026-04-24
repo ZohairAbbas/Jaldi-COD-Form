@@ -13,7 +13,7 @@ const COUNTRY_NAME_TO_CODE = {
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod, riskData } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod, riskData, _financialStatus, _paymentGateway, _orderTags, _orderNote } = orderData;
 
   // Clean phone number (remove all non-digit characters except +)
   const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
@@ -143,10 +143,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       line_items: restLineItems,
       shipping_address: restShippingAddress,
       billing_address: restBillingAddress,
-      financial_status: "pending",
-      note: orderNote,
+      financial_status: _financialStatus || "pending",
+      note: _orderNote || orderNote,
       tags: [
-        "preventify_cod_form",
+        _orderTags || "preventify_cod_form",
         verificationMethod,
         riskData?.riskLevel === "HIGH" ? "preventify-high-risk" : null,
         riskData?.riskLevel === "MEDIUM" ? "preventify-medium-risk" : null,
@@ -218,9 +218,9 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       transactions: [
         {
           kind: "sale",
-          status: "pending",
+          status: _financialStatus === "paid" ? "success" : "pending",
           amount: total.toString(),
-          gateway: "manual",
+          gateway: _paymentGateway || "manual",
         }
       ],
     };

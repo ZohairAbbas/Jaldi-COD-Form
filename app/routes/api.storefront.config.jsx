@@ -39,6 +39,12 @@ export const loader = async ({ request }) => {
         buttonPosition: shopData.settings.buttonPosition,
         buttonBgColor: shopData.settings.buttonBgColor,
         buttonTextColor: shopData.settings.buttonTextColor,
+        // PayFast settings (credentials never exposed to storefront)
+        payfastEnabled: shopData.settings.payfastEnabled || false,
+        payfastButtonText: shopData.settings.payfastButtonText,
+        payfastButtonBgColor: shopData.settings.payfastButtonBgColor,
+        payfastButtonTextColor: shopData.settings.payfastButtonTextColor,
+        payfastButtonFontSize: shopData.settings.payfastButtonFontSize,
         // Pay with Card settings
         enableCartPermalink: shopData.settings.enableCartPermalink,
         cardButtonText: shopData.settings.cardButtonText,
