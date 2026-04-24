@@ -116,6 +116,14 @@ model Settings {
   disabledProductTitles Json    @default("[]")
   enableUserBlocking   Boolean  @default(false)
   blockedUserMessage   String   @default("You are not allowed to place orders. Please contact support.")
+  // PayFast configuration
+  payfastEnabled        Boolean  @default(false)
+  payfastMerchantId     String?
+  payfastSecuredKey     String?
+  payfastButtonText     String   @default("PAY WITH PAYFAST")
+  payfastButtonBgColor  String   @default("#00B140")
+  payfastButtonTextColor String  @default("#FFFFFF")
+  payfastButtonFontSize Int      @default(14)
   shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 

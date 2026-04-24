@@ -3,6 +3,7 @@ import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId,
 import { getCurrencyCode, COUNTRIES } from '../lib/constants';
 import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } from './device-recognition';
 import { t, fieldTranslations } from './translations';
+import PayFastModal from './PayFastModal';
 
 export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
   // Manual country selection state (for user override)
@@ -55,6 +56,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false); // To track submitting state in async callbacks
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
+
+  // PayFast state
+  const [showPayFastModal, setShowPayFastModal] = useState(false);
+  const [isPayfastProcessing, setIsPayfastProcessing] = useState(false);
 
   // OTP verification state
   const [otpStep, setOtpStep] = useState('form'); // 'form' | 'otp' | 'whatsapp'
@@ -1315,6 +1320,85 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       console.error('Pay with Card error:', error);
       setSubmitError(t(lang, 'somethingWentWrong'));
       setIsRedirectingToCheckout(false);
+    }
+  };
+
+  // Handle Pay with PayFast — opens the PayFast card modal after form validation
+  const handlePayWithPayFast = () => {
+    if (variantMixOosError) return;
+    if (!validate()) return;
+    setSubmitError('');
+    setShowPayFastModal(true);
+  };
+
+  // Build the order payload that PayFastModal will send to the backend
+  const buildPayfastOrderPayload = () => {
+    const items = cart.items.map(item => ({
+      variantId: item.variantId,
+      title: item.title,
+      quantity: item.quantity,
+      price: item.price,
+      originalPrice: item.originalPrice,
+      hasBundleDiscount: item.hasBundleDiscount,
+      variantShopifyPrice: item.variantShopifyPrice,
+      bundleDiscount: item.hasBundleDiscount && item.originalPrice
+        ? Math.max(0, (item.variantShopifyPrice || (item.originalPrice / item.quantity)) * item.quantity - item.price)
+        : 0,
+      isShopifyMarkets: item.isShopifyMarkets || false,
+      displayCurrencyCode: item.displayCurrencyCode || null,
+    }));
+
+    let firstName = formData.firstName || formData.firstname || '';
+    let lastName = formData.lastName || formData.lastname || '';
+    const fullNameValue = formData.fullName || formData.fullname || '';
+    if (fullNameValue.trim()) {
+      const parts = fullNameValue.trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0];
+    }
+    if (!lastName) lastName = firstName;
+
+    const effectiveCountry = selectedCountry || detectedCountry || config?.shop?.country || 'PAK';
+
+    return {
+      firstName,
+      lastName,
+      email: formData.email || '',
+      phone: formData.phone || '',
+      address: formData.address || '',
+      address2: formData.address2 || '',
+      city: formData.city || '',
+      province: formData.province || '',
+      postalCode: formData.postalCode || formData.postalcode || '',
+      country: COUNTRIES[effectiveCountry]?.name || 'Pakistan',
+      countryCode: effectiveCountry,
+      items,
+      total: cart.total,
+      shippingCost: selectedShippingRate?.price || 0,
+      shippingRateName: selectedShippingRate?.name || 'Standard Shipping',
+      shippingRateId: selectedShippingRate?.id || null,
+      recoveryDiscount: recoveryDiscount || null,
+      userDiscount: appliedDiscount || null,
+      presentmentCurrencyCode: cart.items.find(i => i.isShopifyMarkets)?.displayCurrencyCode || null,
+      customFields: formData.customFields || {},
+      sessionId: sessionId || null,
+      verificationMethod: null,
+      pixelEventId: getEventId(),
+      pixelAttribution: getAttributionData(),
+    };
+  };
+
+  // Called by PayFastModal on successful payment + order creation
+  const handlePayfastSuccess = (result) => {
+    setShowPayFastModal(false);
+    setIsPayfastProcessing(false);
+    // Reuse CODForm's existing onSubmit success flow with the created order data
+    if (onSubmit) {
+      onSubmit({
+        paymentMethod: 'payfast',
+        order: result.order,
+        payfastTransactionId: result.payfastTransactionId,
+      });
     }
   };
 
@@ -3269,6 +3353,50 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           </>
         )}
 
+        {/* Pay with PayFast button */}
+        {config.settings?.payfastEnabled && (
+          <button
+            type="button"
+            onClick={handlePayWithPayFast}
+            disabled={isPayfastProcessing || isSubmitting || isRedirectingToCheckout || variantMixOosError}
+            style={{
+              width: '100%',
+              padding: '14px 20px',
+              marginTop: '12px',
+              backgroundColor: config.settings?.payfastButtonBgColor || '#00B140',
+              color: config.settings?.payfastButtonTextColor || '#FFFFFF',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: `${config.settings?.payfastButtonFontSize || 14}px`,
+              fontWeight: '600',
+              cursor: (isPayfastProcessing || isSubmitting || isRedirectingToCheckout || variantMixOosError) ? 'not-allowed' : 'pointer',
+              opacity: (isPayfastProcessing || isSubmitting || isRedirectingToCheckout || variantMixOosError) ? 0.7 : 1,
+              transition: 'all 0.2s',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            {isPayfastProcessing ? (
+              <>
+                <div className="jaldi-loading"></div>
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <span>{config.settings?.payfastButtonText || 'PAY WITH PAYFAST'}</span>
+              </>
+            )}
+          </button>
+        )}
+
         {/* WhatsApp Buttons - rendered after COD and Pay with Card buttons */}
         {visibleFields.filter(f => f.type === 'whatsapp').map(field => {
           const waNumber = (field.whatsappNumber || '').replace(/\D/g, '');
@@ -3327,6 +3455,19 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           </>
         )}
       </div>
+
+      {/* PayFast Modal — rendered OUTSIDE the COD <form> to prevent nested-form page reload */}
+      {showPayFastModal && (
+        <PayFastModal
+          appPath={appPath}
+          shop={config.shopDomain}
+          orderPayload={buildPayfastOrderPayload()}
+          phone={formData.phone || ''}
+          config={config}
+          onSuccess={handlePayfastSuccess}
+          onClose={() => { setShowPayFastModal(false); setIsPayfastProcessing(false); }}
+        />
+      )}
 
       {/* WhatsApp Verification Overlay (Primary) */}
       {otpStep === 'whatsapp' && (

@@ -80,6 +80,12 @@ export const loader = async ({ request }) => {
         cardDiscountType: shopData.settings.cardDiscountType,
         cardDiscountValue: shopData.settings.cardDiscountValue,
         allowDiscountOnBundles: shopData.settings.allowDiscountOnBundles,
+        // PayFast settings (credentials never exposed to storefront)
+        payfastEnabled: shopData.settings.payfastEnabled || false,
+        payfastButtonText: shopData.settings.payfastButtonText,
+        payfastButtonBgColor: shopData.settings.payfastButtonBgColor,
+        payfastButtonTextColor: shopData.settings.payfastButtonTextColor,
+        payfastButtonFontSize: shopData.settings.payfastButtonFontSize,
         // OTP verification
         enableOTP: shopData.settings.enableOTP,
         enableSmartCheckout: shopData.settings.enableSmartCheckout,
