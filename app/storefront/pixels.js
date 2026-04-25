@@ -577,7 +577,7 @@ export function trackTikTokPlaceAnOrder(orderData, currency = 'PKR') {
     }
 
     try {
-      window.ttq.track('PlaceAnOrder', eventData);
+      window.ttq.track('Purchase', eventData);
       console.log(`[TikTok Pixel] Fired PlaceAnOrder on pixel ${pixel.pixelId}`, eventData);
     } catch (error) {
       console.error(`Error tracking PlaceAnOrder on TikTok pixel ${pixel.pixelId}:`, error);
@@ -620,7 +620,7 @@ export function trackTikTokCompletePayment(orderData, currency = 'PKR') {
     }
 
     try {
-      window.ttq.track('CompletePayment', eventData);
+      window.ttq.track('Purchase', eventData);
       console.log(`[TikTok Pixel] Fired CompletePayment on pixel ${pixel.pixelId}`, eventData);
     } catch (error) {
       console.error(`Error tracking CompletePayment on TikTok pixel ${pixel.pixelId}:`, error);
