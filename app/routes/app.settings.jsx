@@ -1701,7 +1701,7 @@ export default function Settings() {
               />
             </div>
 
-            {pixelFormData.type === 'facebook_capi' && (
+            {(pixelFormData.type === 'facebook_capi' || pixelFormData.type === 'tiktok_events_api') && (
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>Access Token</label>
                 <input
@@ -1711,7 +1711,7 @@ export default function Settings() {
                   placeholder="Enter access token"
                   style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
                 />
-                <small style={{ color: '#666' }}>Required for Conversions API</small>
+                <small style={{ color: '#666' }}>Required for {pixelFormData.type === 'facebook_capi' ? 'Conversions API' : 'TikTok Events API'}</small>
               </div>
             )}
 
