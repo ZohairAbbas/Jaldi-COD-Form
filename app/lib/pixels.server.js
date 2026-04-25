@@ -300,7 +300,7 @@ export async function sendTikTokEventsAPI(pixel, eventData) {
   } = eventData;
 
   try {
-    // Build user data with hashed values
+    // Build user data with hashed values (Events API 2.0 format)
     const hashedUserData = {
       ...(userData.email && { email: [hashForFacebook(userData.email)] }),
       ...(userData.phone && { phone: [hashPhone(userData.phone)] }),
@@ -308,31 +308,31 @@ export async function sendTikTokEventsAPI(pixel, eventData) {
       ...(userData.clientUserAgent && { user_agent: userData.clientUserAgent }),
     };
 
-    // Build the TikTok Events API request payload
+    // Build the TikTok Events API 2.0 request payload
+    // Docs: https://business-api.tiktok.com/portal/docs/report-app-web-offline-or-crm-events/v1.3
     const payload = {
-      pixel_code: pixel.pixelId,
-      event: eventName,
-      event_id: eventId,
-      timestamp: eventTime || Math.floor(Date.now() / 1000).toString(),
-      context: {
+      event_source: 'web',
+      event_source_id: pixel.pixelId,
+      ...(testEventCode && { test_event_code: testEventCode }),
+      data: [{
+        event: eventName,
+        event_time: eventTime || Math.floor(Date.now() / 1000),
+        event_id: eventId,
         user: hashedUserData,
         page: {
           url: eventSourceUrl || '',
         },
-        ip: userData.clientIpAddress || '',
-        user_agent: userData.clientUserAgent || '',
-      },
-      properties: {
-        contents: customData.content_ids ? customData.content_ids.map(id => ({ content_id: id })) : [],
-        content_type: customData.content_type || 'product',
-        currency: customData.currency || 'USD',
-        value: customData.value ? String(customData.value) : '0',
-      },
-      ...(testEventCode && { test_event_code: testEventCode }),
+        properties: {
+          contents: customData.content_ids ? customData.content_ids.map(id => ({ content_id: id })) : [],
+          content_type: customData.content_type || 'product',
+          currency: customData.currency || 'USD',
+          value: customData.value ? String(customData.value) : '0',
+        },
+      }],
     };
 
-    // Send to TikTok Events API
-    const url = `https://business-api.tiktok.com/open_api/v1.3/pixel/track/`;
+    // Send to TikTok Events API 2.0 endpoint (pixel/track was sunset in H2 2024)
+    const url = `https://business-api.tiktok.com/open_api/v1.3/event/track/`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -340,7 +340,7 @@ export async function sendTikTokEventsAPI(pixel, eventData) {
         'Content-Type': 'application/json',
         'Access-Token': pixel.accessToken,
       },
-      body: JSON.stringify({ data: [payload] }),
+      body: JSON.stringify(payload),
     });
 
     const result = await response.json();
@@ -435,23 +435,15 @@ export async function fireTikTokEvents(pixels, orderData) {
 
       const events = [];
 
-      // PlaceAnOrder event
-      if (pixel.enablePlaceAnOrder) {
+      // Fire Purchase event (the correct TikTok Events API 2.0 web standard event).
+      // Both enablePlaceAnOrder and enableCompletePayment map to Purchase —
+      // PlaceAnOrder/CompletePayment were legacy pixel event names, not valid Events API events.
+      // event_id deduplication ensures only one Purchase is counted even if both toggles are on.
+      if (pixel.enablePlaceAnOrder || pixel.enableCompletePayment) {
         events.push(
           sendTikTokEventsAPI(pixel, {
             ...baseEventData,
-            eventName: 'PlaceAnOrder',
-            testEventCode: pixel.testMode ? pixel.testEventCode : null,
-          })
-        );
-      }
-
-      // CompletePayment event
-      if (pixel.enableCompletePayment) {
-        events.push(
-          sendTikTokEventsAPI(pixel, {
-            ...baseEventData,
-            eventName: 'CompletePayment',
+            eventName: 'Purchase',
             testEventCode: pixel.testMode ? pixel.testEventCode : null,
           })
         );
