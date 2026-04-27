@@ -460,9 +460,10 @@ async function handleFulfillmentSync(request) {
   await logCronJob("fulfillment-sync", "started");
 
   try {
-    // Get all shops with active orders that need syncing
+    // Get all shops with active orders that need syncing (skip shops with invalid tokens)
     const shopsWithPendingOrders = await db.shop.findMany({
       where: {
+        tokenInvalid: false,
         orders: {
           some: {
             shopifyOrderId: { not: null },
@@ -470,7 +471,6 @@ async function handleFulfillmentSync(request) {
               { deliveryOutcome: null },
               { deliveryOutcome: { notIn: ["delivered", "returned", "cancelled"] } },
             ],
-            createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
           },
         },
       },
@@ -492,6 +492,18 @@ async function handleFulfillmentSync(request) {
     for (const shop of shopsWithPendingOrders) {
       try {
         const shopResult = await syncShopFulfillments(shop.id, shop.shopifyDomain, shop.accessToken);
+
+        // If shop returned an invalid token signal, mark it and skip future runs
+        if (shopResult.invalidToken) {
+          await db.shop.update({
+            where: { id: shop.id },
+            data: { tokenInvalid: true },
+          });
+          console.log(`[fulfillment-sync] Marked ${shop.shopifyDomain} as tokenInvalid — will be skipped in future runs`);
+          results.byShop[shop.shopifyDomain] = { skipped: true, reason: "invalidToken" };
+          continue;
+        }
+
         results.shopsProcessed++;
         results.totalProcessed += shopResult.processed;
         results.totalUpdated += shopResult.updated;
