@@ -1443,7 +1443,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       padding: '10px 12px',
       borderRadius: '0',
       border: 'none',
-      fontSize: '16px',
+      fontSize: '14px',
+      fontFamily: 'inherit',
       color: '#111827',
       backgroundColor: '#FFFFFF',
       outline: 'none',
@@ -1474,7 +1475,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     const labelStyle = {
       display: 'flex',
       alignItems: 'center',
-      fontSize: '16px',
+      fontSize: '14px',
       fontWeight: '600',
       color: '#000000',
       width: '100px',
@@ -1510,8 +1511,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
       return (
         <div key={field.id} style={{ marginBottom: '16px' }}>
-          <div style={fieldRowStyle}>
-            <label style={labelStyle}>
+          <div className="jaldi-field-row" style={fieldRowStyle}>
+            <label className="jaldi-field-label" style={labelStyle}>
               {getFieldLabel(field)}
             </label>
 
@@ -1546,7 +1547,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   color: '#FFFFFF',
                   border: 'none',
                   borderRadius: '4px',
-                  fontSize: '16px',
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
                   fontWeight: '600',
                   cursor: (!discountCodeInput.trim() || isDiscountDisabled)
                     ? 'not-allowed' : 'pointer',
@@ -1615,8 +1617,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       case 'text':
         return (
           <div key={field.id} style={{ marginBottom: '0' }}>
-            <div style={fieldRowStyle}>
-              <label style={labelStyle}>
+            <div className="jaldi-field-row" style={fieldRowStyle}>
+              <label className="jaldi-field-label" style={labelStyle}>
                 {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
               </label>
               <div style={{ flex: 1, position: 'relative' }}>
@@ -1678,8 +1680,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         if (field.id === 'province' && (!options || options.length === 0)) {
           return (
             <div key={field.id} style={{ marginBottom: '0' }}>
-              <div style={fieldRowStyle}>
-                <label style={labelStyle}>
+              <div className="jaldi-field-row" style={fieldRowStyle}>
+                <label className="jaldi-field-label" style={labelStyle}>
                   {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
                 </label>
                 <div style={{ flex: 1 }}>
@@ -1702,8 +1704,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
         return (
           <div key={field.id} style={{ marginBottom: '0' }}>
-            <div style={fieldRowStyle}>
-              <label style={labelStyle}>
+            <div className="jaldi-field-row" style={fieldRowStyle}>
+              <label className="jaldi-field-label" style={labelStyle}>
                 {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
               </label>
               <div style={{ flex: 1 }}>
@@ -1993,6 +1995,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
+                    fontFamily: 'inherit',
                     backgroundColor: '#f9fafb',
                     borderBottom: step1SummaryOpen ? '1px solid #E5E7EB' : 'none',
                   }}
@@ -2001,7 +2004,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                     </svg>
-                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#111' }}>
+                    <span style={{ fontSize: '15px', fontWeight: '600', color: '#111' }}>
                       Order Summary
                     </span>
                     <span style={{ fontSize: '13px', color: '#6B7280' }}>
@@ -2110,7 +2113,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             {/* Phone Entry Section */}
             <div>
               {/* Heading */}
-              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#000', margin: '0 0 16px 0' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#000', margin: '0 0 16px 0' }}>
                 {t(lang, 'loginToContinue')}
               </h3>
 
@@ -2209,7 +2212,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       padding: '0 14px 0 10px',
                       border: 'none',
                       outline: 'none',
-                      fontSize: '15px',
+                      fontSize: '14px',
+                      fontFamily: 'inherit',
                       color: '#111',
                       backgroundColor: 'transparent',
                     }}
@@ -2235,6 +2239,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   border: 'none',
                   borderRadius: `${config.formConfig.borderRadius}px`,
                   fontSize: '15px',
+                  fontFamily: 'inherit',
                   fontWeight: '600',
                   cursor: isTransitioningStep ? 'not-allowed' : 'pointer',
                   opacity: isTransitioningStep ? 0.7 : 1,
@@ -2392,6 +2397,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
+                      fontFamily: 'inherit',
                       backgroundColor: '#f9fafb',
                       borderBottom: step2SummaryOpen ? '1px solid #E5E7EB' : 'none',
                     }}
@@ -2400,7 +2406,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                       </svg>
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#111' }}>{t(lang, 'orderSummary')}</span>
+                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#111' }}>{t(lang, 'orderSummary')}</span>
                       <span style={{ fontSize: '13px', color: '#6B7280' }}>
                         ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? t(lang, 'item') : t(lang, 'items')})
                       </span>
@@ -2562,10 +2568,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         <circle cx="5.5" cy="18.5" r="2.5"></circle>
                         <circle cx="18.5" cy="18.5" r="2.5"></circle>
                       </svg>
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#000' }}>{t(lang, 'shipping')}</span>
+                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#000' }}>{t(lang, 'shipping')}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: '#000' }}>
+                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#000' }}>
                         {selectedShippingRate ? (selectedShippingRate.price === 0 ? t(lang, 'free') : `${currencySymbol}${(hasDisplayPrice ? parseFloat((selectedShippingRate.price * displayExchangeRate).toFixed(2)) : selectedShippingRate.price).toFixed(2)}`) : t(lang, 'free')}
                       </span>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2.5"
@@ -2608,12 +2614,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                     accentColor: '#000',
                                   }}
                                 />
-                                <span style={{ fontSize: '16px', color: '#000000' }}>
+                                <span style={{ fontSize: '14px', color: '#000000' }}>
                                   {rate.name}
                                 </span>
                               </div>
                               <span style={{
-                                fontSize: '16px',
+                                fontSize: '14px',
                                 fontWeight: '700',
                                 color: '#000000',
                               }}>
@@ -2639,9 +2645,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               readOnly
                               style={{ width: '16px', height: '16px', accentColor: '#000' }}
                             />
-                            <span style={{ fontSize: '16px', color: '#000000' }}>{t(lang, 'freeShipping')}</span>
+                            <span style={{ fontSize: '14px', color: '#000000' }}>{t(lang, 'freeShipping')}</span>
                           </div>
-                          <span style={{ fontSize: '16px', fontWeight: '700', color: '#000000' }}>{t(lang, 'free')}</span>
+                          <span style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>{t(lang, 'free')}</span>
                         </label>
                       )}
                     </div>
@@ -2653,8 +2659,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               return (
                 <div key={section.id} style={{ marginBottom: '16px', border: '1px solid #E5E7EB', borderRadius: '12px', overflow: 'hidden', padding: '16px' }}>
                   <h3 style={{
-                    fontSize: '16px',
-                    fontWeight: '700',
+                    fontSize: '15px',
+                    fontWeight: '600',
                     marginBottom: '16px',
                     color: '#000',
                   }}>
@@ -2669,10 +2675,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       gap: '8px',
                       marginBottom: '16px',
                     }}>
-                      <label style={{
+                      <label className="jaldi-field-label" style={{
                         display: 'flex',
                         alignItems: 'center',
-                        fontSize: '16px',
+                        fontSize: '14px',
                         fontWeight: '600',
                         color: '#000000',
                         width: '100px',
@@ -2708,7 +2714,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               padding: '10px 12px',
                               borderRadius: '0',
                               border: 'none',
-                              fontSize: '16px',
+                              fontSize: '14px',
+                              fontFamily: 'inherit',
                               backgroundColor: 'transparent',
                               cursor: isSmartCheckout ? 'default' : 'pointer',
                               outline: 'none',
@@ -3213,7 +3220,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               color: config.formConfig?.submitButtonTextColor || '#FFFFFF',
               border: 'none',
               borderRadius: '4px',
-              fontSize: `${config.formConfig?.submitButtonFontSize || 14}px`,
+              fontSize: `${config.formConfig?.submitButtonFontSize || 15}px`,
+              fontFamily: 'inherit',
               fontWeight: '600',
               cursor: (isSubmitting || variantMixOosError) ? 'not-allowed' : 'pointer',
               opacity: (isSubmitting || variantMixOosError) ? 0.7 : 1,
@@ -3321,7 +3329,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               color: config.settings?.cardButtonTextColor || '#000000',
               border: buyerData?.preferredPaymentMethod === 'card' ? '2px solid #1a7340' : '2px solid #000000',
               borderRadius: '4px',
-              fontSize: `${config.settings?.cardButtonFontSize || 14}px`,
+              fontSize: `${config.settings?.cardButtonFontSize || 15}px`,
+              fontFamily: 'inherit',
               fontWeight: '600',
               cursor: (isRedirectingToCheckout || isSubmitting || variantMixOosError) ? 'not-allowed' : 'pointer',
               opacity: (isRedirectingToCheckout || isSubmitting || variantMixOosError) ? 0.7 : 1,
@@ -3367,7 +3376,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               color: config.settings?.payfastButtonTextColor || '#FFFFFF',
               border: 'none',
               borderRadius: '4px',
-              fontSize: `${config.settings?.payfastButtonFontSize || 14}px`,
+              fontSize: `${config.settings?.payfastButtonFontSize || 15}px`,
+              fontFamily: 'inherit',
               fontWeight: '600',
               cursor: (isPayfastProcessing || isSubmitting || isRedirectingToCheckout || variantMixOosError) ? 'not-allowed' : 'pointer',
               opacity: (isPayfastProcessing || isSubmitting || isRedirectingToCheckout || variantMixOosError) ? 0.7 : 1,
@@ -3421,7 +3431,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 color: field.whatsappTextColor || '#ffffff',
                 border: 'none',
                 borderRadius: '8px',
-                fontSize: `${field.whatsappFontSize || 16}px`,
+                fontSize: `${field.whatsappFontSize || 15}px`,
+                fontFamily: 'inherit',
                 fontWeight: '600',
                 cursor: 'pointer',
                 textDecoration: 'none',

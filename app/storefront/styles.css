@@ -42,11 +42,12 @@
   position: relative;
 }
 
-/* Form inputs */
+/* Form inputs — always inherit body font (Poppins) */
 .jaldi-form input,
-.jaldi-form select {
+.jaldi-form select,
+.jaldi-form button,
+.jaldi-form a {
   font-family: inherit;
-  font-size: inherit;
 }
 
 .jaldi-form input:focus,
@@ -73,6 +74,18 @@
 
   .jaldi-modal-content {
     max-height: 95vh;
+  }
+
+  /* Stack field label above input on mobile */
+  .jaldi-field-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .jaldi-field-label {
+    width: auto !important;
+    min-width: unset !important;
+    margin-bottom: 6px !important;
   }
 }
 

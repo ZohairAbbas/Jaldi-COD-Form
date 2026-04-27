@@ -26,6 +26,7 @@ export default function BuyButton({ config, onClick }) {
     border: `${settings.buttonBorderWidth || 0}px solid ${settings.buttonBorderColor || '#000000'}`,
     borderRadius: `${settings.buttonBorderRadius || 4}px`,
     fontSize: `${settings.buttonFontSize || 16}px`,
+    fontFamily: 'inherit',
     fontWeight: '600',
     cursor: 'pointer',
     textAlign: 'center',
