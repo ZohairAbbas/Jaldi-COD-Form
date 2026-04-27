@@ -139,7 +139,24 @@ export async function syncShopFulfillments(shopId, shopDomain, accessToken) {
         }
       );
 
+      // Detect invalid/expired access token (401 or Shopify auth errors)
+      if (response.status === 401 || response.status === 403) {
+        console.error(`[fulfillment-sync] Invalid token for ${shopDomain} (HTTP ${response.status}) — marking tokenInvalid`);
+        return { processed: 0, updated: 0, errors: 0, invalidToken: true };
+      }
+
       const result = await response.json();
+
+      // Shopify sometimes returns 200 with an auth error in the body
+      const authError = result.errors?.find(e =>
+        e.message?.toLowerCase().includes("invalid api key") ||
+        e.message?.toLowerCase().includes("access token") ||
+        e.message?.toLowerCase().includes("unrecognized login")
+      );
+      if (authError) {
+        console.error(`[fulfillment-sync] Auth error for ${shopDomain}: ${authError.message} — marking tokenInvalid`);
+        return { processed: 0, updated: 0, errors: 0, invalidToken: true };
+      }
 
       // Check rate limiting
       const throttle = result.extensions?.cost?.throttleStatus;

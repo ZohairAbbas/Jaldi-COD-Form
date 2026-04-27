@@ -38,8 +38,9 @@ model Shop {
   enableMultiCountry Boolean         @default(false)
   supportedCountries Json            @default("[]")
   setupProgress      Json?           @default("{\"step1Completed\": false, \"step2Completed\": false, \"welcomeDismissed\": false, \"setupGuideDismissed\": false}")
-  themeEmbedEnabled  Boolean?
+  themeEmbedEnabled   Boolean?
   themeEmbedCheckedAt DateTime?
+  tokenInvalid        Boolean   @default(false)  // Set true when Shopify returns 401 — skip in cron
   abandonedCarts     AbandonedCart[]
   downsells          Downsell[]
   formConfig         FormConfig?

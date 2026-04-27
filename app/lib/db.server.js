@@ -109,11 +109,11 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       }
     }
   } else {
-    // Update access token if changed
-    if (shop.accessToken !== accessToken) {
+    // Update access token if changed (also clears tokenInvalid on reinstall)
+    if (shop.accessToken !== accessToken || shop.tokenInvalid) {
       shop = await prisma.shop.update({
         where: { shopifyDomain },
-        data: { accessToken },
+        data: { accessToken, tokenInvalid: false },
         include: {
           settings: true,
           formConfig: true,
