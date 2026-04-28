@@ -1,6 +1,7 @@
 import db from "../db.server";
 import { createDraftOrderForAbandonedCart } from "../lib/abandoned-cart.server";
 import { syncShopFulfillments } from "../lib/fulfillment-sync.server";
+import { syncCourierifyData } from "../lib/courierify-sync.server";
 
 
 const ABANDONED_THRESHOLD_MINUTES = 10;
@@ -22,6 +23,8 @@ export const action = async ({ request, params }) => {
       return handleSessionTrack(request);
     case "cron-fulfillment-sync":
       return handleFulfillmentSync(request);
+    case "cron-courierify-sync":
+      return handleCourierifySync(request);
     case "cron-health":
       return handleCronHealth(request);
     default:
@@ -541,6 +544,47 @@ async function handleFulfillmentSync(request) {
 
     return Response.json(
       { success: false, error: error.message || "Failed to sync fulfillments" },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleCourierifySync(request) {
+  if (request.method !== "POST") {
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
+  }
+  if (!verifyCronSecret(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startTime = Date.now();
+  await logCronJob("courierify-sync", "started");
+
+  try {
+    const result = await syncCourierifyData();
+    const duration = Date.now() - startTime;
+
+    await logCronJob("courierify-sync", "completed", {
+      message: result.skipped
+        ? `Skipped: ${result.reason}`
+        : `Enriched ${result.phonesEnriched} buyers, imported ${result.recordsImported} records`,
+      processed: result.recordsImported ?? 0,
+      errors: result.errors ?? 0,
+      duration,
+    });
+
+    return Response.json({ success: true, ...result, duration: `${duration}ms` });
+  } catch (error) {
+    console.error("[courierify-sync] Unhandled error:", error);
+
+    const duration = Date.now() - startTime;
+    await logCronJob("courierify-sync", "failed", {
+      message: error.message,
+      duration,
+    });
+
+    return Response.json(
+      { success: false, error: error.message || "Failed to sync Courierify data" },
       { status: 500 }
     );
   }

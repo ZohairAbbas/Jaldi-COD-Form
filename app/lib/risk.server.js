@@ -78,8 +78,8 @@ export async function recalculateBuyerRisk(phone) {
   });
   if (!buyer) return;
 
-  // Aggregate delivery outcomes across ALL shops
-  const outcomes = await prisma.order.groupBy({
+  // Aggregate delivery outcomes from Preventify orders
+  const internalOutcomes = await prisma.order.groupBy({
     by: ["deliveryOutcome"],
     where: {
       phone: normalized,
@@ -88,30 +88,55 @@ export async function recalculateBuyerRisk(phone) {
     _count: { id: true },
   });
 
+  // Aggregate delivery outcomes from external sources (Courierify etc.)
+  const externalOutcomes = await prisma.externalDeliveryRecord.groupBy({
+    by: ["deliveryOutcome"],
+    where: {
+      phone: normalized,
+      deliveryOutcome: { in: ["delivered", "returned", "cancelled"] },
+    },
+    _count: { id: true },
+  });
+
+  // Count ALL external records (terminal + non-terminal) for totalOrdersGlobal
+  const externalTotal = await prisma.externalDeliveryRecord.count({
+    where: { phone: normalized },
+  });
+
+  // Merge internal + external outcome counts
   let deliveredOrders = 0;
   let rtoOrders = 0;
   let cancelledOrders = 0;
 
-  for (const row of outcomes) {
-    if (row.deliveryOutcome === "delivered") deliveredOrders = row._count.id;
-    if (row.deliveryOutcome === "returned") rtoOrders = row._count.id;
-    if (row.deliveryOutcome === "cancelled") cancelledOrders = row._count.id;
+  for (const row of internalOutcomes) {
+    if (row.deliveryOutcome === "delivered") deliveredOrders += row._count.id;
+    if (row.deliveryOutcome === "returned") rtoOrders += row._count.id;
+    if (row.deliveryOutcome === "cancelled") cancelledOrders += row._count.id;
   }
+  for (const row of externalOutcomes) {
+    if (row.deliveryOutcome === "delivered") deliveredOrders += row._count.id;
+    if (row.deliveryOutcome === "returned") rtoOrders += row._count.id;
+    if (row.deliveryOutcome === "cancelled") cancelledOrders += row._count.id;
+  }
+
+  // totalOrders = Preventify orders + all external shipments (Courierify etc.)
+  const combinedTotal = buyer.totalOrdersGlobal + externalTotal;
 
   const terminalOrders = deliveredOrders + rtoOrders;
   const rtoRate = terminalOrders > 0 ? rtoOrders / terminalOrders : 0;
 
   const { riskLevel } = calculateRiskLevel({
-    totalOrders: buyer.totalOrdersGlobal,
+    totalOrders: combinedTotal,
     deliveredOrders,
     rtoOrders,
     cancelledOrders,
   });
 
-  // Update GlobalBuyer
+  // Update GlobalBuyer with combined stats
   await prisma.globalBuyer.update({
     where: { phone: normalized },
     data: {
+      totalOrdersGlobal: combinedTotal,
       deliveredOrdersGlobal: deliveredOrders,
       rtoOrdersGlobal: rtoOrders,
       cancelledOrdersGlobal: cancelledOrders,
