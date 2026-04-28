@@ -8,6 +8,7 @@ const locks = {
   abandonedCarts: false,
   draftOrders: false,
   fulfillmentSync: false,
+  courierifySync: false,
 };
 
 async function runJob(jobName, endpoint) {
@@ -82,6 +83,14 @@ cron.schedule('0 */3 * * *', () => {
   timezone: 'Asia/Karachi'
 });
 
+// Job 4: Courierify Data Sync - Daily at 02:00 PKT
+cron.schedule('0 2 * * *', () => {
+  runJob('courierifySync', '/proxy/cron-courierify-sync');
+}, {
+  scheduled: true,
+  timezone: 'Asia/Karachi'
+});
+
 // ============================================
 // STARTUP
 // ============================================
@@ -95,6 +104,7 @@ console.log('Jobs:');
 console.log('  - Abandoned cart detection: Every 5 minutes');
 console.log('  - Draft order creation: Every 30 minutes');
 console.log('  - Fulfillment sync: Every 3 hours');
+console.log('  - Courierify data sync: Daily at 02:00 PKT');
 console.log('========================================');
 
 // Run jobs immediately on startup for testing (optional - comment out in production)
