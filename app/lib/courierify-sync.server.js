@@ -70,19 +70,27 @@ export async function syncCourierifyData() {
       const phoneVariants = buildPhoneVariants(phoneBatch);
 
       try {
-        const shipments = await courierifyPrisma.shipment.findMany({
-          where: {
-            customerPhone: { in: phoneVariants },
-            status: { in: Object.keys(COURIERIFY_STATUS_MAP) },
-          },
-          select: {
-            id: true,
-            customerPhone: true,
-            status: true,
-            codAmount: true,
-            shop: { select: { domain: true } },
-          },
-        });
+        // Use raw SQL — the second PrismaClient shares Preventify's generated client
+        // and doesn't know about Courierify's Shipment model.
+        // Courierify table names: "Shipment" and "Shop" (Prisma default PascalCase → quoted in PG)
+        // Shop.domain is stored in column "shopDomain" (via @map("shopDomain"))
+        const validStatuses = Object.keys(COURIERIFY_STATUS_MAP);
+
+        // Build parameterized placeholders: $1, $2, ..., $N
+        const phoneParams = phoneVariants.map((_, idx) => `$${idx + 1}`).join(", ");
+        const statusOffset = phoneVariants.length;
+        const statusParams = validStatuses.map((_, idx) => `$${statusOffset + idx + 1}`).join(", ");
+
+        const queryParams = [...phoneVariants, ...validStatuses];
+
+        const shipments = await courierifyPrisma.$queryRawUnsafe(
+          `SELECT s.id, s."customerPhone", s.status, s."codAmount", sh."shopDomain" as "shopDomain"
+           FROM "Shipment" s
+           JOIN "Shop" sh ON sh.id = s."shopId"
+           WHERE s."customerPhone" IN (${phoneParams})
+             AND s.status IN (${statusParams})`,
+          ...queryParams
+        );
 
         const newRecords = [];
 
@@ -97,7 +105,7 @@ export async function syncCourierifyData() {
           newRecords.push({
             phone: normalizedPhone,
             sourceApp: "courierify",
-            sourceShopDomain: shipment.shop?.domain || "unknown",
+            sourceShopDomain: shipment.shopDomain || "unknown",
             externalId: shipment.id,
             deliveryOutcome,
             orderValue: shipment.codAmount ? parseFloat(shipment.codAmount) : null,
