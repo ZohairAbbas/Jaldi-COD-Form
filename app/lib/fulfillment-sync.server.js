@@ -147,8 +147,18 @@ export async function syncShopFulfillments(shopId, shopDomain, accessToken) {
 
       const result = await response.json();
 
+      // Shopify sometimes returns errors as a string (e.g. "Unavailable Shop") or array
+      const errorsArray = Array.isArray(result.errors) ? result.errors : [];
+      const errorsString = typeof result.errors === "string" ? result.errors.toLowerCase() : "";
+
+      // Mark unavailable/paused/deleted shops as invalid so they get skipped permanently
+      if (errorsString.includes("unavailable shop") || errorsString.includes("shop not found")) {
+        console.error(`[fulfillment-sync] Shop unavailable for ${shopDomain}: "${result.errors}" — marking tokenInvalid`);
+        return { processed: 0, updated: 0, errors: 0, invalidToken: true };
+      }
+
       // Shopify sometimes returns 200 with an auth error in the body
-      const authError = result.errors?.find(e =>
+      const authError = errorsArray.find(e =>
         e.message?.toLowerCase().includes("invalid api key") ||
         e.message?.toLowerCase().includes("access token") ||
         e.message?.toLowerCase().includes("unrecognized login")
