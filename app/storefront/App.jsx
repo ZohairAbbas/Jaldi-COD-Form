@@ -163,6 +163,22 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     let isUpdating = false;
     let lastKnownDisplayCurrency = currentProduct?.displayCurrencySymbol || null;
 
+    // Helper to find the quantity input regardless of whether it lives inside the cart-add form.
+    // Some themes render the quantity stepper outside the form (form attr is absent or references
+    // a different element), so the strict `form[action*="/cart/add"] input[name="quantity"]`
+    // selector returns null. Fall back to any visible quantity input on the page.
+    const getQuantityInput = () => {
+      // Preferred: inside the cart-add form
+      const inForm = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+      if (inForm) return inForm;
+      // Fallback: any input[name="quantity"] that is visible (not hidden)
+      const all = document.querySelectorAll('input[name="quantity"]');
+      for (const el of all) {
+        if (el.type !== 'hidden' && el.offsetParent !== null) return el;
+      }
+      return null;
+    };
+
     // ===== PUMPER BUNDLES INTEGRATION =====
     // Helper to get Pumper Bundles selected bundle data
     const getPumperBundleData = () => {
@@ -455,7 +471,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
         // If no bundle data, try to get quantity from product form
         if (!bundleData) {
-          const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+          const quantityInput = getQuantityInput();
           if (quantityInput) {
             const inputQuantity = parseInt(quantityInput.value);
             if (!isNaN(inputQuantity) && inputQuantity > 0) {
@@ -850,7 +866,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
               const hasBundlerApp = document.querySelector('.bndlr-quantity-break');
               const hasQuantityBreaks = document.querySelector('quantity-breaks');
               if (!hasPumperBundles && !hasBundlerApp && !hasQuantityBreaks) {
-                const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+                const quantityInput = getQuantityInput();
                 if (quantityInput) {
                   const currentQuantity = parseInt(quantityInput.value);
                   if (!isNaN(currentQuantity) && currentQuantity > 0 && currentQuantity !== lastKnownQuantity) {
@@ -932,7 +948,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
     // Listen for quantity changes
     const handleQuantityChange = () => {
-      const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+      const quantityInput = getQuantityInput();
       if (quantityInput) {
         const newQuantity = parseInt(quantityInput.value);
         if (!isNaN(newQuantity) && newQuantity > 0 && newQuantity !== lastKnownQuantity) {
@@ -1032,7 +1048,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     window.addEventListener('popstate', handleUrlChange);
 
     // Listen for quantity input changes
-    const quantityInput = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+    const quantityInput = getQuantityInput();
     if (quantityInput) {
       quantityInput.addEventListener('change', handleQuantityChange);
       quantityInput.addEventListener('input', handleQuantityChange);
