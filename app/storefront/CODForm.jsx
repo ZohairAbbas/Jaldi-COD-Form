@@ -1628,15 +1628,27 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       {getFieldIcon(field.id)}
                     </div>
                   )}
+                  {field.id === 'phone' && (
+                    <span style={{
+                      padding: '0 6px 0 10px',
+                      fontSize: '14px',
+                      color: '#111827',
+                      fontFamily: 'inherit',
+                      whiteSpace: 'nowrap',
+                      userSelect: 'none',
+                    }}>
+                      {country.phoneCode}
+                    </span>
+                  )}
                   <input
                     type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
                     name={field.id}
-                    value={value}
-                    onChange={(e) => handleChange(fieldId, e.target.value)}
+                    value={field.id === 'phone' ? value.slice(country.phoneCode.length) : value}
+                    onChange={(e) => handleChange(fieldId, field.id === 'phone' ? country.phoneCode + e.target.value : e.target.value)}
                     onBlur={undefined}
-                    placeholder={field.id === 'phone' ? `${country.phoneCode}3001234567` : field.id === 'email' ? 'email@example.com' : field.placeholder}
-                    maxLength={field.id === 'phone' ? 15 : undefined}
-                    style={inputStyle}
+                    placeholder={field.id === 'phone' ? (field.placeholder || '3001234567') : field.id === 'email' ? 'email@example.com' : field.placeholder}
+                    maxLength={field.id === 'phone' ? 15 - country.phoneCode.length : undefined}
+                    style={field.id === 'phone' ? { ...inputStyle, paddingLeft: '0' } : inputStyle}
                   />
                   {field.id === 'phone' && isLookingUpCustomer && (
                     <div style={{ padding: '0 12px', display: 'flex', alignItems: 'center' }}>
@@ -1725,6 +1737,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 {error && <div style={errorStyle}>{error}</div>}
               </div>
             </div>
+          </div>
+        );
+
+      case 'checkbox':
+        return (
+          <div key={field.id} style={{ marginBottom: fieldRowStyle.marginBottom }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                name={field.id}
+                checked={!!value}
+                onChange={(e) => handleChange(fieldId, e.target.checked)}
+                style={{ width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: '14px', color: '#000000', fontWeight: '600' }}>
+                {getFieldLabel(field)}{field.required && <span style={{ color: '#EF4444' }}> *</span>}
+              </span>
+            </label>
+            {error && <div style={errorStyle}>{error}</div>}
           </div>
         );
 
