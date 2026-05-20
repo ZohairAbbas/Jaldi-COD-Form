@@ -3,7 +3,7 @@ import { buildHmac, executeTransaction, getTransactionStatus, isPayfastSuccess, 
 import { createShopifyOrder } from "../lib/order.server";
 import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
 import { normalizePrice } from "../lib/constants";
-import { upsertGlobalBuyer } from "../lib/buyer.server";
+import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import prisma from "../db.server";
 
@@ -23,6 +23,8 @@ export const action = async ({ request }) => {
     if (!shop) {
       return Response.json({ error: "Shop not found" }, { status: 404 });
     }
+
+    if (data.phone) data.phone = normalizePhone(data.phone);
 
     if (!shop.settings?.payfastEnabled || !shop.settings?.payfastMerchantId || !shop.settings?.payfastSecuredKey) {
       return Response.json({ error: "PayFast is not configured for this shop" }, { status: 400 });

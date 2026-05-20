@@ -1,6 +1,6 @@
 import { getShopByDomain, isUserBlocked } from "../lib/db.server";
 import { normalizePrice } from "../lib/constants";
-import { upsertGlobalBuyer } from "../lib/buyer.server";
+import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 
 export const action = async ({ request }) => {
@@ -58,6 +58,7 @@ export const action = async ({ request }) => {
 
     const items = data.items || [];
     const customerInfo = data.customerInfo || {};
+    if (customerInfo.phone) customerInfo.phone = normalizePhone(customerInfo.phone);
     const address = data.address || {};
 
     // Risk scoring (non-blocking — always allow order)

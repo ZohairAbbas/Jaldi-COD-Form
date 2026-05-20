@@ -1,6 +1,7 @@
 import { getShopByDomain, isUserBlocked } from "../lib/db.server";
 import { getPayfastToken, buildHmac, validateCustomer } from "../lib/payfast.server";
 import { normalizePrice } from "../lib/constants";
+import { normalizePhone } from "../lib/buyer.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -18,6 +19,8 @@ export const action = async ({ request }) => {
     if (!shop) {
       return Response.json({ error: "Shop not found" }, { status: 404 });
     }
+
+    if (data.phone) data.phone = normalizePhone(data.phone);
 
     // Verify PayFast is configured for this merchant
     if (!shop.settings?.payfastEnabled) {
