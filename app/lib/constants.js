@@ -403,8 +403,9 @@ export function validatePhone(phone, countryCode) {
     };
   }
 
-  // Extract the phone number without country code
-  const phoneWithoutCode = cleaned.substring(country.phoneCode.length);
+  // Extract the phone number without country code, stripping trunk zero (e.g. +920300... → +92300...)
+  let phoneWithoutCode = cleaned.substring(country.phoneCode.length);
+  if (phoneWithoutCode.startsWith('0')) phoneWithoutCode = phoneWithoutCode.slice(1);
 
   // Country-specific validation rules (matching Shopify's requirements)
   // For countries with known validation rules, we enforce specific digit counts
@@ -430,14 +431,6 @@ export function validatePhone(phone, countryCode) {
     return {
       isValid: false,
       message: `Phone number must have at most ${rules.maxDigits} digits after ${country.phoneCode}`
-    };
-  }
-
-  // Ensure the phone number after country code doesn't start with 0
-  if (phoneWithoutCode.startsWith('0')) {
-    return {
-      isValid: false,
-      message: 'Remove the leading 0 after the country code'
     };
   }
 

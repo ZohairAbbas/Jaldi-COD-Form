@@ -14,6 +14,10 @@ export function normalizePhone(phone) {
   if (!cleaned.startsWith("+") && cleaned.startsWith("00")) {
     cleaned = "+" + cleaned.substring(2);
   }
+  // Strip trunk zero after country code (e.g. +920300... → +92300...)
+  if (cleaned.startsWith("+92") && /^\+920\d/.test(cleaned)) {
+    cleaned = cleaned.replace("+920", "+92");
+  }
   return cleaned || null;
 }
 

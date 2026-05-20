@@ -1,5 +1,6 @@
 import { getShopByDomain } from "../lib/db.server";
 import { sendOTP } from "../lib/sms.server";
+import { normalizePhone } from "../lib/buyer.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -13,8 +14,9 @@ export const action = async ({ request }) => {
       return Response.json({ error: "Shop and phone are required" }, { status: 400 });
     }
 
+    const normalizedPhone = normalizePhone(phone) || phone;
     // Validate phone format (Pakistan: +92 followed by 10 digits)
-    if (!phone.startsWith("+92") || phone.length < 13) {
+    if (!normalizedPhone.startsWith("+92") || normalizedPhone.length < 13) {
       return Response.json({ error: "Invalid phone number format" }, { status: 400 });
     }
 
@@ -23,7 +25,7 @@ export const action = async ({ request }) => {
       return Response.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const result = await sendOTP(shopData.id, phone);
+    const result = await sendOTP(shopData.id, normalizedPhone);
     return Response.json(result);
   } catch (error) {
     console.error("OTP send error:", error);

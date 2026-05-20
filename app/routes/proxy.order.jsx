@@ -52,6 +52,8 @@ export const action = async ({ request }) => {
       return Response.json({ error: "Shop not found" }, { status: 404 });
     }
 
+    if (orderData.phone) orderData.phone = normalizePhone(orderData.phone);
+
     // Check if user is blocked (fraud prevention)
     if (shop.settings?.enableUserBlocking) {
       const blocked = await isUserBlocked(shop.id, orderData.email, orderData.phone);

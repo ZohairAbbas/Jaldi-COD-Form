@@ -3570,7 +3570,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             textAlign: 'center',
             letterSpacing: '0.5px',
           }}>
-            {formData.phone}
+            {formData.phone.replace(/^(\+92)0(\d)/, '$1$2')}
           </p>
 
           {/* Error message */}
@@ -3886,7 +3886,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             textAlign: 'center',
             letterSpacing: '0.5px',
           }}>
-            {formData.phone}
+            {formData.phone.replace(/^(\+92)0(\d)/, '$1$2')}
           </p>
 
           {/* 6 Individual OTP Boxes */}
