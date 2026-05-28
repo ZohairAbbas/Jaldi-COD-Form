@@ -1436,26 +1436,17 @@ export function getDefaultShippingRate() {
  * Ensure default "Free Shipping" rate exists for shop
  */
 export async function ensureFreeShippingRate(shopId) {
-  const existingFree = await prisma.shippingRate.findFirst({
-    where: {
-      shopId,
-      name: "Free Shipping",
-      price: 0,
-    },
+  const anyRate = await prisma.shippingRate.findFirst({ where: { shopId } });
+  if (anyRate) return anyRate;
+
+  return await createShippingRate(shopId, {
+    name: "Free Shipping",
+    description: "Free standard shipping",
+    price: 0,
+    enabled: true,
+    conditions: [],
+    priority: 9999,
   });
-
-  if (!existingFree) {
-    return await createShippingRate(shopId, {
-      name: "Free Shipping",
-      description: "Free standard shipping",
-      price: 0,
-      enabled: true,
-      conditions: [],
-      priority: 9999, // Always last priority (fallback)
-    });
-  }
-
-  return existingFree;
 }
 
 // ============================================
