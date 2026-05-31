@@ -774,7 +774,7 @@ function renderPopupAtDefault(shopDomain, productData) {
   if (pageType === 'product') {
     // Find product form area - use queryVisibleElement to skip hidden containers (e.g. cart drawer)
     const addToCartButton = queryVisibleElement('button[name="add"]');
-    const productFormButtons = addToCartButton?.closest('.product-form-buttons');
+    const productFormButtons = addToCartButton?.closest('.product-form-buttons, .product-form__buttons');
     const shopifyProductForm = queryVisibleElement('form.shopify-product-form')
       || queryVisibleElement('form[action*="/cart/add"]:not(.payment-terms)');
     const productSection = queryVisibleElement('[data-section-type="product"]')
@@ -791,9 +791,9 @@ function renderPopupAtDefault(shopDomain, productData) {
       const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
       quantityBreaks.after(button);
     } else if (productFormButtons) {
-      // Place before product-form-buttons (above ATC button)
+      // Place after product-form-buttons (below ATC button)
       const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
-      productFormButtons.before(button);
+      productFormButtons.after(button);
     } else if (shopifyProductForm || productSection) {
       const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
       const insertTarget = getInsertionTarget(shopifyProductForm || productSection);
@@ -829,7 +829,7 @@ function renderEmbeddedAtDefault(shopDomain, productData) {
   if (pageType === 'product') {
     // Find product form area - use queryVisibleElement to skip hidden containers (e.g. cart drawer)
     const addToCartButton = queryVisibleElement('button[name="add"]');
-    const productFormButtons = addToCartButton?.closest('.product-form-buttons');
+    const productFormButtons = addToCartButton?.closest('.product-form-buttons, .product-form__buttons');
     const shopifyProductForm = queryVisibleElement('form.shopify-product-form')
       || queryVisibleElement('form[action*="/cart/add"]:not(.payment-terms)');
     const productSection = queryVisibleElement('[data-section-type="product"]')
@@ -846,9 +846,9 @@ function renderEmbeddedAtDefault(shopDomain, productData) {
       const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
       quantityBreaks.after(form);
     } else if (productFormButtons) {
-      // Place before product-form-buttons (above ATC button)
+      // Place after product-form-buttons (below ATC button)
       const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
-      productFormButtons.before(form);
+      productFormButtons.after(form);
     } else if (shopifyProductForm || productSection) {
       const form = createEmbeddedForm(appEmbedContainer, shopDomain, productData);
       const insertTarget = getInsertionTarget(shopifyProductForm || productSection);

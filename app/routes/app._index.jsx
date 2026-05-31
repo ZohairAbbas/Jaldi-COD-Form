@@ -7,6 +7,7 @@ import { getSubscription } from "../lib/mantle.server";
 import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import { getCurrencyCode } from "../lib/constants";
 import { useState } from "react";
+import { OtherAppsCarousel } from "../components/OtherAppsCarousel";
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -674,6 +675,10 @@ export default function Index() {
         </s-card>
       </s-section>
       )}
+
+      <s-section heading="More apps from our team">
+        <OtherAppsCarousel currentHandle="preventify" />
+      </s-section>
 
     </s-page>
   );
