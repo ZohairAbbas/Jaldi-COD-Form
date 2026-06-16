@@ -1,7 +1,7 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
 import { getShopByDomain, getUpsells, getEnabledPixels, isUserBlocked } from "../lib/db.server";
 import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
-import { normalizePrice } from "../lib/constants";
+import { normalizePrice, CORE_FIELD_IDS, parseJsonColumn } from "../lib/constants";
 import prisma from "../db.server";
 import { upsertCustomerProfile } from "../lib/sms.server";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
@@ -36,20 +36,32 @@ export const action = async ({ request }) => {
       return Response.json({ error: "Shop parameter is required" }, { status: 400 });
     }
 
+    // Get shop from database
+    const shop = await getShopByDomain(orderData.shop);
+    if (!shop) {
+      return Response.json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    // Determine which core fields the merchant hid in the Form Designer so
+    // validation doesn't require values for fields the customer never sees.
+    // `fields` is a Prisma Json column: it may come back already deserialized
+    // (array) or as a JSON string depending on the caller. Handle both.
+    const configFields = parseJsonColumn(shop.formConfig?.fields, []);
+    const hiddenCoreFields = new Set();
+    for (const f of configFields) {
+      if (CORE_FIELD_IDS.includes(f.id) && f.visible === false) {
+        hiddenCoreFields.add(f.id);
+      }
+    }
+
     // Validate order data
-    const validation = validateOrderData(orderData);
+    const validation = validateOrderData(orderData, { hiddenCoreFields });
     if (!validation.isValid) {
       return Response.json({
         success: false,
         error: validation.errors.join(", "),
         fieldErrors: validation.fieldErrors || {}
       }, { status: 400 });
-    }
-
-    // Get shop from database
-    const shop = await getShopByDomain(orderData.shop);
-    if (!shop) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
     }
 
     if (orderData.phone) orderData.phone = normalizePhone(orderData.phone);
@@ -124,9 +136,23 @@ export const action = async ({ request }) => {
     };
 
     // Create order in Shopify FIRST
+    // Build field-id -> label map so custom fields show with readable names
+    // in the Shopify order's Additional details (note_attributes).
+    const fieldLabels = configFields.reduce((acc, field) => {
+      acc[field.id] = field.label;
+      return acc;
+    }, {});
+
+    // Normalize customFields (may arrive as a JSON string from the storefront)
+    const parsedCustomFields = typeof orderData.customFields === 'string'
+      ? JSON.parse(orderData.customFields || '{}')
+      : (orderData.customFields || {});
+
     const shopifyResult = await createShopifyOrder(
       admin,
       {
+        customFields: parsedCustomFields,
+        fieldLabels,
         customerInfo: {
           firstName: orderData.firstName,
           lastName: orderData.lastName,

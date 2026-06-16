@@ -1,5 +1,5 @@
 import { getShopByDomain, isUserBlocked } from "../lib/db.server";
-import { normalizePrice } from "../lib/constants";
+import { normalizePrice, parseJsonColumn } from "../lib/constants";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 
@@ -166,6 +166,12 @@ export const action = async ({ request }) => {
       discountParts.push(`Card Discount: ${cardDiscountAmount.toFixed(2)}`);
     }
 
+    // Build field-id -> label map so custom fields show with readable names
+    const draftFieldLabels = parseJsonColumn(shop.formConfig?.fields, []).reduce((acc, field) => {
+      acc[field.id] = field.label;
+      return acc;
+    }, {});
+
     // Build draft order input
     const draftOrderInput = {
       lineItems: lineItems,
@@ -186,6 +192,13 @@ export const action = async ({ request }) => {
         ...(riskData && riskData.riskLevel !== "UNKNOWN" ? [
           { key: "_preventify_risk_level", value: riskData.riskLevel },
         ] : []),
+        // Custom fields -> Additional details on the order (readable labels)
+        ...(data.customFields && Object.keys(data.customFields).length > 0
+          ? Object.entries(data.customFields).map(([fieldId, fieldValue]) => ({
+              key: draftFieldLabels[fieldId] || fieldId.replace(/custom-/g, '').replace(/-/g, ' '),
+              value: String(fieldValue ?? ''),
+            }))
+          : []),
       ],
       // Shopify Markets: create draft order in the presentment currency.
       // Only set when presentmentCurrencyCode is provided (i.e., Shopify Markets is active).
@@ -194,18 +207,24 @@ export const action = async ({ request }) => {
       } : {}),
     };
 
-    // Add shipping address
+    // Add shipping address.
+    // Core fields (first name, address, city) may be empty when hidden in the
+    // Form Designer. Shopify enforces non-blank address fields per country, so
+    // substitute a neutral placeholder to keep order creation/completion from
+    // failing. Phone is omitted when empty (format-validated, can't be faked).
     if (address.address) {
+      const fillCore = (val) => (val && String(val).trim() !== '' ? val : '-');
+      const hasPhone = !!(customerInfo.phone && customerInfo.phone.trim() !== '');
       draftOrderInput.shippingAddress = {
-        firstName: customerInfo.firstName || '',
+        firstName: fillCore(customerInfo.firstName),
         lastName: customerInfo.lastName || '',
-        address1: address.address || '',
+        address1: fillCore(address.address),
         address2: address.address2 || '',
-        city: address.city || '',
+        city: fillCore(address.city),
         province: address.province || '',
         country: address.country || 'Pakistan',
         zip: address.postalCode || '',
-        phone: customerInfo.phone || '',
+        ...(hasPhone ? { phone: customerInfo.phone } : {}),
       };
       // Use same as billing
       draftOrderInput.billingAddress = { ...draftOrderInput.shippingAddress };

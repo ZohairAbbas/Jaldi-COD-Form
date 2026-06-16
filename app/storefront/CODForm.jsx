@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
-import { getCurrencyCode, COUNTRIES } from '../lib/constants';
+import { getCurrencyCode, COUNTRIES, validatePhone } from '../lib/constants';
 import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } from './device-recognition';
 import { t, fieldTranslations } from './translations';
 import PayFastModal from './PayFastModal';
@@ -329,13 +329,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       setErrors({ phone: t(lang, 'phoneRequired') });
       return;
     }
-    if (!phone.startsWith(country.phoneCode)) {
-      setErrors({ phone: `Phone number must start with ${country.phoneCode}` });
-      return;
-    }
-    const digitsAfterPrefix = phone.slice(country.phoneCode.length);
-    if (digitsAfterPrefix.length < 7 || digitsAfterPrefix.length > 11) {
-      setErrors({ phone: `Phone number must be 7-11 digits after ${country.phoneCode}` });
+    const phoneValidation = validatePhone(phone, country.code);
+    if (!phoneValidation.isValid) {
+      setErrors({ phone: phoneValidation.message });
       return;
     }
 
@@ -696,6 +692,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       ...prev,
       customFields: { ...prev.customFields, [fieldId]: value },
     }));
+    // Clear error when user edits (errors are keyed by full field id)
+    if (errors[fieldId]) {
+      setErrors(prev => ({ ...prev, [fieldId]: null }));
+    }
   };
 
   // Check if cart has any bundle items (for blocking discount codes on bundles)
@@ -903,12 +903,22 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       // Phone was already validated in Step 1 and is read-only in Step 2
       if (field.id === 'phone' && checkoutStep === 'details' && isSmartCheckout) return;
 
+      // Title fields are presentational (no input) — never validate
+      if (field.type === 'title') return;
+
       if (field.required) {
         const value = field.id.startsWith('custom-')
-          ? formData.customFields[field.id]
+          ? formData.customFields?.[field.id]
           : formData[field.id.replace(/-/g, '')];
 
-        if (!value || value.trim() === '') {
+        // Handle non-string values (checkbox boolean, quantity number) safely
+        const isEmpty =
+          value === undefined ||
+          value === null ||
+          value === false ||
+          (typeof value === 'string' && value.trim() === '');
+
+        if (isEmpty) {
           newErrors[field.id] = config.formConfig.requiredFieldErrorText;
         }
       }
@@ -916,13 +926,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       // Special validation for phone field
       if (field.id === 'phone') {
         const phoneValue = formData.phone;
-        if (!phoneValue.startsWith(country.phoneCode)) {
-          newErrors['phone'] = `Phone number must start with ${country.phoneCode}`;
+        if (!phoneValue || phoneValue === country.phoneCode) {
+          newErrors['phone'] = t(lang, 'phoneRequired');
         } else {
-          const digitsAfterPrefix = phoneValue.slice(country.phoneCode.length);
-          if (digitsAfterPrefix.length < 7 || digitsAfterPrefix.length > 11) {
-            newErrors['phone'] = `Phone number must be 7-11 digits after ${country.phoneCode}`;
-          }
+          const phoneValidation = validatePhone(phoneValue, country.code);
+          if (!phoneValidation.isValid) newErrors['phone'] = phoneValidation.message;
         }
       }
     });
@@ -1254,6 +1262,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       const cardPayload = {
         shop: config.shopDomain,
         items: allItems,
+        customFields: formData.customFields || {},
         customerInfo: {
           firstName,
           lastName,
@@ -1433,7 +1442,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   const renderField = (field) => {
     const fieldId = field.id.replace(/-/g, '');
-    const value = formData[fieldId] || '';
+    // Custom fields store their value in formData.customFields keyed by the full
+    // (hyphenated) field id — that's what validation and order submission read.
+    // Core/Shopify fields use a flat, de-hyphenated key on formData.
+    const isCustom = field.id.startsWith('custom-');
+    const value = isCustom
+      ? (formData.customFields?.[field.id] ?? '')
+      : (formData[fieldId] || '');
+    // Route changes to the correct store so values are actually captured/submitted.
+    const setFieldValue = (val) =>
+      isCustom ? handleCustomFieldChange(field.id, val) : handleChange(fieldId, val);
     const error = errors[field.id];
 
     const hasIcon = ['full-name', 'first-name', 'last-name', 'email', 'phone', 'address', 'city'].includes(field.id);
@@ -1644,7 +1662,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     type={field.id === 'phone' ? 'tel' : field.id === 'email' ? 'email' : 'text'}
                     name={field.id}
                     value={field.id === 'phone' ? value.slice(country.phoneCode.length) : value}
-                    onChange={(e) => handleChange(fieldId, field.id === 'phone' ? country.phoneCode + e.target.value : e.target.value)}
+                    onChange={(e) => field.id === 'phone' ? handleChange(fieldId, country.phoneCode + e.target.value) : setFieldValue(e.target.value)}
                     onBlur={undefined}
                     placeholder={field.id === 'phone' ? (field.placeholder || '3001234567') : field.id === 'email' ? 'email@example.com' : field.placeholder}
                     maxLength={field.id === 'phone' ? 15 - country.phoneCode.length : undefined}
@@ -1725,7 +1743,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   <select
                     name={field.id}
                     value={value}
-                    onChange={(e) => handleChange(fieldId, e.target.value)}
+                    onChange={(e) => setFieldValue(e.target.value)}
                     style={{ ...inputStyle, cursor: 'pointer' }}
                   >
                     <option value="">{field.placeholder || 'Select...'}</option>
@@ -1748,7 +1766,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 type="checkbox"
                 name={field.id}
                 checked={!!value}
-                onChange={(e) => handleChange(fieldId, e.target.checked)}
+                onChange={(e) => setFieldValue(e.target.checked)}
                 style={{ width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
               />
               <span style={{ fontSize: '14px', color: '#000000', fontWeight: '600' }}>
@@ -1756,6 +1774,63 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               </span>
             </label>
             {error && <div style={errorStyle}>{error}</div>}
+          </div>
+        );
+
+      case 'date':
+        return (
+          <div key={field.id} style={{ marginBottom: '0' }}>
+            <div className="jaldi-field-row" style={fieldRowStyle}>
+              <label className="jaldi-field-label" style={labelStyle}>
+                {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+              </label>
+              <div style={{ flex: 1 }}>
+                <div style={inputGroupStyle}>
+                  <input
+                    type="date"
+                    name={field.id}
+                    value={value}
+                    onChange={(e) => setFieldValue(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+                {error && <div style={errorStyle}>{error}</div>}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'quantity':
+        return (
+          <div key={field.id} style={{ marginBottom: '0' }}>
+            <div className="jaldi-field-row" style={fieldRowStyle}>
+              <label className="jaldi-field-label" style={labelStyle}>
+                {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+              </label>
+              <div style={{ flex: 1 }}>
+                <div style={inputGroupStyle}>
+                  <input
+                    type="number"
+                    min="1"
+                    name={field.id}
+                    value={value === '' ? '' : value}
+                    onChange={(e) => setFieldValue(e.target.value)}
+                    placeholder={field.placeholder || '1'}
+                    style={inputStyle}
+                  />
+                </div>
+                {error && <div style={errorStyle}>{error}</div>}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'title':
+        return (
+          <div key={field.id} style={{ marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#000000' }}>
+              {getFieldLabel(field)}
+            </h3>
           </div>
         );
 
@@ -2437,7 +2512,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                       </svg>
-                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#111' }}>{t(lang, 'orderSummary')}</span>
+                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#111' }}>{section.customLabel || t(lang, 'orderSummary')}</span>
                       <span style={{ fontSize: '13px', color: '#6B7280' }}>
                         ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? t(lang, 'item') : t(lang, 'items')})
                       </span>
@@ -2599,7 +2674,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         <circle cx="5.5" cy="18.5" r="2.5"></circle>
                         <circle cx="18.5" cy="18.5" r="2.5"></circle>
                       </svg>
-                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#000' }}>{t(lang, 'shipping')}</span>
+                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#000' }}>{section.customLabel || t(lang, 'shipping')}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '14px', fontWeight: '600', color: '#000' }}>
@@ -2695,7 +2770,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     marginBottom: '16px',
                     color: '#000',
                   }}>
-                    {t(lang, 'enterShippingAddress')}
+                    {section.customLabel || t(lang, 'enterShippingAddress')}
                   </h3>
 
                   {/* Country Selector - Only show in multi-country mode with more than 1 country */}

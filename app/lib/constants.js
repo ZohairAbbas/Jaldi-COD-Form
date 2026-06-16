@@ -414,7 +414,8 @@ export function validatePhone(phone, countryCode) {
     'UAE': { minDigits: 9, maxDigits: 9 },   // +971 5X XXX XXXX = 9 digits
     'QATAR': { minDigits: 8, maxDigits: 8 }, // +974 XXXX XXXX = 8 digits
     'KUWAIT': { minDigits: 8, maxDigits: 8 }, // +965 XXXX XXXX = 8 digits
-    'KSA': { minDigits: 9, maxDigits: 9 }    // +966 5X XXX XXXX = 9 digits
+    'KSA': { minDigits: 9, maxDigits: 9 },    // +966 5X XXX XXXX = 9 digits
+    'BGD': { minDigits: 10, maxDigits: 10 }, // +880 1XXX XXXXX = 10 digits
   };
 
   // For all other countries, use generic validation (8-15 digits is standard international range)
@@ -665,6 +666,21 @@ export function getShopifyFieldConfig(fieldId) {
  */
 export function isCoreField(fieldId) {
   return CORE_FIELD_IDS.includes(fieldId);
+}
+
+/**
+ * Safely read a Prisma Json column that may come back either already
+ * deserialized (array/object) or as a JSON string, depending on the caller.
+ * Returns the parsed value, or `fallback` if parsing fails.
+ */
+export function parseJsonColumn(value, fallback = []) {
+  if (value == null) return fallback;
+  if (typeof value !== "string") return value; // already deserialized by Prisma
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
 }
 
 /**

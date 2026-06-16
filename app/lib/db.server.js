@@ -258,18 +258,17 @@ export function getDefaultSettings() {
 export function getDefaultFormConfig() {
   const sections = [
     { id: "order-summary", type: "orderSummary", visible: true, order: 0 },
-    { id: "totals", type: "totals", visible: true, order: 1 },
     {
       id: "shipping-method",
       type: "shippingMethod",
       visible: true,
-      order: 2,
+      order: 1,
     },
     {
       id: "shipping-address",
       type: "shippingAddress",
       visible: true,
-      order: 3,
+      order: 2,
     },
   ];
 

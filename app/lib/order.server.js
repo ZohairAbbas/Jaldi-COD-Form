@@ -15,8 +15,9 @@ const COUNTRY_NAME_TO_CODE = {
 export async function createShopifyOrder(admin, orderData, shopDomain) {
   const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod, riskData, _financialStatus, _paymentGateway, _orderTags, _orderNote } = orderData;
 
-  // Clean phone number (remove all non-digit characters except +)
-  const cleanedPhone = customerInfo.phone.replace(/[^\d+]/g, '');
+  // Clean phone number (remove all non-digit characters except +).
+  // Phone may be empty/undefined when the field is hidden in the Form Designer.
+  const cleanedPhone = (customerInfo.phone || '').replace(/[^\d+]/g, '');
 
   // Calculate total discount for one-tick upsells
   let oneTickDiscount = 0;
@@ -39,13 +40,21 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     }
   });
 
+  // When a core field is hidden in the Form Designer, its value arrives empty.
+  // Shopify enforces non-blank address fields per country, so a blank
+  // first_name / address1 / city makes POST /orders.json 400. Substitute a
+  // neutral placeholder ONLY in the Shopify payload — the DB record (saved by
+  // the caller from the original orderData) keeps the real empty value.
+  const ADDRESS_PLACEHOLDER = "-";
+  const fillCore = (val) => (val && String(val).trim() !== "" ? val : ADDRESS_PLACEHOLDER);
+
   // Prepare shipping address
   const shippingAddress = {
-    firstName: customerInfo.firstName,
+    firstName: fillCore(customerInfo.firstName),
     lastName: customerInfo.lastName,
-    address1: address.address,
+    address1: fillCore(address.address),
     address2: address.address2 || "",
-    city: address.city,
+    city: fillCore(address.city),
     province: address.province,
     country: address.country || "Pakistan",
     zip: address.postalCode || "",
@@ -80,6 +89,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       };
     });
 
+    // Phone is validated for FORMAT by Shopify, so a placeholder would 400.
+    // When the phone field is hidden (empty), omit the key entirely instead.
+    const hasPhone = !!cleanedPhone && cleanedPhone.trim() !== "";
+
     // Convert GraphQL address format to REST API format
     const restShippingAddress = {
       first_name: shippingAddress.firstName,
@@ -90,7 +103,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       province: shippingAddress.province,
       country: shippingAddress.country,
       zip: shippingAddress.zip,
-      phone: shippingAddress.phone,
+      ...(hasPhone ? { phone: shippingAddress.phone } : {}),
     };
 
     const restBillingAddress = {
@@ -102,7 +115,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       province: billingAddress.province,
       country: billingAddress.country,
       zip: billingAddress.zip,
-      phone: billingAddress.phone,
+      ...(hasPhone ? { phone: billingAddress.phone } : {}),
     };
 
     // Calculate recovery discount amount (from downsell)
@@ -138,8 +151,8 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
 
     // Prepare REST API order payload
     const restOrder = {
-      email: customerInfo.email || `noreply+${cleanedPhone}@example.com`,
-      phone: cleanedPhone,
+      email: customerInfo.email || `noreply+${cleanedPhone || Date.now()}@example.com`,
+      ...(hasPhone ? { phone: cleanedPhone } : {}),
       line_items: restLineItems,
       shipping_address: restShippingAddress,
       billing_address: restBillingAddress,
@@ -341,12 +354,19 @@ export function calculateOrderTotals(items, shippingCost = 0) {
 /**
  * Validate order data
  */
-export function validateOrderData(orderData) {
+export function validateOrderData(orderData, options = {}) {
   const errors = [];
   const fieldErrors = {};
 
+  // Core fields the merchant has hidden in the Form Designer. Hidden fields
+  // arrive empty by design, so skip the "required" check for them — the Shopify
+  // payload substitutes a placeholder (createShopifyOrder) so the order still
+  // succeeds. `hiddenCoreFields` is a Set of form field ids (e.g. "city").
+  const hiddenCoreFields = options.hiddenCoreFields || new Set();
+  const isHidden = (fieldId) => hiddenCoreFields.has(fieldId);
+
   // Validate customer info
-  if (!orderData.firstName || orderData.firstName.trim() === "") {
+  if (!isHidden("first-name") && (!orderData.firstName || orderData.firstName.trim() === "")) {
     errors.push("First name is required");
     fieldErrors.firstName = "First name is required";
   }
@@ -355,7 +375,9 @@ export function validateOrderData(orderData) {
 
   // Email is now optional - no validation needed
 
-  if (!orderData.phone || orderData.phone.trim() === "") {
+  if (isHidden("phone")) {
+    // Phone field hidden — no value expected, skip entirely
+  } else if (!orderData.phone || orderData.phone.trim() === "") {
     errors.push("Phone number is required");
     fieldErrors.phone = "Phone number is required";
   } else {
@@ -368,12 +390,12 @@ export function validateOrderData(orderData) {
   }
 
   // Validate address
-  if (!orderData.address || orderData.address.trim() === "") {
+  if (!isHidden("address") && (!orderData.address || orderData.address.trim() === "")) {
     errors.push("Address is required");
     fieldErrors.address = "Address is required";
   }
 
-  if (!orderData.city || orderData.city.trim() === "") {
+  if (!isHidden("city") && (!orderData.city || orderData.city.trim() === "")) {
     errors.push("City is required");
     fieldErrors.city = "City is required";
   }

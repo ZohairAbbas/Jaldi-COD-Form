@@ -38,7 +38,10 @@ export default function FormDesigner() {
 
   const [activeTab, setActiveTab] = useState("form-designer");
   const [formConfig, setFormConfig] = useState(initialConfig);
-  const [sections, setSections] = useState(initialConfig.sections);
+  // 'totals' is now merged into Order Summary — drop any legacy totals section
+  const [sections, setSections] = useState(
+    (initialConfig.sections || []).filter((s) => s.type !== "totals"),
+  );
   const [fields, setFields] = useState(initialConfig.fields);
   const [settings, setSettings] = useState(initialSettings);
   const [isSaving, setIsSaving] = useState(false);
