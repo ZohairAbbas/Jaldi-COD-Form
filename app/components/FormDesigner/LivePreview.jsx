@@ -254,28 +254,8 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
 
       case "title":
         return (
-          <div key={field.id} style={{ marginBottom: "16px" }}>
-            <h3 style={{ margin: 0 }}>{field.label}</h3>
-          </div>
-        );
-
-      case "image":
-        return (
-          <div key={field.id} style={{ marginBottom: "16px" }}>
-            <div
-              style={{
-                width: "100%",
-                height: "150px",
-                backgroundColor: "#f3f4f6",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#9ca3af",
-              }}
-            >
-              Image Placeholder
-            </div>
+          <div key={field.id} style={{ marginBottom: "12px" }}>
+            <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#000000" }}>{getFieldLabel(field)}</h3>
           </div>
         );
 
@@ -298,156 +278,72 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
             return (
               <div key={section.id} style={{
                 marginBottom: "24px",
-                borderTop: "1px solid #E5E7EB",
-                borderBottom: "1px solid #E5E7EB",
-                padding: "16px 0",
+                border: "1px solid #E5E7EB",
+                borderRadius: "12px",
+                overflow: "hidden",
               }}>
-                <div style={{ position: "relative" }}>
-                  {/* Product Image with Quantity Badge */}
-                  <div style={{ display: "flex", gap: "12px", position: "relative" }}>
-                    <div
-                      style={{
-                        width: "64px",
-                        height: "64px",
-                        flexShrink: 0,
-                        borderRadius: "8px",
-                        backgroundColor: "#F3F4F6",
-                        position: "relative",
-                        border: "1px solid #E5E7EB",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#9ca3af",
-                        fontSize: "10px",
-                      }}
-                    >
-                      IMG
-                      {/* Quantity Badge - Top Left */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: "-8px",
-                          left: "-8px",
-                          backgroundColor: "#6B7280",
-                          color: "#fff",
-                          borderRadius: "50%",
-                          width: "24px",
-                          height: "24px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "12px",
-                          fontWeight: "600",
-                          border: "2px solid #fff",
-                        }}
-                      >
-                        1
-                      </div>
-                    </div>
-
-                    {/* Product Details */}
-                    <div
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "center",
-                        minWidth: 0,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "16px",
-                          fontWeight: "700",
-                          color: "#000000",
-                          marginBottom: "4px",
-                          lineHeight: "1.4",
-                        }}
-                      >
-                        Sample Product
-                      </div>
-                      <div style={{ fontSize: "13px", color: "#6B7280", lineHeight: "1.4" }}>
-                        Variant
-                      </div>
-                    </div>
-
-                    {/* Price */}
-                    <div
-                      style={{
-                        fontSize: "16px",
-                        fontWeight: "700",
-                        color: "#000000",
-                        whiteSpace: "nowrap",
-                        alignSelf: "center",
-                      }}
-                    >
-                      {currencySymbol} 19.99
-                    </div>
-
-                    {/* Remove Button (X) - Top Right */}
-                    <button
-                      type="button"
-                      disabled
-                      style={{
-                        position: "absolute",
-                        top: "-4px",
-                        right: "-4px",
-                        background: "#6B7280",
-                        border: "none",
-                        borderRadius: "50%",
-                        width: "20px",
-                        height: "20px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "not-allowed",
-                        color: "#fff",
-                        fontSize: "12px",
-                        lineHeight: "1",
-                        padding: "0",
-                        fontWeight: "600",
-                      }}
-                    >
-                      ×
-                    </button>
+                {/* Collapsible header */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 16px",
+                  backgroundColor: "#f9fafb",
+                  borderBottom: "1px solid #E5E7EB",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                    </svg>
+                    <span style={{ fontSize: "15px", fontWeight: "600", color: "#111" }}>{section.customLabel || t(lang, 'orderSummary')}</span>
+                    <span style={{ fontSize: "13px", color: "#6B7280" }}>(1 {t(lang, 'item')})</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "15px", fontWeight: "700", color: "#111" }}>{currencySymbol} 19.99</span>
+                    <svg width="12" height="12" viewBox="0 0 12 12">
+                      <path d="M2.5 4.5L6 8L9.5 4.5" stroke="#6B7280" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
                   </div>
                 </div>
-              </div>
-            );
 
-          case "totals":
-            return (
-              <div key={section.id} style={{ marginBottom: "24px" }}>
-                <div
-                  style={{
-                    padding: "8px 12px",
-                    backgroundColor: "#F3F4F6",
-                    borderRadius: "4px",
-                    border: "1px solid #E5E7EB",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "16px", fontWeight: "400", color: "#000000" }}>
-                    <span>{t(lang, 'subtotal')}</span>
-                    <span style={{ fontWeight: "600" }}>{currencySymbol} 19.99</span>
+                {/* Body — product card + price breakdown */}
+                <div style={{ padding: "12px 16px 16px 16px" }}>
+                  <div style={{ display: "flex", gap: "12px", marginBottom: "12px", position: "relative" }}>
+                    <div style={{
+                      width: "52px", height: "52px", flexShrink: 0, borderRadius: "8px",
+                      backgroundColor: "#F3F4F6", position: "relative", border: "1px solid #E5E7EB",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "#9ca3af", fontSize: "10px",
+                    }}>
+                      IMG
+                      <div style={{
+                        position: "absolute", top: "-6px", left: "-6px",
+                        backgroundColor: "#6B7280", color: "#fff", borderRadius: "50%",
+                        width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "11px", fontWeight: "600", border: "2px solid #fff",
+                      }}>1</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", fontWeight: "500", color: "#111", marginBottom: "2px" }}>Sample Product</div>
+                      <div style={{ fontSize: "12px", color: "#6B7280" }}>Variant</div>
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#111", alignSelf: "center" }}>{currencySymbol} 19.99</div>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "16px", fontWeight: "400", color: "#000000" }}>
-                    <span>{t(lang, 'shipping')}</span>
-                    <span style={{ fontWeight: "600" }}>{t(lang, 'free')}</span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      paddingTop: "8px",
-                      marginTop: "4px",
-                      borderTop: "1px solid #D1D5DB",
-                      fontSize: "16px",
-                      fontWeight: "700",
-                      color: "#000000",
-                    }}
-                  >
-                    <span>{t(lang, 'total')}</span>
-                    <span>{currencySymbol} 19.99</span>
+
+                  {/* Price Breakdown (merged from former Totals section) */}
+                  <div style={{ padding: "10px 12px", backgroundColor: "#F3F4F6", borderRadius: "8px", fontSize: "13px", marginTop: "4px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", color: "#374151" }}>
+                      <span>{t(lang, 'subtotal')}</span>
+                      <span style={{ fontWeight: "600" }}>{currencySymbol} 19.99</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", color: "#374151" }}>
+                      <span>{t(lang, 'shipping')}</span>
+                      <span style={{ fontWeight: "600" }}>{t(lang, 'free')}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 2px", marginTop: "4px", borderTop: "1px solid #D1D5DB", fontWeight: "700", color: "#111" }}>
+                      <span>{t(lang, 'total')}</span>
+                      <span>{currencySymbol} 19.99</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -456,7 +352,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingMethod":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "8px", fontSize: "16px", fontWeight: "700" }}>{t(lang, 'shippingOptions')}</h3>
+                <h3 style={{ marginBottom: "8px", fontSize: "16px", fontWeight: "700" }}>{section.customLabel || t(lang, 'shipping')}</h3>
                 <label style={{
                   display: "flex",
                   alignItems: "center",
@@ -478,7 +374,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingAddress":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "700" }}>{t(lang, 'enterShippingAddress')}</h3>
+                <h3 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "700" }}>{section.customLabel || t(lang, 'enterShippingAddress')}</h3>
                 {visibleFields
                   .filter((f) => f.section === "shipping-address" && f.type !== "whatsapp")
                   .map(renderField)}

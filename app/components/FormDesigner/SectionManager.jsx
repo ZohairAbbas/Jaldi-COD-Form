@@ -6,9 +6,24 @@ export default function SectionManager({ sections, onUpdate }) {
 
   const sectionTypes = {
     orderSummary: "Order Summary",
-    totals: "Totals Summary",
     shippingMethod: "Shipping Method",
     shippingAddress: "Shipping Address",
+  };
+
+  // Default heading text shown as placeholder when no custom label is set
+  const defaultLabels = {
+    orderSummary: "Order summary",
+    shippingMethod: "Shipping",
+    shippingAddress: "Enter your shipping address",
+  };
+
+  const updateLabel = (sectionId, value) => {
+    const updated = sections.map((section) =>
+      section.id === sectionId
+        ? { ...section, customLabel: value }
+        : section,
+    );
+    onUpdate(updated);
   };
 
   const toggleVisibility = (sectionId) => {
@@ -96,7 +111,10 @@ export default function SectionManager({ sections, onUpdate }) {
     }
   };
 
-  const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+  // 'totals' is merged into Order Summary — never show it in the designer
+  const sortedSections = [...sections]
+    .filter((s) => s.type !== "totals")
+    .sort((a, b) => a.order - b.order);
 
   return (
     <s-stack direction="block" gap="base">
@@ -109,63 +127,94 @@ export default function SectionManager({ sections, onUpdate }) {
         {sortedSections.map((section, index) => (
           <div
             key={section.id}
-            draggable
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragOver={(e) => handleDragOver(e, index)}
-            onDragEnd={handleDragEnd}
-            onDragLeave={handleDragLeave}
             style={{
-              padding: '12px',
               border: '1px solid #E1E3E5',
               borderRadius: '8px',
               backgroundColor: dragOverIndex === index ? '#F6F6F7' : 'white',
               opacity: draggedIndex === index ? 0.5 : 1,
-              cursor: 'grab',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
               transition: 'background-color 0.2s, opacity 0.2s',
             }}
           >
-            {/* Left side: drag handle + section name */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-              <span style={{ fontSize: '16px', color: '#8C9196', cursor: 'grab', lineHeight: 1 }}>⋮⋮</span>
+            {/* Draggable header row: drag handle + section name + actions */}
+            <div
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragEnd={handleDragEnd}
+              onDragLeave={handleDragLeave}
+              style={{
+                padding: '12px',
+                cursor: 'grab',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              {/* Left side: drag handle + section name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                <span style={{ fontSize: '16px', color: '#8C9196', cursor: 'grab', lineHeight: 1 }}>⋮⋮</span>
 
-              <span style={{ fontSize: '14px', fontWeight: '500', color: '#202223' }}>
-                {sectionTypes[section.type] || section.type}
-              </span>
+                <span style={{ fontSize: '14px', fontWeight: '500', color: '#202223' }}>
+                  {sectionTypes[section.type] || section.type}
+                </span>
+              </div>
+
+              {/* Right side: action buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {/* Toggle visibility button - hide for shipping-address section */}
+                {section.id !== 'shipping-address' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleVisibility(section.id);
+                    }}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '4px',
+                      color: '#5C5F62',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F6F6F7'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    title={section.visible ? "Hide" : "Show"}
+                  >
+                    {renderIcon(section.visible ? 'hide' : 'show')}
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Right side: action buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {/* Toggle visibility button - hide for shipping-address section */}
-              {section.id !== 'shipping-address' && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleVisibility(section.id);
-                  }}
+            {/* Custom heading label input */}
+            {defaultLabels[section.type] && (
+              <div style={{ padding: '0 12px 12px 40px' }}>
+                <label htmlFor={`section-label-${section.id}`} style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#6D7175', marginBottom: '4px' }}>
+                  Heading label
+                </label>
+                <input
+                  id={`section-label-${section.id}`}
+                  type="text"
+                  value={section.customLabel || ''}
+                  onChange={(e) => updateLabel(section.id, e.target.value)}
+                  placeholder={defaultLabels[section.type]}
                   style={{
-                    width: '32px',
-                    height: '32px',
-                    border: 'none',
-                    background: 'transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '4px',
-                    color: '#5C5F62',
-                    transition: 'background-color 0.2s',
+                    width: '100%',
+                    padding: '8px 10px',
+                    fontSize: '14px',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '6px',
+                    boxSizing: 'border-box',
+                    color: '#202223',
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F6F6F7'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  title={section.visible ? "Hide" : "Show"}
-                >
-                  {renderIcon(section.visible ? 'hide' : 'show')}
-                </button>
-              )}
-            </div>
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>

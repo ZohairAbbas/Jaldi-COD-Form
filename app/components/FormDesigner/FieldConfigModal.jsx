@@ -166,7 +166,6 @@ export default function FieldConfigModal({
                     <option value="date">Date Selector</option>
                     <option value="quantity">Quantity Selector</option>
                     <option value="title">Title/Text</option>
-                    <option value="image">Image/GIF</option>
                     <option value="whatsapp">WhatsApp Button</option>
                   </select>
                 </s-stack>

@@ -2,7 +2,7 @@ import { getShopByDomain, getEnabledPixels, isUserBlocked } from "../lib/db.serv
 import { buildHmac, executeTransaction, getTransactionStatus, isPayfastSuccess, isPayfastPending } from "../lib/payfast.server";
 import { createShopifyOrder } from "../lib/order.server";
 import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
-import { normalizePrice } from "../lib/constants";
+import { normalizePrice, parseJsonColumn } from "../lib/constants";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import prisma from "../db.server";
@@ -161,9 +161,22 @@ export const action = async ({ request }) => {
     );
     const calculatedTotal = calculatedSubtotal + shippingCost;
 
+    // Build field-id -> label map so custom fields show with readable names
+    // in the Shopify order's Additional details (note_attributes).
+    const fieldLabels = parseJsonColumn(shop.formConfig?.fields, []).reduce((acc, field) => {
+      acc[field.id] = field.label;
+      return acc;
+    }, {});
+
+    const parsedCustomFields = typeof data.customFields === 'string'
+      ? JSON.parse(data.customFields || '{}')
+      : (data.customFields || {});
+
     const shopifyResult = await createShopifyOrder(
       admin,
       {
+        customFields: parsedCustomFields,
+        fieldLabels,
         customerInfo: {
           firstName: data.firstName,
           lastName: data.lastName,
