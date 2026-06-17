@@ -54,8 +54,16 @@ export const action = async ({ request }) => {
       }
     }
 
+    // Merchant-configured phone validation overrides from the phone field config
+    const phoneField = configFields.find(f => f.id === 'phone') || {};
+    const phoneValidation = {
+      minDigits: phoneField.phoneMinDigits,
+      maxDigits: phoneField.phoneMaxDigits,
+      errorMessage: phoneField.phoneErrorMessage,
+    };
+
     // Validate order data
-    const validation = validateOrderData(orderData, { hiddenCoreFields });
+    const validation = validateOrderData(orderData, { hiddenCoreFields, phoneValidation });
     if (!validation.isValid) {
       return Response.json({
         success: false,

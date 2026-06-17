@@ -102,6 +102,12 @@ export const loader = async ({ request }) => {
           : (typeof shopData.settings.disabledProductIds === 'string' ? JSON.parse(shopData.settings.disabledProductIds) : []),
         // WhatsApp verification (business phone for deep link)
         whatsappBusinessPhone: process.env.WHATSAPP_BUSINESS_PHONE || null,
+        // Post-order redirection (COD)
+        redirectMode: shopData.settings.redirectMode || 'shopify',
+        redirectUrl: shopData.settings.redirectUrl || null,
+        redirectWhatsappNumber: shopData.settings.redirectWhatsappNumber || null,
+        redirectWhatsappMessage: shopData.settings.redirectWhatsappMessage || null,
+        thankYouMessage: shopData.settings.thankYouMessage || null,
       },
       shop: {
         country: shopData.country || 'PAK',

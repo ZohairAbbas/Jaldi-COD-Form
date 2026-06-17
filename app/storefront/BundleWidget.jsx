@@ -34,6 +34,7 @@ export default function BundleWidget({
   productPrice,
   compareAtPrice = null,
   currencySymbol,
+  productImage = null,
   onTierSelect,
   selectedTierId,
   isRTL,
@@ -127,6 +128,9 @@ export default function BundleWidget({
             ? (inventoryQuantity <= 0 ? 'Out of stock!' : `Only ${inventoryQuantity} item${inventoryQuantity !== 1 ? 's' : ''} left in stock!`)
             : null;
 
+          // Tier thumbnail: per-tier override URL, else the (variant/product) image
+          const tierImage = (tier.imageUrl && tier.imageUrl.trim() !== '') ? tier.imageUrl : productImage;
+
           return (
             <div
               key={tier.id}
@@ -217,6 +221,22 @@ export default function BundleWidget({
                       />
                     )}
                   </div>
+
+                  {/* Thumbnail */}
+                  {tierImage && (
+                    <img
+                      src={tierImage}
+                      alt={tier.titleText || ''}
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        objectFit: 'cover',
+                        borderRadius: '8px',
+                        border: '1px solid #e5e7eb',
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
 
                   {/* Title */}
                   <span
@@ -323,6 +343,22 @@ export default function BundleWidget({
                       />
                     )}
                   </div>
+
+                  {/* Thumbnail */}
+                  {tierImage && (
+                    <img
+                      src={tierImage}
+                      alt={tier.titleText || ''}
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        objectFit: 'cover',
+                        borderRadius: '8px',
+                        border: '1px solid #e5e7eb',
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
 
                   {/* Tier content */}
                   <div style={{ flex: 1 }}>

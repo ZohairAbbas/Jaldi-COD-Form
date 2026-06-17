@@ -13,13 +13,13 @@ import {
 import { getCurrencySymbol } from "../lib/constants";
 
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
   const currencySymbol = getCurrencySymbol(shop.country);
 
   if (params.id === "new") {
     const defaultBundle = getDefaultBundle();
-    return { bundle: defaultBundle, isNew: true, shopId: shop.id, currencySymbol };
+    return { bundle: defaultBundle, isNew: true, shopId: shop.id, currencySymbol, sampleProductImage: null };
   }
 
   const bundle = await getBundleById(params.id);
@@ -38,7 +38,29 @@ export const loader = async ({ request, params }) => {
     collectionTitles: typeof bundle.collectionTitles === "string" ? JSON.parse(bundle.collectionTitles) : bundle.collectionTitles,
   };
 
-  return { bundle: parsed, isNew: false, shopId: shop.id, currencySymbol };
+  // Fetch the first targeted product's image so the live preview shows a real
+  // thumbnail when reopening a saved bundle (admin-only, best-effort).
+  let sampleProductImage = null;
+  const firstProductId = parsed.productIds?.[0];
+  if (firstProductId) {
+    try {
+      const res = await admin.graphql(
+        `#graphql
+        query bundlePreviewImage($id: ID!) {
+          product(id: $id) {
+            featuredImage { url }
+          }
+        }`,
+        { variables: { id: firstProductId } },
+      );
+      const json = await res.json();
+      sampleProductImage = json?.data?.product?.featuredImage?.url || null;
+    } catch (e) {
+      // Best-effort; preview falls back to placeholder
+    }
+  }
+
+  return { bundle: parsed, isNew: false, shopId: shop.id, currencySymbol, sampleProductImage };
 };
 
 export const action = async ({ request, params }) => {
@@ -201,7 +223,7 @@ const COLOR_PALETTES = [
 // COMPONENT
 // ============================================
 export default function BundleEditor() {
-  const { bundle: initialBundle, isNew, currencySymbol } = useLoaderData();
+  const { bundle: initialBundle, isNew, currencySymbol, sampleProductImage: initialSampleProductImage } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -211,6 +233,8 @@ export default function BundleEditor() {
   const [expandedTier, setExpandedTier] = useState(0);
   const [selectedPreviewTier, setSelectedPreviewTier] = useState(null);
   const [customizeSubTab, setCustomizeSubTab] = useState("style");
+  // Sample product image for the live preview (from the product picker, not persisted)
+  const [sampleProductImage, setSampleProductImage] = useState(initialSampleProductImage || null);
 
   const saveButtonRef = useRef(null);
   const publishButtonRef = useRef(null);
@@ -290,6 +314,7 @@ export default function BundleEditor() {
         priceRounding: false,
         priceRoundingValue: 0.99,
         titleText: `${prev.tiers.length + 1} Pair`,
+        imageUrl: "",
         badgeText: "10% OFF",
         subtitle: "",
         showSubtitle: false,
@@ -373,6 +398,11 @@ export default function BundleEditor() {
       if (selected) {
         updateField("productIds", selected.map((p) => p.id));
         updateField("productTitles", selected.map((p) => p.title));
+        // Grab the first product's image to make the live preview realistic
+        const firstImage = selected[0]?.images?.[0]?.originalSrc
+          || selected[0]?.images?.[0]?.src
+          || null;
+        setSampleProductImage(firstImage);
       }
     } catch (e) {
       // User cancelled
@@ -802,6 +832,19 @@ export default function BundleEditor() {
                                 />
                               </div>
 
+                              {/* Image URL */}
+                              <div>
+                                <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Image URL</label>
+                                <input
+                                  type="text"
+                                  value={tier.imageUrl || ""}
+                                  onChange={(e) => updateTier(idx, "imageUrl", e.target.value)}
+                                  placeholder="Defaults to the product image"
+                                  style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box" }}
+                                />
+                                <s-text tone="subdued">Paste an image URL (e.g. from Shopify Content &gt; Files). Leave blank to use the product image.</s-text>
+                              </div>
+
                               {/* Badge */}
                               <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
                                 <div style={{ flex: 1 }}>
@@ -1091,6 +1134,7 @@ export default function BundleEditor() {
                 samplePrice={samplePrice}
                 selectedTierId={selectedPreviewTier}
                 onTierSelect={setSelectedPreviewTier}
+                sampleProductImage={sampleProductImage}
               />
             </div>
           </s-box>
@@ -1103,7 +1147,7 @@ export default function BundleEditor() {
 // ============================================
 // LIVE PREVIEW COMPONENT
 // ============================================
-function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, onTierSelect }) {
+function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, onTierSelect, sampleProductImage = null }) {
   const styling = bundle.styling || {};
   const colors = styling.colors || {};
   const tiers = bundle.tiers || [];
@@ -1150,6 +1194,21 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
           const isSelected = effectiveSelectedId === tier.id;
           const tierColors = isSelected ? colors.selectedTier : colors.unselectedTier;
           const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(samplePrice, tier);
+          // Preview image: per-tier override URL, else the selected product's image.
+          // When neither exists, show a placeholder so the admin sees the thumbnail slot.
+          const tierImage = tier.imageUrl && tier.imageUrl.trim() !== "" ? tier.imageUrl : sampleProductImage;
+          const thumbStyle = { width: "44px", height: "44px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb", flexShrink: 0 };
+          const thumbNode = tierImage ? (
+            <img src={tierImage} alt={tier.titleText || ""} style={thumbStyle} />
+          ) : (
+            <div style={{ ...thumbStyle, backgroundColor: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </div>
+          );
 
           return (
             <div
@@ -1224,6 +1283,9 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
                       }} />
                     )}
                   </div>
+
+                  {/* Thumbnail */}
+                  {thumbNode}
 
                   {/* Title */}
                   <span style={{
@@ -1302,6 +1364,9 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
                       }} />
                     )}
                   </div>
+
+                  {/* Thumbnail */}
+                  {thumbNode}
 
                   {/* Tier content */}
                   <div style={{ flex: 1 }}>

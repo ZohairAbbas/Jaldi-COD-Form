@@ -389,7 +389,7 @@ export function getCurrencySymbol(countryCode) {
 /**
  * Validate phone number format (matches Shopify's requirements)
  */
-export function validatePhone(phone, countryCode) {
+export function validatePhone(phone, countryCode, options = {}) {
   const country = getCountryData(countryCode);
 
   // Remove all non-digit characters except +
@@ -407,8 +407,8 @@ export function validatePhone(phone, countryCode) {
   let phoneWithoutCode = cleaned.substring(country.phoneCode.length);
   if (phoneWithoutCode.startsWith('0')) phoneWithoutCode = phoneWithoutCode.slice(1);
 
-  // Country-specific validation rules (matching Shopify's requirements)
-  // For countries with known validation rules, we enforce specific digit counts
+  // Country-specific validation rules (matching Shopify's requirements).
+  // Digit counts are LOCAL digits (after the country code, trunk zero stripped).
   const validationRules = {
     'PAK': { minDigits: 10, maxDigits: 10 }, // +92 3XX XXXXXXX = 10 digits
     'UAE': { minDigits: 9, maxDigits: 9 },   // +971 5X XXX XXXX = 9 digits
@@ -419,19 +419,33 @@ export function validatePhone(phone, countryCode) {
   };
 
   // For all other countries, use generic validation (8-15 digits is standard international range)
-  const rules = validationRules[countryCode] || { minDigits: 7, maxDigits: 15 };
+  const defaultRules = validationRules[countryCode] || { minDigits: 7, maxDigits: 15 };
+
+  // Merchant-configured overrides from the phone field config take precedence
+  // when provided. Each is optional and overrides only that bound.
+  const min = Number.parseInt(options.minDigits, 10);
+  const max = Number.parseInt(options.maxDigits, 10);
+  const rules = {
+    minDigits: Number.isFinite(min) && min > 0 ? min : defaultRules.minDigits,
+    maxDigits: Number.isFinite(max) && max > 0 ? max : defaultRules.maxDigits,
+  };
+
+  // Optional merchant custom error message (used for any length failure)
+  const customMessage = options.errorMessage && String(options.errorMessage).trim() !== ''
+    ? String(options.errorMessage).trim()
+    : null;
 
   if (phoneWithoutCode.length < rules.minDigits) {
     return {
       isValid: false,
-      message: `Phone number must have at least ${rules.minDigits} digits after ${country.phoneCode}`
+      message: customMessage || `Phone number must have at least ${rules.minDigits} digits after ${country.phoneCode}`
     };
   }
 
   if (phoneWithoutCode.length > rules.maxDigits) {
     return {
       isValid: false,
-      message: `Phone number must have at most ${rules.maxDigits} digits after ${country.phoneCode}`
+      message: customMessage || `Phone number must have at most ${rules.maxDigits} digits after ${country.phoneCode}`
     };
   }
 
@@ -653,6 +667,21 @@ export const SHOPIFY_FIELD_OPTIONS = [
     defaultPlaceholder: "1"
   }
 ];
+
+/**
+ * Default HTML for the "No redirection" post-order thank-you message.
+ * Used as the starting value in the admin editor and as the fallback shown on
+ * the storefront when a merchant enables the message but leaves it empty.
+ */
+export const DEFAULT_THANK_YOU_MESSAGE = `<div style="text-align:center;">
+  <h2 style="margin:0 0 8px;font-size:24px;">Thank You, {{customer.first_name}}! 🎉</h2>
+  <p style="margin:0 0 16px;color:#374151;">Your order {{order.number}} is confirmed.</p>
+  <div style="border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 auto;max-width:360px;text-align:left;">
+    <div style="font-weight:600;margin-bottom:8px;">🛍️ Order Summary</div>
+    <div style="color:#6B7280;font-size:14px;margin-bottom:8px;">{{order.products}}</div>
+    <div style="font-weight:700;">Total: {{order.total}}</div>
+  </div>
+</div>`;
 
 /**
  * Get Shopify field configuration by ID

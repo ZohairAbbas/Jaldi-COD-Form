@@ -381,8 +381,9 @@ export function validateOrderData(orderData, options = {}) {
     errors.push("Phone number is required");
     fieldErrors.phone = "Phone number is required";
   } else {
-    // Validate phone format (use countryCode, not country name)
-    const phoneValidation = validatePhone(orderData.phone, orderData.countryCode || "PAK");
+    // Validate phone format (use countryCode, not country name).
+    // Apply merchant-configured phone rules from the phone field config.
+    const phoneValidation = validatePhone(orderData.phone, orderData.countryCode || "PAK", options.phoneValidation || {});
     if (!phoneValidation.isValid) {
       errors.push(phoneValidation.message);
       fieldErrors.phone = phoneValidation.message;
