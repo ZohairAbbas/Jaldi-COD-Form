@@ -125,6 +125,12 @@ model Settings {
   payfastButtonBgColor  String   @default("#00B140")
   payfastButtonTextColor String  @default("#FFFFFF")
   payfastButtonFontSize Int      @default(14)
+  // Post-order redirection (COD)
+  redirectMode            String   @default("shopify") // shopify | custom_page | whatsapp | none
+  redirectUrl             String?
+  redirectWhatsappNumber  String?
+  redirectWhatsappMessage String?
+  thankYouMessage         String?
   shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 

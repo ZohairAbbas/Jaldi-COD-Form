@@ -240,6 +240,50 @@ export default function FieldConfigModal({
                 </s-stack>
               )}
 
+              {/* Phone Validation Settings (phone field only) */}
+              {formData.id === "phone" && (
+                <>
+                  <s-stack direction="inline" gap="base">
+                    <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                      <s-text variant="heading-sm">Min digits</s-text>
+                      <input
+                        type="number"
+                        min={1}
+                        value={formData.phoneMinDigits ?? ""}
+                        onChange={(e) => handleChange("phoneMinDigits", e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                        placeholder="Auto (by country)"
+                        style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%" }}
+                      />
+                    </s-stack>
+                    <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                      <s-text variant="heading-sm">Max digits</s-text>
+                      <input
+                        type="number"
+                        min={1}
+                        value={formData.phoneMaxDigits ?? ""}
+                        onChange={(e) => handleChange("phoneMaxDigits", e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                        placeholder="Auto (by country)"
+                        style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%" }}
+                      />
+                    </s-stack>
+                  </s-stack>
+                  <s-text tone="subdued">
+                    Number of digits after the country code. Leave blank to use the built-in per-country rules.
+                  </s-text>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">Invalid phone error message</s-text>
+                    <input
+                      type="text"
+                      value={formData.phoneErrorMessage || ""}
+                      onChange={(e) => handleChange("phoneErrorMessage", e.target.value)}
+                      placeholder="Enter a valid phone number."
+                      style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%" }}
+                    />
+                    <s-text tone="subdued">Shown when the phone length is invalid. Leave blank for the default message.</s-text>
+                  </s-stack>
+                </>
+              )}
+
               {/* WhatsApp Button Fields */}
               {formData.type === "whatsapp" && (
                 <>

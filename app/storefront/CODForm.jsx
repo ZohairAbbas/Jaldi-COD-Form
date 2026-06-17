@@ -329,7 +329,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       setErrors({ phone: t(lang, 'phoneRequired') });
       return;
     }
-    const phoneValidation = validatePhone(phone, country.code);
+    const phoneValidation = validatePhone(phone, country.code, phoneValidationOptions);
     if (!phoneValidation.isValid) {
       setErrors({ phone: phoneValidation.message });
       return;
@@ -655,6 +655,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     .filter(f => f.visible && f.section === 'shipping-address')
     .sort((a, b) => a.order - b.order);
 
+  // Merchant-configured phone validation overrides (min/max digits, error msg)
+  const phoneFieldConfig = config.formConfig.fields.find(f => f.id === 'phone') || {};
+  const phoneValidationOptions = {
+    minDigits: phoneFieldConfig.phoneMinDigits,
+    maxDigits: phoneFieldConfig.phoneMaxDigits,
+    errorMessage: phoneFieldConfig.phoneErrorMessage,
+  };
+
   // One-tap banner: true when all required fields are filled via device recognition
   const allRequiredFieldsFilled = buyerData?.trustLevel === 'trusted' &&
     visibleFields
@@ -929,7 +937,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         if (!phoneValue || phoneValue === country.phoneCode) {
           newErrors['phone'] = t(lang, 'phoneRequired');
         } else {
-          const phoneValidation = validatePhone(phoneValue, country.code);
+          const phoneValidation = validatePhone(phoneValue, country.code, phoneValidationOptions);
           if (!phoneValidation.isValid) newErrors['phone'] = phoneValidation.message;
         }
       }

@@ -4,7 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getPixelsByShop, getBlockedUsers } from "../lib/db.server";
-import { COUNTRY_OPTIONS } from "../lib/constants";
+import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE } from "../lib/constants";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -427,6 +427,113 @@ export default function Settings() {
       {/* General Tab */}
       {activeTab === "general" && (
         <>
+          {/* Manage Redirection */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <s-heading>Manage redirection</s-heading>
+              <s-paragraph>Select where you want to redirect customers after placing the order.</s-paragraph>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                {[
+                  { value: "shopify", label: "Redirect customers to Shopify default Thank you page" },
+                  { value: "custom_page", label: "Redirect customers to specific page" },
+                  { value: "whatsapp", label: "Redirect customers to WhatsApp to chat with you" },
+                  { value: "none", label: "No redirection (Show thank you message only)" },
+                ].map((opt) => (
+                  <label
+                    key={opt.value}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "12px 14px",
+                      border: (settings.redirectMode || "shopify") === opt.value ? "2px solid #000" : "1px solid #D1D5DB",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="redirectMode"
+                      checked={(settings.redirectMode || "shopify") === opt.value}
+                      onChange={() => {
+                        const updates = { redirectMode: opt.value };
+                        // Seed the editable default message the first time "none" is chosen
+                        if (opt.value === "none" && !settings.thankYouMessage) {
+                          updates.thankYouMessage = DEFAULT_THANK_YOU_MESSAGE;
+                        }
+                        handleUpdate(updates);
+                      }}
+                      style={{ width: "16px", height: "16px", accentColor: "#000" }}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+
+              {/* Specific page URL */}
+              {settings.redirectMode === "custom_page" && (
+                <s-stack direction="block" gap="tight" style={{ marginTop: "8px" }}>
+                  <s-text variant="heading-sm">Redirect URL</s-text>
+                  <input
+                    type="url"
+                    value={settings.redirectUrl || ""}
+                    onChange={(e) => handleUpdate({ redirectUrl: e.target.value })}
+                    placeholder="https://example.com/thank-you"
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box" }}
+                  />
+                  <s-text tone="subdued">Link where to redirect customers after submitting the form.</s-text>
+                </s-stack>
+              )}
+
+              {/* WhatsApp */}
+              {settings.redirectMode === "whatsapp" && (
+                <s-stack direction="block" gap="base" style={{ marginTop: "8px" }}>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">Your WhatsApp phone number</s-text>
+                    <input
+                      type="text"
+                      value={settings.redirectWhatsappNumber || ""}
+                      onChange={(e) => handleUpdate({ redirectWhatsappNumber: e.target.value })}
+                      placeholder="+571234567890"
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box" }}
+                    />
+                    <s-text tone="subdued">Please include the country code.</s-text>
+                  </s-stack>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">WhatsApp message</s-text>
+                    <textarea
+                      value={settings.redirectWhatsappMessage || ""}
+                      onChange={(e) => handleUpdate({ redirectWhatsappMessage: e.target.value })}
+                      placeholder="Hi! I just placed order {{order.number}}."
+                      rows={3}
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", resize: "vertical" }}
+                    />
+                    <s-text tone="subdued">Variables: {"{{customer.name}}, {{order.number}}, {{order.total}}, {{order.products}}, {{order.quantity}}"}</s-text>
+                  </s-stack>
+                </s-stack>
+              )}
+
+              {/* No redirection — thank you message */}
+              {settings.redirectMode === "none" && (
+                <s-stack direction="block" gap="tight" style={{ marginTop: "8px" }}>
+                  <s-text variant="heading-sm">Message to show after submitting the form</s-text>
+                  <textarea
+                    value={settings.thankYouMessage || ""}
+                    onChange={(e) => handleUpdate({ thankYouMessage: e.target.value })}
+                    placeholder={DEFAULT_THANK_YOU_MESSAGE}
+                    rows={8}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "monospace" }}
+                  />
+                  <s-text tone="subdued">
+                    HTML is supported. Variables: {"{{customer.name}}, {{customer.first_name}}, {{customer.phone}}, {{customer.email}}, {{customer.address1}}, {{customer.city}}, {{order.number}}, {{order.total}}, {{order.products}}, {{order.quantity}}"}
+                  </s-text>
+                </s-stack>
+              )}
+            </s-stack>
+          </s-section>
+
           {/* Country Selection */}
           <s-section>
         <s-stack direction="block" gap="base">

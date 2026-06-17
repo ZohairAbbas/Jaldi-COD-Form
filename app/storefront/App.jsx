@@ -8,6 +8,7 @@ import BundleWidget, { calculateTierPrice } from './BundleWidget';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
+import { resolveOrderRedirect } from './order-redirect';
 
 // Default config to show button immediately while real config loads
 const defaultConfig = {
@@ -62,6 +63,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [showPostPurchaseUpsell, setShowPostPurchaseUpsell] = useState(false);
   const [postPurchaseUpsellConfig, setPostPurchaseUpsellConfig] = useState(null);
   const [orderResult, setOrderResult] = useState(null); // Store order result for post-purchase flow
+  const [thankYouHtml, setThankYouHtml] = useState(null); // In-form thank-you message (redirectMode 'none')
 
   // Downsell state
   const [showDownsellModal, setShowDownsellModal] = useState(false);
@@ -81,6 +83,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Multi-country detection state
   const [detectedCountry, setDetectedCountry] = useState(null);
+
+  // Holds the submitted order data for post-success redirect resolution
+  const lastOrderDataRef = React.useRef(null);
 
   useEffect(() => {
     loadConfig();
@@ -1492,6 +1497,21 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     return checkSpecificProductAllowed();
   };
 
+  // Apply the merchant-configured post-order behavior (COD): redirect to a URL,
+  // show an in-form thank-you message, or just close.
+  const applyOrderRedirect = (orderData, result) => {
+    const currencySymbol = currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country);
+    const action = resolveOrderRedirect(config?.settings, orderData, result, currencySymbol);
+    if (action.type === 'redirect') {
+      window.location.href = action.url;
+    } else if (action.type === 'message') {
+      setIsModalOpen(false);
+      setThankYouHtml(action.html || '');
+    } else {
+      setIsModalOpen(false);
+    }
+  };
+
   const handleSubmit = async (orderData) => {
     try {
       const response = await fetch(`${appPath}proxy/order`, {
@@ -1506,6 +1526,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
       if (result.success) {
         setOrderResult(result);
+        lastOrderDataRef.current = orderData;
 
         // Track Purchase event with the same event ID used for server-side tracking
         const currency = getCurrencyCode(config.shop?.country);
@@ -1550,12 +1571,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           // Track impression for post-purchase upsell
           trackUpsellStat(result.postPurchaseUpsell.id, 'impression');
         } else {
-          // No post-purchase upsell, redirect immediately
-          if (result.orderStatusUrl) {
-            window.location.href = result.orderStatusUrl;
-          } else {
-            setIsModalOpen(false);
-          }
+          // No post-purchase upsell — apply the merchant's redirect setting
+          applyOrderRedirect(orderData, result);
         }
       } else {
         // Throw validation error with field-specific errors
@@ -2133,11 +2150,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       console.error('Error adding upsell to order:', error);
     }
 
-    // Close modal and redirect to order confirmation
+    // Close upsell and apply the merchant's post-order redirect setting
     setShowPostPurchaseUpsell(false);
-    if (orderResult.orderStatusUrl) {
-      window.location.href = orderResult.orderStatusUrl;
-    }
+    applyOrderRedirect(lastOrderDataRef.current, orderResult);
   };
 
   // Handle post-purchase upsell decline
@@ -2146,11 +2161,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       trackUpsellStat(postPurchaseUpsellConfig.id, 'decline');
     }
 
-    // Close modal and redirect to order confirmation
+    // Close upsell and apply the merchant's post-order redirect setting
     setShowPostPurchaseUpsell(false);
-    if (orderResult?.orderStatusUrl) {
-      window.location.href = orderResult.orderStatusUrl;
-    }
+    applyOrderRedirect(lastOrderDataRef.current, orderResult);
   };
 
   // Get cart items with upsell product included
@@ -2200,7 +2213,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Check if button should be visible on current page
   // BUT always render if we're showing a post-purchase upsell or if the COD modal is open
-  if (!shouldShowButton() && !showPostPurchaseUpsell && !isModalOpen) {
+  if (!shouldShowButton() && !showPostPurchaseUpsell && !isModalOpen && thankYouHtml == null) {
     return null; // Don't render if not on the correct page type
   }
 
@@ -2266,6 +2279,49 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     </div>
   );
 
+  // Thank-you overlay shown when redirectMode is 'none'
+  const closeThankYou = () => {
+    setThankYouHtml(null);
+    setIsModalOpen(false);
+  };
+  const thankYouContent = thankYouHtml != null && (
+    <div
+      className="jaldi-modal-overlay"
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 2147483647, padding: '20px', overflowY: 'auto',
+        direction: config?.settings?.enableRTL ? 'rtl' : 'ltr',
+      }}
+      onClick={closeThankYou}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: 'white', borderRadius: '8px', maxWidth: '560px',
+          width: '100%', maxHeight: '90vh', overflow: 'auto', position: 'relative',
+          margin: 'auto', padding: '32px 28px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={closeThankYou}
+          aria-label="Close"
+          style={{
+            position: 'absolute', top: '12px', right: '12px', border: 'none',
+            background: 'transparent', fontSize: '22px', lineHeight: 1,
+            cursor: 'pointer', color: '#6B7280',
+          }}
+        >
+          ×
+        </button>
+        {/* eslint-disable-next-line react/no-danger */}
+        <div dangerouslySetInnerHTML={{ __html: thankYouHtml }} />
+      </div>
+    </div>
+  );
+
   return (
     <>
       {/* Bundle / Quantity Break Widget — never in cart drawer */}
@@ -2275,6 +2331,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           productPrice={bundleBasePrice ?? currentProduct?.price ?? 0}
           compareAtPrice={compareAtPrice}
           currencySymbol={currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country)}
+          productImage={currentProduct?.image || null}
           onTierSelect={handleBundleTierSelect}
           selectedTierId={selectedBundleTier?.id}
           isRTL={config?.settings?.enableRTL}
@@ -2341,6 +2398,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       )}
 
       {isModalOpen && createPortal(modalContent, document.body)}
+
+      {thankYouHtml != null && createPortal(thankYouContent, document.body)}
     </>
   );
 }
