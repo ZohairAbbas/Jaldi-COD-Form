@@ -266,7 +266,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
 
   return (
     <div style={formStyle}>
-      <h2 style={{ marginTop: 0, marginBottom: "24px", fontWeight: "900" }}>
+      <h2 style={{ marginTop: 0, marginBottom: "24px", fontWeight: "900", textAlign: formConfig.formTitleAlign || "left" }}>
         {lang === 'bilingual' && formConfig.formTitle === 'CASH ON DELIVERY'
           ? 'CASH ON DELIVERY (الدفع عند الاستلام)'
           : formConfig.formTitle}
@@ -291,15 +291,19 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                   backgroundColor: "#f9fafb",
                   borderBottom: "1px solid #E5E7EB",
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", justifyContent: (section.headingAlign === "center" ? "center" : section.headingAlign === "right" ? "flex-end" : "flex-start"), minWidth: 0 }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                     </svg>
                     <span style={{ fontSize: "15px", fontWeight: "600", color: "#111" }}>{section.customLabel || t(lang, 'orderSummary')}</span>
-                    <span style={{ fontSize: "13px", color: "#6B7280" }}>(1 {t(lang, 'item')})</span>
+                    {(section.headingAlign || "left") === "left" && (
+                      <span style={{ fontSize: "13px", color: "#6B7280" }}>(1 {t(lang, 'item')})</span>
+                    )}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "15px", fontWeight: "700", color: "#111" }}>{currencySymbol} 19.99</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                    {(section.headingAlign || "left") === "left" && (
+                      <span style={{ fontSize: "15px", fontWeight: "700", color: "#111" }}>{currencySymbol} 19.99</span>
+                    )}
                     <svg width="12" height="12" viewBox="0 0 12 12">
                       <path d="M2.5 4.5L6 8L9.5 4.5" stroke="#6B7280" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -352,7 +356,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingMethod":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "8px", fontSize: "16px", fontWeight: "700" }}>{section.customLabel || t(lang, 'shipping')}</h3>
+                <h3 style={{ marginBottom: "8px", fontSize: "16px", fontWeight: "700", textAlign: section.headingAlign || "left" }}>{section.customLabel || t(lang, 'shipping')}</h3>
                 <label style={{
                   display: "flex",
                   alignItems: "center",
@@ -374,7 +378,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
           case "shippingAddress":
             return (
               <div key={section.id} style={{ marginBottom: "24px" }}>
-                <h3 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "700" }}>{section.customLabel || t(lang, 'enterShippingAddress')}</h3>
+                <h3 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "700", textAlign: section.headingAlign || "left" }}>{section.customLabel || t(lang, 'enterShippingAddress')}</h3>
                 {visibleFields
                   .filter((f) => f.section === "shipping-address" && f.type !== "whatsapp")
                   .map(renderField)}

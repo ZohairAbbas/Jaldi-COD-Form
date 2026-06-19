@@ -129,7 +129,10 @@ export default function BundleWidget({
             : null;
 
           // Tier thumbnail: per-tier override URL, else the (variant/product) image
-          const tierImage = (tier.imageUrl && tier.imageUrl.trim() !== '') ? tier.imageUrl : productImage;
+          // Images can be disabled per bundle (styling.showImage). Default on.
+          const tierImage = styling.showImage === false
+            ? null
+            : ((tier.imageUrl && tier.imageUrl.trim() !== '') ? tier.imageUrl : productImage);
 
           return (
             <div
@@ -139,7 +142,7 @@ export default function BundleWidget({
                 flex: isHorizontal ? 1 : 'none',
                 border: `2px solid ${tierColors?.borderColor || '#e0e0e0'}`,
                 borderRadius: `${radius}px`,
-                backgroundColor: tierColors?.bgColor || '#fff',
+                background: tierColors?.bgGradient || tierColors?.bgColor || '#fff',
                 padding: `${space}px`,
                 paddingTop: isHorizontal && tier.showMostPopular ? `${space + 14}px` : `${space}px`,
                 cursor: 'pointer',

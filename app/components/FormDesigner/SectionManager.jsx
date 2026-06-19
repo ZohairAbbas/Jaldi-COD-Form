@@ -26,6 +26,15 @@ export default function SectionManager({ sections, onUpdate }) {
     onUpdate(updated);
   };
 
+  const updateAlign = (sectionId, value) => {
+    const updated = sections.map((section) =>
+      section.id === sectionId
+        ? { ...section, headingAlign: value }
+        : section,
+    );
+    onUpdate(updated);
+  };
+
   const toggleVisibility = (sectionId) => {
     const updated = sections.map((section) =>
       section.id === sectionId
@@ -213,6 +222,34 @@ export default function SectionManager({ sections, onUpdate }) {
                     color: '#202223',
                   }}
                 />
+
+                {/* Heading alignment */}
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#6D7175', margin: '10px 0 4px' }}>
+                  Heading alignment
+                </label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {['left', 'center', 'right'].map((align) => (
+                    <button
+                      key={align}
+                      type="button"
+                      onClick={() => updateAlign(section.id, align)}
+                      style={{
+                        flex: 1,
+                        padding: '6px',
+                        textTransform: 'capitalize',
+                        borderRadius: '6px',
+                        border: (section.headingAlign || 'left') === align ? '2px solid #000' : '1px solid #D1D5DB',
+                        backgroundColor: (section.headingAlign || 'left') === align ? '#F5F5F5' : '#fff',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: (section.headingAlign || 'left') === align ? '600' : '400',
+                        color: '#202223',
+                      }}
+                    >
+                      {align}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

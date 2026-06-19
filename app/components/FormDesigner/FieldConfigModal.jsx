@@ -216,6 +216,49 @@ export default function FieldConfigModal({
                 </s-stack>
               )}
 
+              {/* Text field length validation (all text inputs except phone) */}
+              {formData.type === "text" && formData.id !== "phone" && (
+                <>
+                  <s-stack direction="inline" gap="base">
+                    <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                      <s-text variant="heading-sm">Min length</s-text>
+                      <input
+                        type="number"
+                        min={0}
+                        value={formData.minLength ?? ""}
+                        onChange={(e) => handleChange("minLength", e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                        placeholder="No minimum"
+                        style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%" }}
+                      />
+                    </s-stack>
+                    <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                      <s-text variant="heading-sm">Max length</s-text>
+                      <input
+                        type="number"
+                        min={1}
+                        value={formData.maxLength ?? ""}
+                        onChange={(e) => handleChange("maxLength", e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                        placeholder="No maximum"
+                        style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%" }}
+                      />
+                    </s-stack>
+                  </s-stack>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">Invalid value error text</s-text>
+                    <input
+                      type="text"
+                      value={formData.errorText || ""}
+                      onChange={(e) => handleChange("errorText", e.target.value)}
+                      placeholder="Enter a valid value."
+                      style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "100%" }}
+                    />
+                    <s-text tone="subdued">
+                      Shown when the value fails the length rules. Leave empty to use your generic invalid field error text (set in Form Designer).
+                    </s-text>
+                  </s-stack>
+                </>
+              )}
+
               {/* Dropdown Options */}
               {formData.type === "dropdown" && (
                 <s-stack direction="block" gap="tight">

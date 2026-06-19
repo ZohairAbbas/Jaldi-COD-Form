@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import CODForm from './CODForm';
 import BuyButton from './BuyButton';
+import StickyBar from './StickyBar';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
 import BundleWidget, { calculateTierPrice } from './BundleWidget';
@@ -2356,6 +2357,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         config={config}
         onClick={handleBuyButtonClick}
       />
+
+      {/* Sticky page bar (mobile) — hidden while the form/modals are open */}
+      {config?.settings?.stickyBarEnabled
+        && shouldShowButton()
+        && !isModalOpen
+        && !showPostPurchaseUpsell
+        && thankYouHtml == null
+        && createPortal(
+          <StickyBar config={config} onClick={handleBuyButtonClick} />,
+          document.body,
+        )}
 
       {/* Pre-Purchase Upsell Modal */}
       {showUpsellModal && createPortal(

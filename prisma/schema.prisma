@@ -117,6 +117,15 @@ model Settings {
   disabledProductTitles Json    @default("[]")
   enableUserBlocking   Boolean  @default(false)
   blockedUserMessage   String   @default("You are not allowed to place orders. Please contact support.")
+  // Fraud prevention — order rate limit & high-quantity block
+  limitOrdersEnabled        Boolean @default(false)
+  limitOrdersWindowMinutes  Int     @default(1440) // default 24h
+  blockHighQuantityEnabled  Boolean @default(false)
+  maxQuantityPerOrder       Int     @default(10)
+  // Sticky page bar (mobile) — opens the COD form
+  stickyBarEnabled          Boolean @default(false)
+  stickyBarPosition         String  @default("bottom") // bottom | top
+  stickyBarAlwaysVisible    Boolean @default(true)
   // PayFast configuration
   payfastEnabled        Boolean  @default(false)
   payfastMerchantId     String?
@@ -131,6 +140,11 @@ model Settings {
   redirectWhatsappNumber  String?
   redirectWhatsappMessage String?
   thankYouMessage         String?
+  // Free shipping progress nudge
+  freeShippingNudgeEnabled     Boolean @default(false)
+  freeShippingNudgeAmountText  String  @default("🚚 Add {{amount}} more to get free delivery")
+  freeShippingNudgeQtyText     String  @default("🚚 Add {{count}} more item(s) to get free delivery")
+  freeShippingNudgeSuccessText String  @default("🎉 You've unlocked free delivery!")
   shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
@@ -153,6 +167,7 @@ model FormConfig {
   submitButtonTextColor    String   @default("rgba(255,255,255,1)")
   submitButtonFontSize     Int      @default(14)
   submitButtonIcon         String   @default("none")
+  formTitleAlign           String   @default("left") // left | center | right
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   shop                     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)

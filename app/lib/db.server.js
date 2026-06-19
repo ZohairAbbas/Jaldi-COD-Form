@@ -1148,6 +1148,7 @@ export function getDefaultBundle() {
       cornerRoundness: 12,
       breathingSpace: 12,
       colorPalette: "default",
+      showImage: true,
       colors: {
         headerText: { color: "#000000", fontSize: 16 },
         tierTitle: { color: "#000000", fontSize: 14 },

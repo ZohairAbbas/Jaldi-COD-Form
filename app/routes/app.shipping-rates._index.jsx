@@ -54,6 +54,7 @@ export default function ShippingRates() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [hoveredConditionRateId, setHoveredConditionRateId] = useState(null);
 
   // Refs for s-button elements
   const addButtonRef = useRef(null);
@@ -201,6 +202,39 @@ export default function ShippingRates() {
     return `${conditionsArray.length} condition${conditionsArray.length > 1 ? "s" : ""}`;
   };
 
+  // Build a human-readable line per condition for the hover tooltip.
+  const getConditionDetails = (conditions) => {
+    const arr = typeof conditions === "string" ? JSON.parse(conditions || "[]") : (conditions || []);
+    return arr.map((c) => {
+      switch (c.type) {
+        case "order_total_gte":
+          return `Order total ≥ ${currencySymbol}${Number(c.value || 0).toFixed(2)}`;
+        case "order_total_lt":
+          return `Order total < ${currencySymbol}${Number(c.value || 0).toFixed(2)}`;
+        case "order_weight_gte":
+          return `Order weight ≥ ${c.value || 0} kg`;
+        case "order_weight_lt":
+          return `Order weight < ${c.value || 0} kg`;
+        case "quantity_gte":
+          return `Quantity ≥ ${c.value || 0}`;
+        case "quantity_lt":
+          return `Quantity < ${c.value || 0}`;
+        case "contains_product": {
+          const names = c.productTitles || c.productTitle
+            || (c.productIds ? `${c.productIds.length} product(s)` : "a product");
+          return `Cart contains ${names}`;
+        }
+        case "not_contains_product": {
+          const names = c.productTitles || c.productTitle
+            || (c.productIds ? `${c.productIds.length} product(s)` : "a product");
+          return `Cart doesn't contain ${names}`;
+        }
+        default:
+          return c.type;
+      }
+    });
+  };
+
   const hasShopifyRates = shippingRates.some((rate) => rate.isShopifyImported);
 
   return (
@@ -260,7 +294,7 @@ export default function ShippingRates() {
             <div style={{
               border: "1px solid #E5E7EB",
               borderRadius: "8px",
-              overflow: "hidden",
+              overflow: "visible",
             }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
@@ -378,26 +412,64 @@ export default function ShippingRates() {
                           `${currencySymbol}${rate.price.toFixed(2)}`
                         )}
                       </td>
-                      <td style={{ padding: "12px", fontSize: "13px", color: "#6B7280" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          {rate.conditions && (typeof rate.conditions === "string" ? JSON.parse(rate.conditions) : rate.conditions).length > 0 && (
-                            <span style={{
-                              width: "16px",
-                              height: "16px",
-                              backgroundColor: "#FEF3C7",
-                              color: "#92400E",
-                              borderRadius: "50%",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: "10px",
-                              fontWeight: "600",
-                            }}>
-                              ⚙
-                            </span>
-                          )}
-                          <span>{getConditionSummary(rate.conditions)}</span>
-                        </div>
+                      <td style={{ padding: "12px", fontSize: "13px", color: "#6B7280", position: "relative" }}>
+                        {(() => {
+                          const condArr = typeof rate.conditions === "string" ? JSON.parse(rate.conditions || "[]") : (rate.conditions || []);
+                          const hasConditions = condArr.length > 0;
+                          return (
+                            <div
+                              style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: hasConditions ? "help" : "default" }}
+                              onMouseEnter={() => hasConditions && setHoveredConditionRateId(rate.id)}
+                              onMouseLeave={() => setHoveredConditionRateId(null)}
+                            >
+                              {hasConditions && (
+                                <span style={{
+                                  width: "16px",
+                                  height: "16px",
+                                  backgroundColor: "#FEF3C7",
+                                  color: "#92400E",
+                                  borderRadius: "50%",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: "10px",
+                                  fontWeight: "600",
+                                }}>
+                                  ⚙
+                                </span>
+                              )}
+                              <span style={hasConditions ? { borderBottom: "1px dotted #9CA3AF" } : undefined}>
+                                {getConditionSummary(rate.conditions)}
+                              </span>
+
+                              {hasConditions && hoveredConditionRateId === rate.id && (
+                                <div style={{
+                                  position: "absolute",
+                                  bottom: "100%",
+                                  left: "12px",
+                                  marginBottom: "4px",
+                                  zIndex: 20,
+                                  backgroundColor: "#111827",
+                                  color: "#FFFFFF",
+                                  padding: "8px 10px",
+                                  borderRadius: "6px",
+                                  fontSize: "12px",
+                                  lineHeight: "1.5",
+                                  boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+                                  whiteSpace: "nowrap",
+                                  pointerEvents: "none",
+                                }}>
+                                  <div style={{ fontWeight: "600", marginBottom: "2px", color: "#D1D5DB" }}>
+                                    Shows when {condArr.length > 1 ? "all apply:" : "this applies:"}
+                                  </div>
+                                  {getConditionDetails(rate.conditions).map((line, i) => (
+                                    <div key={i}>• {line}</div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: "12px" }}>
                         <div style={{ display: "flex", gap: "8px" }}>
