@@ -74,17 +74,59 @@ export const action = async ({ request }) => {
 
     if (orderData.phone) orderData.phone = normalizePhone(orderData.phone);
 
+    const blockMessage = shop.settings?.blockedUserMessage
+      || "You are not allowed to place orders. Please contact support.";
+
     // Check if user is blocked (fraud prevention)
     if (shop.settings?.enableUserBlocking) {
       const blocked = await isUserBlocked(shop.id, orderData.email, orderData.phone);
       if (blocked) {
-        const message = shop.settings.blockedUserMessage
-          || "You are not allowed to place orders. Please contact support.";
         return Response.json({
           success: false,
-          error: message,
+          error: blockMessage,
           fieldErrors: {},
         }, { status: 403 });
+      }
+    }
+
+    // Fraud: block orders with too many products (independent toggle)
+    if (shop.settings?.blockHighQuantityEnabled) {
+      const maxQty = shop.settings.maxQuantityPerOrder || 0;
+      const orderQty = (orderData.items || []).reduce((sum, i) => sum + (parseInt(i.quantity, 10) || 0), 0);
+      if (maxQty > 0 && orderQty > maxQty) {
+        return Response.json({
+          success: false,
+          error: blockMessage,
+          fieldErrors: {},
+        }, { status: 403 });
+      }
+    }
+
+    // Fraud: rate-limit repeat orders from the same customer (phone/email) in a window
+    if (shop.settings?.limitOrdersEnabled) {
+      const windowMinutes = shop.settings.limitOrdersWindowMinutes || 0;
+      if (windowMinutes > 0) {
+        const since = new Date(Date.now() - windowMinutes * 60 * 1000);
+        const orMatch = [];
+        if (orderData.phone) orMatch.push({ phone: orderData.phone });
+        if (orderData.email) orMatch.push({ email: orderData.email });
+        if (orMatch.length > 0) {
+          const recentOrder = await prisma.order.findFirst({
+            where: {
+              shopId: shop.id,
+              createdAt: { gte: since },
+              OR: orMatch,
+            },
+            select: { id: true },
+          });
+          if (recentOrder) {
+            return Response.json({
+              success: false,
+              error: blockMessage,
+              fieldErrors: {},
+            }, { status: 403 });
+          }
+        }
       }
     }
 

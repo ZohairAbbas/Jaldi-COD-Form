@@ -48,12 +48,17 @@ export const loader = async ({ request }) => {
         submitButtonTextColor: shopData.formConfig.submitButtonTextColor,
         submitButtonFontSize: shopData.formConfig.submitButtonFontSize,
         submitButtonIcon: shopData.formConfig.submitButtonIcon,
+        formTitleAlign: shopData.formConfig.formTitleAlign || 'left',
       },
       settings: {
         formMode: shopData.settings.formMode,
         allowCartItems: shopData.settings.allowCartItems,
         enableRTL: shopData.settings.enableRTL,
         buttonPageVisibility: shopData.settings.buttonPageVisibility,
+        // Sticky page bar (mobile)
+        stickyBarEnabled: shopData.settings.stickyBarEnabled || false,
+        stickyBarPosition: shopData.settings.stickyBarPosition || 'bottom',
+        stickyBarAlwaysVisible: shopData.settings.stickyBarAlwaysVisible !== false,
         // Hide native buttons settings
         hideCheckoutButton: shopData.settings.hideCheckoutButton,
         hideAddToCartButton: shopData.settings.hideAddToCartButton,
@@ -108,6 +113,11 @@ export const loader = async ({ request }) => {
         redirectWhatsappNumber: shopData.settings.redirectWhatsappNumber || null,
         redirectWhatsappMessage: shopData.settings.redirectWhatsappMessage || null,
         thankYouMessage: shopData.settings.thankYouMessage || null,
+        // Free shipping progress nudge
+        freeShippingNudgeEnabled: shopData.settings.freeShippingNudgeEnabled || false,
+        freeShippingNudgeAmountText: shopData.settings.freeShippingNudgeAmountText || '',
+        freeShippingNudgeQtyText: shopData.settings.freeShippingNudgeQtyText || '',
+        freeShippingNudgeSuccessText: shopData.settings.freeShippingNudgeSuccessText || '',
       },
       shop: {
         country: shopData.country || 'PAK',

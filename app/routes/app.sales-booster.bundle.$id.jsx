@@ -220,6 +220,89 @@ const COLOR_PALETTES = [
 ];
 
 // ============================================
+// GRADIENT PALETTES
+// ============================================
+// Gradients apply to ALL tier cards via `bgGradient`. `bgColor` is kept as a
+// solid fallback for older renderers / when gradients aren't supported.
+const GRADIENT_PALETTES = [
+  {
+    id: "gradient-sunrise",
+    label: "Sunrise",
+    swatch: "linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)",
+    colors: {
+      headerText: { color: "#7a2d2d", fontSize: 16 },
+      tierTitle: { color: "#7a2d2d", fontSize: 14 },
+      badge: { bgColor: "#ef6f6c", textColor: "#ffffff", fontSize: 12 },
+      price: { color: "#7a2d2d", fontSize: 16 },
+      strikethroughPrice: { color: "#b98a8a", fontSize: 14 },
+      mostPopularTag: { bgColor: "#ef6f6c", textColor: "#ffffff", fontSize: 11 },
+      selectedTier: { borderColor: "#ef6f6c", bgColor: "#fde2e0", bgGradient: "linear-gradient(135deg, #ffd9c0 0%, #ffc1cc 100%)" },
+      unselectedTier: { borderColor: "#f5c6c0", bgColor: "#fff5f3", bgGradient: "linear-gradient(135deg, #fff1ea 0%, #ffe6ea 100%)" },
+    },
+  },
+  {
+    id: "gradient-aurora",
+    label: "Aurora",
+    swatch: "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)",
+    colors: {
+      headerText: { color: "#4a3a6b", fontSize: 16 },
+      tierTitle: { color: "#4a3a6b", fontSize: 14 },
+      badge: { bgColor: "#8b6fc4", textColor: "#ffffff", fontSize: 12 },
+      price: { color: "#4a3a6b", fontSize: 16 },
+      strikethroughPrice: { color: "#a99ec4", fontSize: 14 },
+      mostPopularTag: { bgColor: "#8b6fc4", textColor: "#ffffff", fontSize: 11 },
+      selectedTier: { borderColor: "#8b6fc4", bgColor: "#ede7f6", bgGradient: "linear-gradient(135deg, #c9b8ee 0%, #f6c8ee 100%)" },
+      unselectedTier: { borderColor: "#d6c9f0", bgColor: "#f8f5ff", bgGradient: "linear-gradient(135deg, #efe9fb 0%, #fdeef9 100%)" },
+    },
+  },
+  {
+    id: "gradient-mint",
+    label: "Mint",
+    swatch: "linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)",
+    colors: {
+      headerText: { color: "#15524a", fontSize: 16 },
+      tierTitle: { color: "#15524a", fontSize: 14 },
+      badge: { bgColor: "#34b3a0", textColor: "#ffffff", fontSize: 12 },
+      price: { color: "#15524a", fontSize: 16 },
+      strikethroughPrice: { color: "#8fc4bb", fontSize: 14 },
+      mostPopularTag: { bgColor: "#34b3a0", textColor: "#ffffff", fontSize: 11 },
+      selectedTier: { borderColor: "#34b3a0", bgColor: "#dcf5ee", bgGradient: "linear-gradient(135deg, #b8f0d4 0%, #bfe6f5 100%)" },
+      unselectedTier: { borderColor: "#bfe7dd", bgColor: "#f3fdfa", bgGradient: "linear-gradient(135deg, #e8fbf1 0%, #ecf8fd 100%)" },
+    },
+  },
+  {
+    id: "gradient-peach",
+    label: "Peach",
+    swatch: "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)",
+    colors: {
+      headerText: { color: "#7a4326", fontSize: 16 },
+      tierTitle: { color: "#7a4326", fontSize: 14 },
+      badge: { bgColor: "#f08a5d", textColor: "#ffffff", fontSize: 12 },
+      price: { color: "#7a4326", fontSize: 16 },
+      strikethroughPrice: { color: "#cba48f", fontSize: 14 },
+      mostPopularTag: { bgColor: "#f08a5d", textColor: "#ffffff", fontSize: 11 },
+      selectedTier: { borderColor: "#f08a5d", bgColor: "#ffe9d6", bgGradient: "linear-gradient(135deg, #ffe0c2 0%, #ffcab0 100%)" },
+      unselectedTier: { borderColor: "#fad9c2", bgColor: "#fff8f1", bgGradient: "linear-gradient(135deg, #fff4e8 0%, #ffeee2 100%)" },
+    },
+  },
+  {
+    id: "gradient-midnight",
+    label: "Midnight",
+    swatch: "linear-gradient(135deg, #30cfd0 0%, #330867 100%)",
+    colors: {
+      headerText: { color: "#ffffff", fontSize: 16 },
+      tierTitle: { color: "#ffffff", fontSize: 14 },
+      badge: { bgColor: "#30cfd0", textColor: "#0b2545", fontSize: 12 },
+      price: { color: "#ffffff", fontSize: 16 },
+      strikethroughPrice: { color: "#b8c4e0", fontSize: 14 },
+      mostPopularTag: { bgColor: "#30cfd0", textColor: "#0b2545", fontSize: 11 },
+      selectedTier: { borderColor: "#30cfd0", bgColor: "#27306b", bgGradient: "linear-gradient(135deg, #3a3f8f 0%, #241052 100%)" },
+      unselectedTier: { borderColor: "#3a3f8f", bgColor: "#2a2f63", bgGradient: "linear-gradient(135deg, #2d3372 0%, #1d0c45 100%)" },
+    },
+  },
+];
+
+// ============================================
 // COMPONENT
 // ============================================
 export default function BundleEditor() {
@@ -1034,6 +1117,20 @@ export default function BundleEditor() {
                         />
                       </div>
 
+                      {/* Show product image */}
+                      <div>
+                        <label style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={styling.showImage !== false}
+                            onChange={(e) => updateStyling("showImage", e.target.checked)}
+                            style={{ width: "16px", height: "16px", accentColor: "#000" }}
+                          />
+                          Show product image on tiers
+                        </label>
+                        <s-text tone="subdued">Shows the product image by default. Add a custom Image URL per tier to override it.</s-text>
+                      </div>
+
                       {/* Color Palettes */}
                       <div>
                         <label style={{ display: "block", fontWeight: "500", marginBottom: "8px", fontSize: "14px" }}>Color Palettes</label>
@@ -1046,7 +1143,27 @@ export default function BundleEditor() {
                               title={palette.label}
                               style={{
                                 width: "40px", height: "40px", borderRadius: "8px",
-                                backgroundColor: palette.swatch, border: styling.colorPalette === palette.id ? "3px solid #000" : "2px solid #e5e7eb",
+                                background: palette.swatch, border: styling.colorPalette === palette.id ? "3px solid #000" : "2px solid #e5e7eb",
+                                cursor: "pointer", transition: "border 0.2s",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Gradient Palettes */}
+                      <div>
+                        <label style={{ display: "block", fontWeight: "500", marginBottom: "8px", fontSize: "14px" }}>Gradient Palettes</label>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                          {GRADIENT_PALETTES.map((palette) => (
+                            <button
+                              key={palette.id}
+                              type="button"
+                              onClick={() => applyColorPalette(palette)}
+                              title={palette.label}
+                              style={{
+                                width: "40px", height: "40px", borderRadius: "8px",
+                                background: palette.swatch, border: styling.colorPalette === palette.id ? "3px solid #000" : "2px solid #e5e7eb",
                                 cursor: "pointer", transition: "border 0.2s",
                               }}
                             />
@@ -1196,9 +1313,10 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
           const { fullPrice, discountedPrice, hasDiscount } = calculateTierPrice(samplePrice, tier);
           // Preview image: per-tier override URL, else the selected product's image.
           // When neither exists, show a placeholder so the admin sees the thumbnail slot.
+          // Hidden entirely when images are disabled for the bundle.
           const tierImage = tier.imageUrl && tier.imageUrl.trim() !== "" ? tier.imageUrl : sampleProductImage;
           const thumbStyle = { width: "44px", height: "44px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb", flexShrink: 0 };
-          const thumbNode = tierImage ? (
+          const thumbNode = styling.showImage === false ? null : (tierImage ? (
             <img src={tierImage} alt={tier.titleText || ""} style={thumbStyle} />
           ) : (
             <div style={{ ...thumbStyle, backgroundColor: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af" }}>
@@ -1208,7 +1326,7 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </div>
-          );
+          ));
 
           return (
             <div
@@ -1218,7 +1336,7 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
                 flex: isHorizontal ? 1 : "none",
                 border: `2px solid ${tierColors?.borderColor || "#e0e0e0"}`,
                 borderRadius: `${radius}px`,
-                backgroundColor: tierColors?.bgColor || "#fff",
+                background: tierColors?.bgGradient || tierColors?.bgColor || "#fff",
                 padding: `${space}px`,
                 paddingTop: isHorizontal && tier.showMostPopular ? `${space + 14}px` : `${space}px`,
                 cursor: "pointer",

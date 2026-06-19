@@ -27,6 +27,33 @@ export default function StyleCustomizer({ formConfig, onUpdate }) {
         />
       </s-stack>
 
+      {/* Form Title Alignment */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">Title Alignment</s-text>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {["left", "center", "right"].map((align) => (
+            <button
+              key={align}
+              type="button"
+              onClick={() => handleChange("formTitleAlign", align)}
+              style={{
+                flex: 1,
+                padding: "8px",
+                textTransform: "capitalize",
+                borderRadius: "6px",
+                border: (formConfig.formTitleAlign || "left") === align ? "2px solid #000" : "1px solid #d1d5db",
+                backgroundColor: (formConfig.formTitleAlign || "left") === align ? "#f5f5f5" : "#fff",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: (formConfig.formTitleAlign || "left") === align ? "600" : "400",
+              }}
+            >
+              {align}
+            </button>
+          ))}
+        </div>
+      </s-stack>
+
       {/* Text Color */}
       <s-stack direction="block" gap="tight">
         <s-text variant="heading-sm">Text Color</s-text>

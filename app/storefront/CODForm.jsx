@@ -941,6 +941,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           if (!phoneValidation.isValid) newErrors['phone'] = phoneValidation.message;
         }
       }
+
+      // Min/max length validation for text fields (skip phone — own rules).
+      // Only runs when a value is present; emptiness is handled by required above.
+      if (field.type === 'text' && field.id !== 'phone' && !newErrors[field.id]) {
+        const rawValue = field.id.startsWith('custom-')
+          ? formData.customFields?.[field.id]
+          : formData[field.id.replace(/-/g, '')];
+        const strValue = typeof rawValue === 'string' ? rawValue.trim() : '';
+        if (strValue !== '') {
+          const min = parseInt(field.minLength, 10);
+          const max = parseInt(field.maxLength, 10);
+          const tooShort = Number.isFinite(min) && min > 0 && strValue.length < min;
+          const tooLong = Number.isFinite(max) && max > 0 && strValue.length > max;
+          if (tooShort || tooLong) {
+            newErrors[field.id] = field.errorText?.trim()
+              || config.formConfig.invalidFieldErrorText;
+          }
+        }
+      }
     });
 
     setErrors(newErrors);
@@ -1673,7 +1692,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     onChange={(e) => field.id === 'phone' ? handleChange(fieldId, country.phoneCode + e.target.value) : setFieldValue(e.target.value)}
                     onBlur={undefined}
                     placeholder={field.id === 'phone' ? (field.placeholder || '3001234567') : field.id === 'email' ? 'email@example.com' : field.placeholder}
-                    maxLength={field.id === 'phone' ? 15 - country.phoneCode.length : undefined}
+                    maxLength={field.id === 'phone'
+                      ? 15 - country.phoneCode.length
+                      : (Number.isFinite(parseInt(field.maxLength, 10)) && parseInt(field.maxLength, 10) > 0 ? parseInt(field.maxLength, 10) : undefined)}
                     style={field.id === 'phone' ? { ...inputStyle, paddingLeft: '0' } : inputStyle}
                   />
                   {field.id === 'phone' && isLookingUpCustomer && (
@@ -2030,6 +2051,77 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     ? displaySubtotal - displayBundleDiscount - displayUpsellDiscount + displayOneTickTotal - displayRecoveryDiscountAmount - displayUserDiscountAmount + displayShippingCost
     : total;
 
+  // ── Free shipping progress nudge ────────────────────────────────────────
+  // When a free (price 0) rate is gated behind an order-total or quantity
+  // threshold the buyer hasn't met, show how much more is needed. If already
+  // unlocked, show a brief success message instead. Auto-derived from rate
+  // conditions; only the message text is merchant-configurable.
+  const getFreeShippingNudge = () => {
+    if (!config.settings?.freeShippingNudgeEnabled) return null;
+
+    const rates = config.shippingRates || [];
+    const candidates = []; // { progress, met, type, gap }
+
+    rates.forEach(rate => {
+      if (rate.price !== 0) return; // free rates only
+      const conditions = rate.conditions || [];
+      if (conditions.length === 0) return; // unconditional free rate — nothing to nudge
+
+      // Only "spend/add more" thresholds are actionable. If a rate carries any
+      // non-actionable condition (upper bounds, product rules), skip it — we
+      // can't promise the buyer they'll unlock it by adding to the cart.
+      const actionable = conditions.every(c => c.type === 'order_total_gte' || c.type === 'quantity_gte');
+      if (!actionable) return;
+
+      conditions.forEach(c => {
+        if (c.type === 'order_total_gte') {
+          const current = subtotal;
+          const gap = c.value - current;
+          candidates.push({
+            type: 'amount',
+            met: gap <= 0,
+            progress: c.value > 0 ? Math.min(current / c.value, 1) : 1,
+            gap: Math.max(gap, 0),
+          });
+        } else if (c.type === 'quantity_gte') {
+          const current = totalQuantity;
+          const gap = c.value - current;
+          candidates.push({
+            type: 'quantity',
+            met: gap <= 0,
+            progress: c.value > 0 ? Math.min(current / c.value, 1) : 1,
+            gap: Math.max(gap, 0),
+          });
+        }
+      });
+    });
+
+    if (candidates.length === 0) return null;
+
+    // If any free rate is already unlocked, show success.
+    if (candidates.some(c => c.met)) {
+      const text = config.settings.freeShippingNudgeSuccessText || '';
+      return text ? { kind: 'success', text } : null;
+    }
+
+    // Otherwise nudge toward the threshold closest to completion (highest progress).
+    const best = candidates.reduce((a, b) => (b.progress > a.progress ? b : a));
+    if (best.type === 'amount') {
+      const displayGap = hasDisplayPrice ? best.gap * displayExchangeRate : best.gap;
+      const amountStr = `${currencySymbol}${displayGap.toFixed(2)}`;
+      const template = config.settings.freeShippingNudgeAmountText || '';
+      return template ? { kind: 'progress', text: template.replace(/\{\{\s*amount\s*\}\}/g, amountStr) } : null;
+    }
+    const template = config.settings.freeShippingNudgeQtyText || '';
+    return template ? { kind: 'progress', text: template.replace(/\{\{\s*count\s*\}\}/g, String(best.gap)) } : null;
+  };
+
+  const freeShippingNudge = getFreeShippingNudge();
+
+  // Map a section's heading alignment to a flexbox justifyContent value.
+  const alignToJustify = (align) =>
+    align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
+
   return (
     <div style={formStyle}>
       {/* Fixed Header */}
@@ -2068,6 +2160,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           fontWeight: '900',
           letterSpacing: '0.5px',
           color: '#000',
+          textAlign: config.formConfig.formTitleAlign || 'left',
         }}>
           {lang === 'bilingual' && config.formConfig.formTitle === 'CASH ON DELIVERY'
             ? 'CASH ON DELIVERY (الدفع عند الاستلام)'
@@ -2516,19 +2609,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       borderBottom: step2SummaryOpen ? '1px solid #E5E7EB' : 'none',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', justifyContent: alignToJustify(section.headingAlign), minWidth: 0 }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                       </svg>
                       <span style={{ fontSize: '15px', fontWeight: '600', color: '#111' }}>{section.customLabel || t(lang, 'orderSummary')}</span>
-                      <span style={{ fontSize: '13px', color: '#6B7280' }}>
-                        ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? t(lang, 'item') : t(lang, 'items')})
-                      </span>
+                      {/* Item count: only when collapsed AND left-aligned, so center/right headings stay clean */}
+                      {!step2SummaryOpen && (section.headingAlign || 'left') === 'left' && (
+                        <span style={{ fontSize: '13px', color: '#6B7280' }}>
+                          ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? t(lang, 'item') : t(lang, 'items')})
+                        </span>
+                      )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '15px', fontWeight: '700', color: '#111' }}>
-                        {currencySymbol}{displayTotal.toFixed(2)}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                      {/* Total: only when collapsed AND left-aligned (kept-when-collapsed rule) */}
+                      {!step2SummaryOpen && (section.headingAlign || 'left') === 'left' && (
+                        <span style={{ fontSize: '15px', fontWeight: '700', color: '#111' }}>
+                          {currencySymbol}{displayTotal.toFixed(2)}
+                        </span>
+                      )}
                       <svg width="12" height="12" viewBox="0 0 12 12"
                         style={{ transform: step2SummaryOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
                         <path d="M2.5 4.5L6 8L9.5 4.5" stroke="#6B7280" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2675,7 +2774,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       borderBottom: shippingMethodOpen ? '1px solid #E5E7EB' : 'none',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', justifyContent: alignToJustify(section.headingAlign), minWidth: 0 }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="1" y="3" width="15" height="13" rx="1"></rect>
                         <path d="M16 8h4l3 5v3h-7V8z"></path>
@@ -2684,10 +2783,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       </svg>
                       <span style={{ fontSize: '15px', fontWeight: '600', color: '#000' }}>{section.customLabel || t(lang, 'shipping')}</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#000' }}>
-                        {selectedShippingRate ? (selectedShippingRate.price === 0 ? t(lang, 'free') : `${currencySymbol}${(hasDisplayPrice ? parseFloat((selectedShippingRate.price * displayExchangeRate).toFixed(2)) : selectedShippingRate.price).toFixed(2)}`) : t(lang, 'free')}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                      {/* Shipping price: only when collapsed AND left-aligned */}
+                      {!shippingMethodOpen && (section.headingAlign || 'left') === 'left' && (
+                        <span style={{ fontSize: '14px', fontWeight: '600', color: '#000' }}>
+                          {selectedShippingRate ? (selectedShippingRate.price === 0 ? t(lang, 'free') : `${currencySymbol}${(hasDisplayPrice ? parseFloat((selectedShippingRate.price * displayExchangeRate).toFixed(2)) : selectedShippingRate.price).toFixed(2)}`) : t(lang, 'free')}
+                        </span>
+                      )}
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2.5"
                         style={{ transform: shippingMethodOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
                         <polyline points="6 9 12 15 18 9"></polyline>
@@ -2698,6 +2800,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   {/* Collapsible body */}
                   {shippingMethodOpen && (
                     <div style={{ padding: '12px 16px' }}>
+                      {/* Free shipping progress nudge */}
+                      {freeShippingNudge && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 12px',
+                          marginBottom: '10px',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          lineHeight: '1.35',
+                          backgroundColor: freeShippingNudge.kind === 'success' ? '#ECFDF5' : '#F3F4F6',
+                          color: freeShippingNudge.kind === 'success' ? '#047857' : '#374151',
+                          border: `1px solid ${freeShippingNudge.kind === 'success' ? '#A7F3D0' : '#E5E7EB'}`,
+                        }}>
+                          <span style={{ fontWeight: '600' }}>{freeShippingNudge.text}</span>
+                        </div>
+                      )}
+
                       {eligibleShippingRates.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {eligibleShippingRates.map(rate => (
@@ -2705,7 +2826,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               key={rate.id}
                               style={{
                                 display: 'flex',
-                                alignItems: 'center',
+                                alignItems: rate.description ? 'flex-start' : 'center',
                                 justifyContent: 'space-between',
                                 padding: '8px 16px',
                                 border: selectedShippingRate?.id === rate.id
@@ -2716,7 +2837,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                 backgroundColor: '#FFFFFF',
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                                 <input
                                   type="radio"
                                   name="shippingRate"
@@ -2726,11 +2847,19 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                                     width: '16px',
                                     height: '16px',
                                     accentColor: '#000',
+                                    flexShrink: 0,
                                   }}
                                 />
-                                <span style={{ fontSize: '14px', color: '#000000' }}>
-                                  {rate.name}
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{ fontSize: '14px', color: '#000000' }}>
+                                    {rate.name}
+                                  </span>
+                                  {rate.description && (
+                                    <span style={{ fontSize: '12px', color: '#6B7280', lineHeight: '1.3' }}>
+                                      {rate.description}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <span style={{
                                 fontSize: '14px',
@@ -2777,6 +2906,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     fontWeight: '600',
                     marginBottom: '16px',
                     color: '#000',
+                    textAlign: section.headingAlign || 'left',
                   }}>
                     {section.customLabel || t(lang, 'enterShippingAddress')}
                   </h3>

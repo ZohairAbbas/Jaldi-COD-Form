@@ -789,6 +789,66 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      {/* Free Shipping Progress Nudge */}
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>Free shipping nudge</s-heading>
+          <s-paragraph>
+            Encourage bigger carts. When a free-shipping rate is gated behind an order-total or quantity threshold, show buyers how much more they need to add to unlock free delivery.
+          </s-paragraph>
+
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.freeShippingNudgeEnabled || false}
+              onChange={(e) => handleUpdate({ freeShippingNudgeEnabled: e.target.checked })}
+              style={{ width: "16px", height: "16px", accentColor: "#000" }}
+            />
+            Show free shipping progress nudge
+          </label>
+
+          {settings.freeShippingNudgeEnabled && (
+            <>
+              <s-stack direction="block" gap="tight" style={{ marginTop: "8px" }}>
+                <s-text variant="heading-sm">Amount-based message</s-text>
+                <input
+                  type="text"
+                  value={settings.freeShippingNudgeAmountText || ""}
+                  onChange={(e) => handleUpdate({ freeShippingNudgeAmountText: e.target.value })}
+                  placeholder="🚚 Add {{amount}} more to get free delivery"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box" }}
+                />
+                <s-text tone="subdued">Shown for order-total thresholds. Use {"{{amount}}"} for the remaining amount.</s-text>
+              </s-stack>
+
+              <s-stack direction="block" gap="tight">
+                <s-text variant="heading-sm">Quantity-based message</s-text>
+                <input
+                  type="text"
+                  value={settings.freeShippingNudgeQtyText || ""}
+                  onChange={(e) => handleUpdate({ freeShippingNudgeQtyText: e.target.value })}
+                  placeholder="🚚 Add {{count}} more item(s) to get free delivery"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box" }}
+                />
+                <s-text tone="subdued">Shown for quantity thresholds. Use {"{{count}}"} for the remaining item count.</s-text>
+              </s-stack>
+
+              <s-stack direction="block" gap="tight">
+                <s-text variant="heading-sm">Unlocked message</s-text>
+                <input
+                  type="text"
+                  value={settings.freeShippingNudgeSuccessText || ""}
+                  onChange={(e) => handleUpdate({ freeShippingNudgeSuccessText: e.target.value })}
+                  placeholder="🎉 You've unlocked free delivery!"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box" }}
+                />
+                <s-text tone="subdued">Shown once the buyer qualifies for free delivery.</s-text>
+              </s-stack>
+            </>
+          )}
+        </s-stack>
+      </s-section>
+
       {/* RTL Support Setting */}
       <s-section>
         <s-stack direction="block" gap="base">
@@ -1257,6 +1317,80 @@ export default function Settings() {
             </s-stack>
           </s-section>
 
+          {/* Sticky Bar (mobile) */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <s-heading>Sticky Order Bar (Mobile)</s-heading>
+              <s-paragraph>
+                Show a sticky bar on mobile that stays in view as the customer scrolls, so they can open the COD form without scrolling back to the button. Uses your COD button's text, icon, and colors.
+              </s-paragraph>
+
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={settings.stickyBarEnabled || false}
+                  onChange={(e) => handleUpdate({ stickyBarEnabled: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+                />
+                <div>
+                  <div style={{ fontWeight: "600", fontSize: "14px" }}>Enable sticky bar on mobile</div>
+                  <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "2px" }}>
+                    Appears on mobile devices only. Tapping it opens the COD form.
+                  </div>
+                </div>
+              </label>
+
+              {settings.stickyBarEnabled && (
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    {/* Position */}
+                    <s-stack direction="block" gap="tight">
+                      <s-text variant="heading-sm">Position</s-text>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        {["bottom", "top"].map((pos) => (
+                          <button
+                            key={pos}
+                            type="button"
+                            onClick={() => handleUpdate({ stickyBarPosition: pos })}
+                            style={{
+                              flex: 1,
+                              padding: "8px",
+                              textTransform: "capitalize",
+                              borderRadius: "6px",
+                              border: (settings.stickyBarPosition || "bottom") === pos ? "2px solid #000" : "1px solid #d1d5db",
+                              backgroundColor: (settings.stickyBarPosition || "bottom") === pos ? "#f5f5f5" : "#fff",
+                              cursor: "pointer",
+                              fontSize: "13px",
+                              fontWeight: (settings.stickyBarPosition || "bottom") === pos ? "600" : "400",
+                            }}
+                          >
+                            {pos}
+                          </button>
+                        ))}
+                      </div>
+                    </s-stack>
+
+                    {/* Visibility behavior */}
+                    <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.stickyBarAlwaysVisible !== false}
+                        onChange={(e) => handleUpdate({ stickyBarAlwaysVisible: e.target.checked })}
+                        style={{ width: "18px", height: "18px" }}
+                      />
+                      <span style={{ fontSize: "14px" }}>
+                        Always visible
+                        <span style={{ display: "block", fontSize: "12px", color: "#6b7280" }}>
+                          When off, the bar appears only after the customer scrolls down the page.
+                        </span>
+                      </span>
+                    </label>
+                  </s-stack>
+                </s-box>
+              )}
+            </s-stack>
+          </s-section>
+
           {/* Disable on Specific Products */}
           <s-section>
             <s-stack direction="block" gap="base">
@@ -1631,6 +1765,78 @@ export default function Settings() {
       {/* User Blocking Tab */}
       {activeTab === "fraud" && (
         <>
+          {/* Order rate limit */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={settings.limitOrdersEnabled || false}
+                  onChange={(e) => handleUpdate({ limitOrdersEnabled: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+                />
+                <div>
+                  <div style={{ fontWeight: "600", fontSize: "14px" }}>Limit orders made from the same customer in a time window</div>
+                  <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "2px" }}>
+                    To determine the customer we use a combination of email and phone number.
+                  </div>
+                </div>
+              </label>
+
+              {settings.limitOrdersEnabled && (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "14px" }}>Allow only 1 order from the same customer in</span>
+                  <select
+                    value={settings.limitOrdersWindowMinutes || 1440}
+                    onChange={(e) => handleUpdate({ limitOrdersWindowMinutes: parseInt(e.target.value, 10) })}
+                    style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px" }}
+                  >
+                    <option value={15}>15 minutes</option>
+                    <option value={30}>30 minutes</option>
+                    <option value={60}>1 hour</option>
+                    <option value={120}>2 hours</option>
+                    <option value={360}>6 hours</option>
+                    <option value={720}>12 hours</option>
+                    <option value={1440}>24 hours</option>
+                    <option value={2880}>2 days</option>
+                    <option value={4320}>3 days</option>
+                    <option value={10080}>1 week</option>
+                  </select>
+                </div>
+              )}
+            </s-stack>
+          </s-section>
+
+          {/* High quantity block */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={settings.blockHighQuantityEnabled || false}
+                  onChange={(e) => handleUpdate({ blockHighQuantityEnabled: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+                />
+                <div>
+                  <div style={{ fontWeight: "600", fontSize: "14px" }}>Block orders if they contain more than X quantity of products</div>
+                </div>
+              </label>
+
+              {settings.blockHighQuantityEnabled && (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "14px" }}>Orders will be blocked if the products quantity in the order is above:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={settings.maxQuantityPerOrder ?? 10}
+                    onChange={(e) => handleUpdate({ maxQuantityPerOrder: e.target.value === "" ? "" : parseInt(e.target.value, 10) })}
+                    style={{ width: "90px", padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px" }}
+                  />
+                </div>
+              )}
+            </s-stack>
+          </s-section>
+
           <s-section>
             <s-stack direction="block" gap="base">
               <s-heading>User Blocking</s-heading>

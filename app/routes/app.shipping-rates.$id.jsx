@@ -357,12 +357,12 @@ export default function ShippingRateEditor() {
                       backgroundColor: "#FFFFFF",
                     }}
                   >
-                    <option value="order_total_gte">Order total ≥</option>
-                    <option value="order_total_lt">Order total &lt;</option>
-                    <option value="order_weight_gte">Order weight ≥</option>
-                    <option value="order_weight_lt">Order weight &lt;</option>
-                    <option value="quantity_gte">Quantity ≥</option>
-                    <option value="quantity_lt">Quantity &lt;</option>
+                    <option value="order_total_gte">Order total is greater or equal than</option>
+                    <option value="order_total_lt">Order total is less than</option>
+                    <option value="order_weight_gte">Order weight is greater or equal than</option>
+                    <option value="order_weight_lt">Order weight is less than</option>
+                    <option value="quantity_gte">Quantity is greater or equal than</option>
+                    <option value="quantity_lt">Quantity is less than</option>
                     <option value="contains_product">Cart contains product</option>
                     <option value="not_contains_product">Cart doesn't contain product</option>
                   </select>
