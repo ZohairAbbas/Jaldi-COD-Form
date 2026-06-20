@@ -561,13 +561,20 @@ function hideNativeButtons(config) {
   const pageType = detectPageType();
   const settings = config.settings;
 
+  // Never hide anything that belongs to Preventify (our injected COD button/form).
+  // Some themes nest the COD button inside the product form, so broad selectors
+  // like `form[action*="/cart/add"] button` could otherwise catch our own button.
+  const isPreventifyEl = (btn) => !!btn.closest(
+    '#preventify-popup, #preventify-embedded, #preventify-drawer-popup, .preventify-product-card-button, [data-preventify-app-embed]'
+  );
+
   // Hide checkout button on cart page
   if (settings.hideCheckoutButton && pageType === 'cart') {
     const checkoutButtons = document.querySelectorAll(
       'button[name="checkout"], #checkout, .cart__checkout-button, [data-checkout-button], form[action="/checkout"] button[type="submit"]'
     );
     checkoutButtons.forEach(btn => {
-      btn.style.display = 'none';
+      if (!isPreventifyEl(btn)) btn.style.display = 'none';
     });
   }
 
@@ -577,7 +584,7 @@ function hideNativeButtons(config) {
       'button[name="add"], .product-form__submit, [data-add-to-cart], form[action*="/cart/add"] button[type="submit"]:not(.shopify-payment-button__button)'
     );
     addToCartButtons.forEach(btn => {
-      btn.style.display = 'none';
+      if (!isPreventifyEl(btn)) btn.style.display = 'none';
     });
   }
 
@@ -587,7 +594,7 @@ function hideNativeButtons(config) {
       '.shopify-payment-button, .shopify-payment-button__button, [data-shopify-buttoncontainer], .product-form__buttons .shopify-payment-button'
     );
     buyNowButtons.forEach(btn => {
-      btn.style.display = 'none';
+      if (!isPreventifyEl(btn)) btn.style.display = 'none';
     });
   }
 }
@@ -703,9 +710,9 @@ function renderPopupOnProductCards(shopDomain) {
         e.preventDefault();
       });
 
-      // Render React component
+      // Render React component (product-card instance — never shows the sticky bar)
       const root = createRoot(buttonContainer);
-      root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} initialInventoryQuantity={null} />);
+      root.render(<JaldiCODFormApp mode="popup" shopDomain={shopDomain} currentProduct={productData} initialInventoryQuantity={null} isProductCard={true} />);
 
       // Place button where Add to Cart was
       if (quickAddContainer) {

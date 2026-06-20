@@ -43,7 +43,7 @@ const defaultConfig = {
   },
 };
 
-export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: initialProduct, isCartDrawer = false, initialInventoryQuantity = null }) {
+export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: initialProduct, isCartDrawer = false, initialInventoryQuantity = null, isProductCard = false }) {
   const [config, setConfig] = useState(defaultConfig);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(initialProduct);
@@ -2358,8 +2358,13 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         onClick={handleBuyButtonClick}
       />
 
-      {/* Sticky page bar (mobile) — hidden while the form/modals are open */}
+      {/* Sticky page bar (mobile) — only on the single main product/cart instance.
+          Excluded from product-card grids, collection/homepage, and the cart drawer,
+          which each mount their own instance and would otherwise stack duplicate bars. */}
       {config?.settings?.stickyBarEnabled
+        && !isProductCard
+        && !isCartDrawer
+        && (currentPageType === 'product' || currentPageType === 'cart')
         && shouldShowButton()
         && !isModalOpen
         && !showPostPurchaseUpsell
