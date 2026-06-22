@@ -1,8 +1,20 @@
 import React from 'react';
 
-export default function BuyButton({ config, onClick }) {
+export default function BuyButton({ config, onClick, compact = false }) {
   const settings = config.settings;
   const isRTL = settings.enableRTL || false;
+
+  // In the collection/homepage product grid the cards are small (especially on
+  // phones), so the full-size product-page button looks oversized. Scale down
+  // the size-related values for the compact variant while keeping the merchant's
+  // colors, border, and animation intact.
+  const basePadding = compact ? '10px 12px' : '16px 32px';
+  // Cap the font size in compact mode so a large merchant setting doesn't blow
+  // up the grid button; allow it to go smaller if the merchant chose smaller.
+  const baseFontSize = compact
+    ? Math.min(settings.buttonFontSize || 16, 14)
+    : (settings.buttonFontSize || 16);
+  const iconSize = compact ? 16 : 20;
 
   // Get animation class
   const getAnimationClass = (animation) => {
@@ -22,10 +34,11 @@ export default function BuyButton({ config, onClick }) {
     width: '100%',
     backgroundColor: settings.buttonBgColor || '#000000',
     color: settings.buttonTextColor || '#FFFFFF',
-    padding: '16px 32px',
+    padding: basePadding,
     border: `${settings.buttonBorderWidth || 0}px solid ${settings.buttonBorderColor || '#000000'}`,
     borderRadius: `${settings.buttonBorderRadius || 4}px`,
-    fontSize: `${settings.buttonFontSize || 16}px`,
+    fontSize: `${baseFontSize}px`,
+    lineHeight: compact ? '1.2' : 'normal',
     fontFamily: 'inherit',
     fontWeight: '600',
     cursor: 'pointer',
@@ -39,16 +52,17 @@ export default function BuyButton({ config, onClick }) {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
+    gap: compact ? '6px' : '8px',
     flexDirection: isRTL ? 'row-reverse' : 'row',
   };
 
   // Icon renderer
   const renderIcon = (iconType) => {
     const iconProps = {
-      width: "20",
-      height: "20",
+      width: String(iconSize),
+      height: String(iconSize),
       viewBox: "0 0 24 24",
+      style: { flexShrink: 0 },
       fill: "none",
       stroke: "currentColor",
       strokeWidth: "2",

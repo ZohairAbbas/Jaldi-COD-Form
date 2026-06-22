@@ -963,10 +963,23 @@ export default function BundleEditor() {
                               </div>
 
                               {/* Most Popular */}
-                              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
-                                <input type="checkbox" checked={tier.showMostPopular} onChange={(e) => updateTier(idx, "showMostPopular", e.target.checked)} />
-                                Show "Most Popular" tag
-                              </label>
+                              <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>"Most Popular" tag text</label>
+                                  <input
+                                    type="text"
+                                    value={tier.mostPopularText ?? ""}
+                                    onChange={(e) => updateTier(idx, "mostPopularText", e.target.value)}
+                                    placeholder="Most Popular"
+                                    disabled={!tier.showMostPopular}
+                                    style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box", opacity: tier.showMostPopular ? 1 : 0.5 }}
+                                  />
+                                </div>
+                                <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "14px", paddingBottom: "10px" }}>
+                                  <input type="checkbox" checked={tier.showMostPopular} onChange={(e) => updateTier(idx, "showMostPopular", e.target.checked)} />
+                                  Show
+                                </label>
+                              </div>
 
                               {/* Pre-select tier */}
                               <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
@@ -1368,7 +1381,7 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
                   fontWeight: "600",
                   whiteSpace: "nowrap",
                 }}>
-                  Most Popular
+                  {tier.mostPopularText || "Most Popular"}
                 </div>
               )}
 

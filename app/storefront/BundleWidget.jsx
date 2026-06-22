@@ -178,7 +178,7 @@ export default function BundleWidget({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  Most Popular
+                  {tier.mostPopularText || 'Most Popular'}
                 </div>
               )}
 

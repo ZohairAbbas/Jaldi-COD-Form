@@ -163,6 +163,7 @@ model FormConfig {
   fields                 Json     @default("[]")
   requiredFieldErrorText   String   @default("This field is required.")
   invalidFieldErrorText    String   @default("Enter a valid value.")
+  submitButtonText         String   @default("")
   submitButtonBgColor      String   @default("rgba(0,0,0,1)")
   submitButtonTextColor    String   @default("rgba(255,255,255,1)")
   submitButtonFontSize     Int      @default(14)
