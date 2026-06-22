@@ -63,13 +63,11 @@ export default function StickyBar({ config, onClick }) {
         right: 0,
         [position]: 0,
         zIndex: 2147483646,
-        padding: '10px 12px',
-        backgroundColor: '#ffffff',
-        boxShadow: position === 'bottom'
-          ? '0 -2px 12px rgba(0,0,0,0.12)'
-          : '0 2px 12px rgba(0,0,0,0.12)',
-        // Respect iOS safe-area on bottom bars
-        paddingBottom: position === 'bottom' ? 'calc(10px + env(safe-area-inset-bottom, 0px))' : '10px',
+        // No wrapper padding/background — the button spans edge-to-edge and the
+        // surrounding area is transparent. Keep only the iOS safe-area inset at
+        // the bottom so the button clears the home indicator.
+        paddingBottom: position === 'bottom' ? 'env(safe-area-inset-bottom, 0px)' : 0,
+        backgroundColor: 'transparent',
         direction: isRTL ? 'rtl' : 'ltr',
       }}
     >
@@ -80,9 +78,9 @@ export default function StickyBar({ config, onClick }) {
           width: '100%',
           backgroundColor: settings.buttonBgColor || '#000000',
           color: settings.buttonTextColor || '#FFFFFF',
-          padding: '14px 24px',
-          border: `${settings.buttonBorderWidth || 0}px solid ${settings.buttonBorderColor || '#000000'}`,
-          borderRadius: `${settings.buttonBorderRadius || 4}px`,
+          padding: '16px 24px',
+          border: 'none',
+          borderRadius: 0,
           fontSize: `${settings.buttonFontSize || 16}px`,
           fontFamily: 'inherit',
           fontWeight: '600',

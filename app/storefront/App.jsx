@@ -2356,6 +2356,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       <BuyButton
         config={config}
         onClick={handleBuyButtonClick}
+        compact={isProductCard}
       />
 
       {/* Sticky page bar (mobile) — only on the single main product/cart instance.

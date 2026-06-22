@@ -1993,16 +1993,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   const eligibleShippingRates = getEligibleShippingRates();
 
-  // Auto-select first eligible rate or free shipping as default
-  useEffect(() => {
-    if (eligibleShippingRates.length > 0 && !selectedShippingRate) {
-      setSelectedShippingRate(eligibleShippingRates[0]);
-    } else if (eligibleShippingRates.length === 0 && !selectedShippingRate) {
-      // Default to free shipping if no rates match
-      setSelectedShippingRate({ id: 'free', name: 'Free Shipping', price: 0 });
-    }
-  }, [eligibleShippingRates.length, subtotal, cartWeight, totalQuantity]);
-
   // Calculate shipping cost
   const shippingCost = selectedShippingRate?.price || 0;
 
@@ -2053,14 +2043,15 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   // ── Free shipping progress nudge ────────────────────────────────────────
   // When a free (price 0) rate is gated behind an order-total or quantity
-  // threshold the buyer hasn't met, show how much more is needed. If already
-  // unlocked, show a brief success message instead. Auto-derived from rate
-  // conditions; only the message text is merchant-configurable.
+  // threshold, we ALWAYS surface that free rate in the Shipping Method list —
+  // disabled with a "buy more" subtitle while locked, enabled + auto-selected
+  // with a success subtitle once unlocked. Auto-derived from rate conditions;
+  // only the message text is merchant-configurable.
   const getFreeShippingNudge = () => {
     if (!config.settings?.freeShippingNudgeEnabled) return null;
 
     const rates = config.shippingRates || [];
-    const candidates = []; // { progress, met, type, gap }
+    let best = null; // { rate, met, progress, type, gap }
 
     rates.forEach(rate => {
       if (rate.price !== 0) return; // free rates only
@@ -2074,49 +2065,105 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       if (!actionable) return;
 
       conditions.forEach(c => {
+        let cand = null;
         if (c.type === 'order_total_gte') {
-          const current = subtotal;
-          const gap = c.value - current;
-          candidates.push({
-            type: 'amount',
-            met: gap <= 0,
-            progress: c.value > 0 ? Math.min(current / c.value, 1) : 1,
-            gap: Math.max(gap, 0),
-          });
+          const gap = c.value - subtotal;
+          cand = { rate, type: 'amount', met: gap <= 0, progress: c.value > 0 ? Math.min(subtotal / c.value, 1) : 1, gap: Math.max(gap, 0) };
         } else if (c.type === 'quantity_gte') {
-          const current = totalQuantity;
-          const gap = c.value - current;
-          candidates.push({
-            type: 'quantity',
-            met: gap <= 0,
-            progress: c.value > 0 ? Math.min(current / c.value, 1) : 1,
-            gap: Math.max(gap, 0),
-          });
+          const gap = c.value - totalQuantity;
+          cand = { rate, type: 'quantity', met: gap <= 0, progress: c.value > 0 ? Math.min(totalQuantity / c.value, 1) : 1, gap: Math.max(gap, 0) };
+        }
+        if (!cand) return;
+        // Prefer an unlocked rate; otherwise the one closest to completion.
+        if (!best || (cand.met && !best.met) || (cand.met === best.met && cand.progress > best.progress)) {
+          best = cand;
         }
       });
     });
 
-    if (candidates.length === 0) return null;
+    if (!best) return null;
 
-    // If any free rate is already unlocked, show success.
-    if (candidates.some(c => c.met)) {
-      const text = config.settings.freeShippingNudgeSuccessText || '';
-      return text ? { kind: 'success', text } : null;
-    }
-
-    // Otherwise nudge toward the threshold closest to completion (highest progress).
-    const best = candidates.reduce((a, b) => (b.progress > a.progress ? b : a));
-    if (best.type === 'amount') {
+    // Build the subtitle message shown under the free rate row.
+    let message = '';
+    if (best.met) {
+      message = config.settings.freeShippingNudgeSuccessText || '';
+    } else if (best.type === 'amount') {
       const displayGap = hasDisplayPrice ? best.gap * displayExchangeRate : best.gap;
       const amountStr = `${currencySymbol}${displayGap.toFixed(2)}`;
-      const template = config.settings.freeShippingNudgeAmountText || '';
-      return template ? { kind: 'progress', text: template.replace(/\{\{\s*amount\s*\}\}/g, amountStr) } : null;
+      message = (config.settings.freeShippingNudgeAmountText || '').replace(/\{\{\s*amount\s*\}\}/g, amountStr);
+    } else {
+      message = (config.settings.freeShippingNudgeQtyText || '').replace(/\{\{\s*count\s*\}\}/g, String(best.gap));
     }
-    const template = config.settings.freeShippingNudgeQtyText || '';
-    return template ? { kind: 'progress', text: template.replace(/\{\{\s*count\s*\}\}/g, String(best.gap)) } : null;
+
+    return { rate: best.rate, unlocked: best.met, message };
   };
 
   const freeShippingNudge = getFreeShippingNudge();
+
+  // The set of rates actually shown in the Shipping Method list. When the free
+  // nudge is active we always include its gated free rate (it may be filtered
+  // out of eligibleShippingRates while locked). When unlocked, the free rate is
+  // the only selectable option and paid rates are shown disabled; when locked,
+  // the free rate is the disabled one.
+  const nudgeFreeRateId = freeShippingNudge?.rate?.id;
+  const displayShippingRates = (() => {
+    if (!freeShippingNudge) return eligibleShippingRates;
+
+    if (freeShippingNudge.unlocked) {
+      // Once free is unlocked, paid rates with an order-total/quantity upper bound
+      // (e.g. "Standard = order < 250") fall out of eligibleShippingRates. We still
+      // want to show them — disabled — so the buyer sees the option they "graduated"
+      // from. Re-evaluate paid rates ignoring threshold conditions; keep product/
+      // weight rules so genuinely-irrelevant rates stay hidden.
+      const isThresholdCond = (c) => ['order_total_gte', 'order_total_lt', 'quantity_gte', 'quantity_lt'].includes(c.type);
+      const paidRatesIgnoringThreshold = (config.shippingRates || []).filter(rate => {
+        if (rate.price === 0) return false;
+        const nonThreshold = (rate.conditions || []).filter(c => !isThresholdCond(c));
+        return nonThreshold.every(condition => {
+          switch (condition.type) {
+            case 'order_weight_gte': return cartWeight >= condition.value;
+            case 'order_weight_lt': return cartWeight < condition.value;
+            case 'contains_product': {
+              const ids = condition.productIds || [condition.productId];
+              return ids.some(pid => cart.items.some(i => i.id === pid || i.variantId?.includes(pid) || i.productId === pid));
+            }
+            case 'not_contains_product': {
+              const ids = condition.productIds || [condition.productId];
+              return !ids.some(pid => cart.items.some(i => i.id === pid || i.variantId?.includes(pid) || i.productId === pid));
+            }
+            default: return true;
+          }
+        });
+      });
+      return [freeShippingNudge.rate, ...paidRatesIgnoringThreshold];
+    }
+
+    // Locked: paid rates eligible as usual, free rate appended (disabled).
+    const withoutFree = eligibleShippingRates.filter(r => r.id !== nudgeFreeRateId);
+    return [...withoutFree, freeShippingNudge.rate];
+  })();
+
+  // Whether a given row is selectable. With the nudge active: unlocked → only the
+  // free rate is enabled; locked → only the free rate is disabled.
+  const isRateDisabled = (rate) => {
+    if (!freeShippingNudge) return false;
+    const isFreeRate = rate.id === nudgeFreeRateId;
+    return freeShippingNudge.unlocked ? !isFreeRate : isFreeRate;
+  };
+
+  // Auto-select the appropriate default rate (skips disabled rows).
+  useEffect(() => {
+    const selectable = displayShippingRates.filter(r => !isRateDisabled(r));
+    const currentStillValid = selectedShippingRate
+      && selectable.some(r => r.id === selectedShippingRate.id);
+    if (currentStillValid) return;
+    if (selectable.length > 0) {
+      setSelectedShippingRate(selectable[0]);
+    } else if (!selectedShippingRate) {
+      setSelectedShippingRate({ id: 'free', name: 'Free Shipping', price: 0 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayShippingRates.map(r => r.id).join(','), freeShippingNudge?.unlocked, subtotal, cartWeight, totalQuantity]);
 
   // Map a section's heading alignment to a flexbox justifyContent value.
   const alignToJustify = (align) =>
@@ -2800,76 +2847,72 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                   {/* Collapsible body */}
                   {shippingMethodOpen && (
                     <div style={{ padding: '12px 16px' }}>
-                      {/* Free shipping progress nudge */}
-                      {freeShippingNudge && (
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '8px 12px',
-                          marginBottom: '10px',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          lineHeight: '1.35',
-                          backgroundColor: freeShippingNudge.kind === 'success' ? '#ECFDF5' : '#F3F4F6',
-                          color: freeShippingNudge.kind === 'success' ? '#047857' : '#374151',
-                          border: `1px solid ${freeShippingNudge.kind === 'success' ? '#A7F3D0' : '#E5E7EB'}`,
-                        }}>
-                          <span style={{ fontWeight: '600' }}>{freeShippingNudge.text}</span>
-                        </div>
-                      )}
-
-                      {eligibleShippingRates.length > 0 ? (
+                      {displayShippingRates.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {eligibleShippingRates.map(rate => (
-                            <label
-                              key={rate.id}
-                              style={{
-                                display: 'flex',
-                                alignItems: rate.description ? 'flex-start' : 'center',
-                                justifyContent: 'space-between',
-                                padding: '8px 16px',
-                                border: selectedShippingRate?.id === rate.id
-                                  ? '1px solid #000'
-                                  : '1px solid #D1D5DB',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                backgroundColor: '#FFFFFF',
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                                <input
-                                  type="radio"
-                                  name="shippingRate"
-                                  checked={selectedShippingRate?.id === rate.id}
-                                  onChange={() => setSelectedShippingRate(rate)}
-                                  style={{
-                                    width: '16px',
-                                    height: '16px',
-                                    accentColor: '#000',
-                                    flexShrink: 0,
-                                  }}
-                                />
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <span style={{ fontSize: '14px', color: '#000000' }}>
-                                    {rate.name}
-                                  </span>
-                                  {rate.description && (
-                                    <span style={{ fontSize: '12px', color: '#6B7280', lineHeight: '1.3' }}>
-                                      {rate.description}
+                          {displayShippingRates.map(rate => {
+                            const disabled = isRateDisabled(rate);
+                            const isSelected = !disabled && selectedShippingRate?.id === rate.id;
+                            // The gated free rate carries the nudge message as its subtitle.
+                            const isNudgeFree = freeShippingNudge && rate.id === nudgeFreeRateId;
+                            const subtitle = isNudgeFree ? freeShippingNudge.message : rate.description;
+                            return (
+                              <label
+                                key={rate.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: subtitle ? 'flex-start' : 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '8px 16px',
+                                  border: isSelected ? '1px solid #000' : '1px solid #D1D5DB',
+                                  borderRadius: '4px',
+                                  cursor: disabled ? 'not-allowed' : 'pointer',
+                                  backgroundColor: disabled ? '#F9FAFB' : '#FFFFFF',
+                                  opacity: disabled ? 0.6 : 1,
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                  <input
+                                    type="radio"
+                                    name="shippingRate"
+                                    checked={isSelected}
+                                    disabled={disabled}
+                                    onChange={() => { if (!disabled) setSelectedShippingRate(rate); }}
+                                    style={{
+                                      width: '16px',
+                                      height: '16px',
+                                      accentColor: '#000',
+                                      flexShrink: 0,
+                                      cursor: disabled ? 'not-allowed' : 'pointer',
+                                    }}
+                                  />
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '14px', color: disabled ? '#9CA3AF' : '#000000' }}>
+                                      {rate.name}
                                     </span>
-                                  )}
+                                    {subtitle && (
+                                      <span style={{
+                                        fontSize: '12px',
+                                        lineHeight: '1.3',
+                                        fontWeight: isNudgeFree ? '600' : '400',
+                                        color: isNudgeFree
+                                          ? (freeShippingNudge.unlocked ? '#047857' : '#B45309')
+                                          : '#6B7280',
+                                      }}>
+                                        {subtitle}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                              <span style={{
-                                fontSize: '14px',
-                                fontWeight: '700',
-                                color: '#000000',
-                              }}>
-                                {rate.price === 0 ? t(lang, 'free') : `${currencySymbol}${(hasDisplayPrice ? parseFloat((rate.price * displayExchangeRate).toFixed(2)) : rate.price).toFixed(2)}`}
-                              </span>
-                            </label>
-                          ))}
+                                <span style={{
+                                  fontSize: '14px',
+                                  fontWeight: '700',
+                                  color: disabled ? '#9CA3AF' : '#000000',
+                                }}>
+                                  {rate.price === 0 ? t(lang, 'free') : `${currencySymbol}${(hasDisplayPrice ? parseFloat((rate.price * displayExchangeRate).toFixed(2)) : rate.price).toFixed(2)}`}
+                                </span>
+                              </label>
+                            );
+                          })}
                         </div>
                       ) : (
                         <label style={{
@@ -3534,7 +3577,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                       return null;
                   }
                 })()}
-                {`${t(lang, 'completeOrder')} - ${currencySymbol}${displayTotal.toFixed(2)}`}
+                {`${config.formConfig?.submitButtonText?.trim() || t(lang, 'completeOrder')} - ${currencySymbol}${displayTotal.toFixed(2)}`}
               </>
             )}
           </button>

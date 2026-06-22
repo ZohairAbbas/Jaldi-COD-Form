@@ -194,6 +194,21 @@ export default function StyleCustomizer({ formConfig, onUpdate }) {
       <s-heading>Complete Order Button</s-heading>
       <s-paragraph>Customize the submit button at the bottom of the form.</s-paragraph>
 
+      {/* Submit Button Text */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">Button Text</s-text>
+        <input
+          type="text"
+          value={formConfig.submitButtonText || ""}
+          onChange={(e) => handleChange("submitButtonText", e.target.value)}
+          placeholder="Complete Order"
+          style={inputStyle}
+        />
+        <s-text variant="body-sm" tone="subdued">
+          The label shown on the button. The order total is appended automatically. Leave blank to use the default.
+        </s-text>
+      </s-stack>
+
       {/* Submit Button Background Color */}
       <s-stack direction="block" gap="tight">
         <s-text variant="heading-sm">Background Color</s-text>

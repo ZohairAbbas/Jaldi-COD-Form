@@ -459,7 +459,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
               return null;
           }
         })()}
-        {t(lang, 'completeOrder')} - {currencySymbol} 19.99
+        {formConfig.submitButtonText?.trim() || t(lang, 'completeOrder')} - {currencySymbol} 19.99
       </button>
 
       {/* Pay with Card Button */}

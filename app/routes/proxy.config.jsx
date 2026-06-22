@@ -44,6 +44,7 @@ export const loader = async ({ request }) => {
         fields: JSON.parse(shopData.formConfig.fields),
         requiredFieldErrorText: shopData.formConfig.requiredFieldErrorText,
         invalidFieldErrorText: shopData.formConfig.invalidFieldErrorText,
+        submitButtonText: shopData.formConfig.submitButtonText,
         submitButtonBgColor: shopData.formConfig.submitButtonBgColor,
         submitButtonTextColor: shopData.formConfig.submitButtonTextColor,
         submitButtonFontSize: shopData.formConfig.submitButtonFontSize,
