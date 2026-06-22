@@ -88,9 +88,14 @@ export async function createDraftOrderForAbandonedCart(admin, abandonedCart, sho
         lineItems: lineItems,
         email: validEmail, // Only pass if valid
         phone: validPhone, // Only pass if valid
-        note: "Abandoned COD Form Checkout - Customer started but didn't complete",
+        note: "",
         tags: ["abandoned_checkout_preventify_cod_form"],
         customAttributes: [
+          {
+            // Formerly the order note — now surfaced in the order's Additional details.
+            key: "Status",
+            value: "Abandoned COD Form Checkout - Customer started but didn't complete",
+          },
           {
             key: "abandoned_at",
             value: abandonedCart.abandonedAt.toISOString(),

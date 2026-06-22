@@ -183,15 +183,16 @@ export const action = async ({ request }) => {
         riskData?.riskLevel === "MEDIUM" ? "preventify-medium-risk" : null,
         riskData?.riskLevel === "LOW" ? "preventify-trusted-buyer" : null,
       ].filter(Boolean),
-      note: riskData && riskData.riskLevel !== "UNKNOWN"
-        ? `Pay with Card - Preventify COD Form\nPreventify Risk: ${riskData.riskLevel} — ${riskData.riskNote}`
-        : "Pay with Card - Preventify COD Form",
+      note: "",
       customAttributes: [
+        // Formerly the order note — now surfaced in the order's Additional details.
+        { key: "Payment Method", value: "Pay with Card - Preventify COD Form" },
+        ...(riskData && riskData.riskLevel !== "UNKNOWN" ? [
+          { key: "Preventify Risk", value: `${riskData.riskLevel} — ${riskData.riskNote}` },
+        ] : []),
+        // Internal markers read by the order-create webhook.
         { key: "_preventify_source", value: "card_checkout" },
         { key: "_preventify_shop", value: data.shop },
-        ...(riskData && riskData.riskLevel !== "UNKNOWN" ? [
-          { key: "_preventify_risk_level", value: riskData.riskLevel },
-        ] : []),
         // Custom fields -> Additional details on the order (readable labels)
         ...(data.customFields && Object.keys(data.customFields).length > 0
           ? Object.entries(data.customFields).map(([fieldId, fieldValue]) => ({
