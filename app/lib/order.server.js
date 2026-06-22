@@ -124,29 +124,30 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
     // User-entered discount code amount
     const userDiscountAmount = userDiscount?.amount || 0;
 
+    // Total of every discount applied to the order. All of these are combined
+    // into a single Shopify discount line (see discount_codes below).
+    const totalDiscountAmount = bundleDiscount + oneTickDiscount + recoveryDiscountAmount + userDiscountAmount;
+
     // Get currency symbol based on country
     const countryCode = passedCountryCode || COUNTRY_NAME_TO_CODE[shippingAddress.country] || 'PAK';
     const currencySymbol = getCurrencySymbol(countryCode);
 
-    // Build order note with all discounts and shipping
-    let orderNote = "Payment Method: Cash on Delivery (COD)";
+    // Build order detail rows (formerly the order note) so the same
+    // payment/discount/shipping/risk info lives in the order's Additional details
+    // (note_attributes) instead of the order note. Each entry becomes a
+    // note_attribute below.
+    const orderDetailAttributes = [];
+    orderDetailAttributes.push({ name: "Payment Method", value: "Cash on Delivery (COD)" });
     if (shippingCost > 0) {
-      orderNote += `\nShipping: ${shippingRateName} - ${currencySymbol}${shippingCost.toFixed(2)}`;
+      orderDetailAttributes.push({ name: "Shipping", value: `${shippingRateName} - ${currencySymbol}${shippingCost.toFixed(2)}` });
     }
-    if (oneTickDiscount > 0) {
-      orderNote += `\nOne-Tick Upsell Discount: -${currencySymbol}${oneTickDiscount.toFixed(2)}`;
-    }
-    if (recoveryDiscountAmount > 0) {
-      orderNote += `\nRecovery Discount: -${currencySymbol}${recoveryDiscountAmount.toFixed(2)}`;
-    }
-    if (userDiscountAmount > 0 && userDiscount?.code) {
-      orderNote += `\nDiscount Code: ${userDiscount.code} -${currencySymbol}${userDiscountAmount.toFixed(2)}`;
-    }
-    if (oneTickDiscount > 0 || recoveryDiscountAmount > 0 || userDiscountAmount > 0) {
-      orderNote += `\nActual Total: ${currencySymbol}${total.toFixed(2)}`;
-    }
+    // Note: discount rows (Bundle / One-Tick / Recovery / Discount Code) and the
+    // "Actual Total" are intentionally NOT shown here. Shopify's own order
+    // Subtotal / Discount / Total section already breaks these down accurately
+    // (via the discount_codes line below), and the `total` passed in mixes price
+    // bases so it can't reliably reconstruct the final amount.
     if (riskData && riskData.riskLevel !== "UNKNOWN") {
-      orderNote += `\nPreventify Risk: ${riskData.riskLevel} — ${riskData.riskNote}`;
+      orderDetailAttributes.push({ name: "Preventify Risk", value: `${riskData.riskLevel} — ${riskData.riskNote}` });
     }
 
     // Prepare REST API order payload
@@ -157,7 +158,7 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       shipping_address: restShippingAddress,
       billing_address: restBillingAddress,
       financial_status: _financialStatus || "pending",
-      note: _orderNote || orderNote,
+      note: "",
       tags: [
         _orderTags || "preventify_cod_form",
         verificationMethod,
@@ -181,29 +182,21 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
         }]
       } : {}),
       note_attributes: [
+        // Human-readable order details (formerly the order note). When an
+        // override note is passed (e.g. PayFast), use its lines as detail rows
+        // instead of the default COD detail rows.
+        ...(_orderNote
+          ? _orderNote.split("\n").filter(Boolean).map((line) => {
+              const idx = line.indexOf(":");
+              return idx > -1
+                ? { name: line.slice(0, idx).trim(), value: line.slice(idx + 1).trim() }
+                : { name: "Note", value: line.trim() };
+            })
+          : orderDetailAttributes),
         {
-          name: "payment_method",
-          value: "Cash on Delivery (COD)"
+          name: "Payment Status",
+          value: _financialStatus === "paid" ? "Paid" : "Payment Pending"
         },
-        {
-          name: "_payment_pending",
-          value: "true"
-        },
-        ...(oneTickDiscount > 0 ? [{
-          name: "_one_tick_discount",
-          value: oneTickDiscount.toString()
-        }] : []),
-        ...(recoveryDiscountAmount > 0 ? [{
-          name: "_recovery_discount",
-          value: recoveryDiscountAmount.toString()
-        }] : []),
-        ...(userDiscountAmount > 0 && userDiscount?.code ? [{
-          name: "_user_discount_code",
-          value: userDiscount.code,
-        }, {
-          name: "_user_discount_amount",
-          value: userDiscountAmount.toString(),
-        }] : []),
         // Add custom fields to note_attributes
         ...(orderData.customFields && Object.keys(orderData.customFields).length > 0
           ? Object.entries(orderData.customFields).map(([fieldId, fieldValue]) => {
@@ -215,11 +208,6 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
               };
             })
           : []),
-        // Add risk intelligence data
-        ...(riskData && riskData.riskLevel !== "UNKNOWN" ? [{
-          name: "_preventify_risk_level",
-          value: riskData.riskLevel,
-        }] : []),
         // Add UTM attribution data to note_attributes
         ...Object.entries(utmData)
           .filter(([, value]) => value)
@@ -240,10 +228,8 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
 
     // Build discount codes array
     // IMPORTANT: Shopify REST API only supports ONE discount code per order.
-    // If both user discount and synthetic discounts exist, combine them into a single entry.
-    const syntheticDiscount = bundleDiscount + oneTickDiscount + recoveryDiscountAmount;
-    const totalDiscountAmount = syntheticDiscount + userDiscountAmount;
-
+    // If both user discount and synthetic discounts exist, combine them into a
+    // single entry. totalDiscountAmount is computed above.
     if (totalDiscountAmount > 0) {
       const codeCountryCode = passedCountryCode || COUNTRY_NAME_TO_CODE[address.country] || 'PAK';
       const codeCurrencySymbol = getCurrencySymbol(codeCountryCode);
