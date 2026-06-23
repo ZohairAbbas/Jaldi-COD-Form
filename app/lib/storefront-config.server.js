@@ -4,11 +4,12 @@ import { getShopByDomain, getEnabledPixels, getEnabledShippingRates, ensureFreeS
 // Inlined by the app embed Liquid (window.PREVENTIFY_SETTINGS) so the storefront
 // button/hide-ATC render on first paint with no network round-trip.
 //
-// Uses a CUSTOM namespace (not the $app reserved namespace) with PUBLIC_READ
-// storefront access so the value is readable in Liquid as
-// `shop.metafields.preventify.storefront_config`. The payload contains no
-// secrets — it is the same data already served publicly by proxy/config.
-export const STOREFRONT_CONFIG_NAMESPACE = "preventify";
+// APP-OWNED metafield: the definition is declared in shopify.app.toml
+// ([shop.metafields.app.storefront_config]) and auto-installed, so NO extra
+// access scope or runtime metafieldDefinitionCreate is needed. We write it via
+// metafieldsSet using the reserved "$app" namespace, and the app embed block
+// reads it in Liquid as `shop.metafields.app.storefront_config`.
+export const STOREFRONT_CONFIG_NAMESPACE = "$app";
 export const STOREFRONT_CONFIG_KEY = "storefront_config";
 export const STOREFRONT_CONFIG_TYPE = "json";
 
@@ -311,63 +312,18 @@ export async function buildStorefrontConfig(shopData) {
   };
 }
 
-// Track which shops have had their metafield definition ensured this process,
-// so we only attempt the (idempotent) definition create once per boot per shop.
-const definitionEnsured = new Set();
-
 /**
- * Ensure the metafield DEFINITION exists with PUBLIC_READ storefront access so
- * the value is readable in Liquid via shop.metafields.preventify.storefront_config.
+ * Build the static storefront config for a shop and write it to the app-owned
+ * shop metafield so the app embed Liquid can inline it (no proxy round-trip).
  *
- * Idempotent: creating an existing definition returns a TAKEN error which we
- * ignore. Runtime creation is used (vs TOML) because this is a shop-owned,
- * custom-namespace metafield the app manages programmatically.
- */
-async function ensureMetafieldDefinition(admin) {
-  const mutation = `#graphql
-    mutation CreateDef($definition: MetafieldDefinitionInput!) {
-      metafieldDefinitionCreate(definition: $definition) {
-        createdDefinition { id }
-        userErrors { field message code }
-      }
-    }`;
-
-  const variables = {
-    definition: {
-      name: "Preventify Storefront Config",
-      namespace: STOREFRONT_CONFIG_NAMESPACE,
-      key: STOREFRONT_CONFIG_KEY,
-      description: "Inlined storefront config for instant button/hide-ATC rendering (managed by Preventify).",
-      type: STOREFRONT_CONFIG_TYPE,
-      ownerType: "SHOP",
-      access: { storefront: "PUBLIC_READ" },
-    },
-  };
-
-  const res = await admin.graphql(mutation, { variables });
-  const json = await res.json();
-  const errors = json?.data?.metafieldDefinitionCreate?.userErrors || [];
-  // TAKEN means the definition already exists — expected and safe to ignore.
-  const fatal = errors.filter((e) => e.code !== "TAKEN");
-  if (fatal.length > 0) {
-    console.warn("[Preventify] metafieldDefinitionCreate userErrors:", JSON.stringify(fatal));
-  }
-}
-
-/**
- * Build the static storefront config for a shop and write it to the shop
- * metafield so the app embed Liquid can inline it (no proxy round-trip).
+ * The metafield definition is declared in shopify.app.toml and auto-installed,
+ * so this only writes the value — no definition create, no extra scope.
  *
  * @param {object} admin   Admin GraphQL client from authenticate.admin()
  * @param {object} shopData  Shop record (with relations) from getOrCreateShop/getShopByDomain
  */
 export async function syncStorefrontConfigMetafield(admin, shopData) {
   try {
-    if (!definitionEnsured.has(shopData.shopifyDomain)) {
-      await ensureMetafieldDefinition(admin);
-      definitionEnsured.add(shopData.shopifyDomain);
-    }
-
     const config = await buildStorefrontConfig(shopData);
 
     // metafieldsSet needs the shop's GraphQL gid as ownerId.
