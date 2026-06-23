@@ -1,5 +1,6 @@
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, updateFormConfig } from "../lib/db.server";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -15,7 +16,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
   const formData = await request.json();
@@ -28,6 +29,9 @@ export const action = async ({ request }) => {
   };
 
   await updateFormConfig(shop.id, updateData);
+
+  // Keep the inlined storefront config metafield fresh (non-blocking on failure).
+  await syncStorefrontConfigByDomain(admin, session.shop);
 
   return Response.json({ success: true });
 };

@@ -88,6 +88,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Holds the submitted order data for post-success redirect resolution
   const lastOrderDataRef = React.useRef(null);
 
+  // Guards one-time side effects in applyConfig (impression/pixel/mixpanel init)
+  // so they don't double-fire when config is applied twice (inlined + reconcile).
+  const configSideEffectsRanRef = React.useRef(false);
+
   useEffect(() => {
     loadConfig();
   }, []);
@@ -1125,12 +1129,51 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     };
   }, [isModalOpen]);
 
+  // Merge per-request / env values (inlined separately by Liquid or known
+  // client-side) onto the static config that comes from the metafield. The
+  // metafield intentionally omits appPath/ENV/whatsappBusinessPhone.
+  const withDynamicValues = (data) => {
+    const appPathResolved = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
+    return {
+      ...data,
+      appPath: appPathResolved,
+      ENV: data.ENV || (window.ENV ? window.ENV : {}),
+    };
+  };
+
   const loadConfig = async () => {
+    // 1) INSTANT PATH: if the app embed inlined the config (window.PREVENTIFY_SETTINGS)
+    //    apply it synchronously so the button/hide-ATC render on first paint with
+    //    no network wait. Then reconcile in the background via the proxy fetch.
+    if (window.PREVENTIFY_SETTINGS) {
+      try {
+        applyConfig(withDynamicValues(window.PREVENTIFY_SETTINGS));
+      } catch (e) {
+        console.error('Failed to apply inlined config:', e);
+      }
+    }
+
+    // 2) RECONCILE / FALLBACK: always fetch the authoritative config. When the
+    //    inlined config was present this just reconciles any post-save changes
+    //    (covers metafield/theme CDN propagation lag). When it was absent this is
+    //    the primary load.
     try {
-      // Use app path from Liquid template global, fallback to default
       const initialAppPath = window.PREVENTIFY_APP_PATH || '/apps/preventify/';
       const response = await fetch(`${initialAppPath}proxy/config?shop=${shopDomain}`);
       const data = await response.json();
+      applyConfig(data);
+    } catch (error) {
+      console.error('Failed to load config:', error);
+      // If we never applied inlined config either, unblock rendering with defaults.
+      setConfigLoaded(true);
+    }
+  };
+
+  // Apply a resolved config payload to state and run all downstream
+  // initialization (bundle matching, pixels, country, mixpanel). Safe to call
+  // more than once (instant inlined apply, then fetch reconcile).
+  const applyConfig = (data) => {
+    try {
       setConfig(data);
       setConfigLoaded(true);
 
@@ -1174,38 +1217,46 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
               setSelectedBundleTier(preselectedTier);
               console.log('[Preventify Debug] Preselect: setSelectedBundleTier called at', Date.now());
             }
-            // Track bundle impression
-            const resolvedPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
-            fetch(`${resolvedPath}proxy/bundle-stats?bundleId=${matchedBundle.id}&stat=impression`, { method: 'POST' }).catch(() => {});
+            // Track bundle impression (once — guarded below with other side effects)
+            if (!configSideEffectsRanRef.current) {
+              const resolvedPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
+              fetch(`${resolvedPath}proxy/bundle-stats?bundleId=${matchedBundle.id}&stat=impression`, { method: 'POST' }).catch(() => {});
+            }
           }
         }
       }
 
-      // Capture UTM params regardless of pixel config
-      captureUtmParams();
+      // One-time side effects: run only on the first apply so they don't
+      // double-fire when config is applied twice (inlined paint + fetch reconcile).
+      if (!configSideEffectsRanRef.current) {
+        configSideEffectsRanRef.current = true;
 
-      // Initialize pixel tracking
-      if (data.pixels) {
-        initializePixels(data.pixels);
-      }
+        // Capture UTM params regardless of pixel config
+        captureUtmParams();
 
-      // Detect country if multi-country is enabled
-      if (data.shop?.enableMultiCountry) {
-        detectCountry(data);
-      }
+        // Initialize pixel tracking
+        if (data.pixels) {
+          initializePixels(data.pixels);
+        }
 
-      // Initialize Mixpanel for storefront tracking
-      if (data.ENV?.MIXPANEL_TOKEN) {
-        initStorefrontMixpanel(data.ENV.MIXPANEL_TOKEN, shopDomain);
-        trackStorefrontEvent('App Loaded', {
-          has_config: !!data.formConfig,
-          form_mode: data.settings?.formMode,
-          has_upsells: data.upsells?.prePurchase?.length > 0,
-          has_downsells: data.downsells?.length > 0,
-        });
+        // Detect country if multi-country is enabled
+        if (data.shop?.enableMultiCountry) {
+          detectCountry(data);
+        }
+
+        // Initialize Mixpanel for storefront tracking
+        if (data.ENV?.MIXPANEL_TOKEN) {
+          initStorefrontMixpanel(data.ENV.MIXPANEL_TOKEN, shopDomain);
+          trackStorefrontEvent('App Loaded', {
+            has_config: !!data.formConfig,
+            form_mode: data.settings?.formMode,
+            has_upsells: data.upsells?.prePurchase?.length > 0,
+            has_downsells: data.downsells?.length > 0,
+          });
+        }
       }
     } catch (error) {
-      console.error('Failed to load config:', error);
+      console.error('Failed to apply config:', error);
       // Keep using default config on error
       setConfigLoaded(true);
     }

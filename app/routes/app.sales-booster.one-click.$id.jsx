@@ -11,6 +11,7 @@ import {
   getDefaultUpsell,
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -53,7 +54,7 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
   const upsellData = await request.json();
@@ -67,10 +68,11 @@ export const action = async ({ request, params }) => {
   delete upsellData.accepts;
   delete upsellData.declines;
 
+  let result;
   if (params.id === "new") {
     // Create new upsell
     const newUpsell = await createUpsell(shop.id, upsellData);
-    return Response.json({ success: true, upsell: newUpsell });
+    result = Response.json({ success: true, upsell: newUpsell });
   } else {
     // Update existing upsell
     const existingUpsell = await getUpsellById(params.id);
@@ -79,8 +81,12 @@ export const action = async ({ request, params }) => {
     }
 
     const updatedUpsell = await updateUpsell(params.id, upsellData);
-    return Response.json({ success: true, upsell: updatedUpsell });
+    result = Response.json({ success: true, upsell: updatedUpsell });
   }
+
+  // Refresh the inlined storefront config metafield (non-blocking on failure).
+  await syncStorefrontConfigByDomain(admin, session.shop);
+  return result;
 };
 
 export default function UpsellEditor() {

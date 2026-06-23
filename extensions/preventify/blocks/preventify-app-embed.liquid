@@ -34,6 +34,18 @@
   {% else %}
     window.PREVENTIFY_APP_PATH = '/apps/preventify/';
   {% endif %}
+
+  {% comment %}
+    Inline the storefront config server-side from the shop metafield so the COD
+    button (and hide-ATC) render on first paint with NO network round-trip.
+    Falls back to the proxy/config fetch when the metafield is absent (e.g. a
+    shop not yet synced / first install). The payload contains no secrets — it
+    is the same data already served publicly by proxy/config.
+  {% endcomment %}
+  {% assign preventify_config = shop.metafields.preventify.storefront_config %}
+  {% if preventify_config != blank %}
+    window.PREVENTIFY_SETTINGS = {{ preventify_config.value | json }};
+  {% endif %}
   {% if template.name == 'product' %}
   window.PREVENTIFY_VARIANT_INVENTORY = {
     {% for variant in product.variants %}

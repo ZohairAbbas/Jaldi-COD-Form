@@ -7,6 +7,7 @@ import {
   deletePixel,
   getPixelById,
 } from "../lib/db.server";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 /**
  * GET /api/pixels - List all pixels for the shop
@@ -25,7 +26,7 @@ export async function loader({ request }) {
  * DELETE /api/pixels - Delete pixel
  */
 export async function action({ request }) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
   const formData = await request.json();
@@ -35,15 +36,16 @@ export async function action({ request }) {
     if (method === "POST") {
       const { id, ...pixelData } = formData;
 
+      let pixel;
       if (id) {
         // Update existing pixel
-        const pixel = await updatePixel(id, pixelData);
-        return { success: true, pixel };
+        pixel = await updatePixel(id, pixelData);
       } else {
         // Create new pixel
-        const pixel = await createPixel(shop.id, pixelData);
-        return { success: true, pixel };
+        pixel = await createPixel(shop.id, pixelData);
       }
+      await syncStorefrontConfigByDomain(admin, session.shop);
+      return { success: true, pixel };
     }
 
     if (method === "DELETE") {
@@ -60,6 +62,7 @@ export async function action({ request }) {
       }
 
       await deletePixel(id);
+      await syncStorefrontConfigByDomain(admin, session.shop);
       return { success: true };
     }
 

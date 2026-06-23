@@ -11,6 +11,7 @@ import {
   getDefaultDownsell,
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -49,7 +50,7 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
   const downsellData = await request.json();
@@ -63,10 +64,11 @@ export const action = async ({ request, params }) => {
   delete downsellData.accepts;
   delete downsellData.declines;
 
+  let result;
   if (params.id === "new") {
     // Create new downsell
     const newDownsell = await createDownsell(shop.id, downsellData);
-    return Response.json({ success: true, downsell: newDownsell });
+    result = Response.json({ success: true, downsell: newDownsell });
   } else {
     // Update existing downsell
     const existingDownsell = await getDownsellById(params.id);
@@ -75,8 +77,12 @@ export const action = async ({ request, params }) => {
     }
 
     const updatedDownsell = await updateDownsell(params.id, downsellData);
-    return Response.json({ success: true, downsell: updatedDownsell });
+    result = Response.json({ success: true, downsell: updatedDownsell });
   }
+
+  // Refresh the inlined storefront config metafield (non-blocking on failure).
+  await syncStorefrontConfigByDomain(admin, session.shop);
+  return result;
 };
 
 export default function DownsellEditor() {
