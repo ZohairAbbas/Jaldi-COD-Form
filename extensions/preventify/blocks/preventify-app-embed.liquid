@@ -36,13 +36,14 @@
   {% endif %}
 
   {% comment %}
-    Inline the storefront config server-side from the shop metafield so the COD
-    button (and hide-ATC) render on first paint with NO network round-trip.
+    Inline the storefront config server-side from the app-owned shop metafield so
+    the COD button (and hide-ATC) render on first paint with NO network round-trip.
+    Definition declared in shopify.app.toml ([shop.metafields.app.storefront_config]).
     Falls back to the proxy/config fetch when the metafield is absent (e.g. a
     shop not yet synced / first install). The payload contains no secrets — it
     is the same data already served publicly by proxy/config.
   {% endcomment %}
-  {% assign preventify_config = shop.metafields.preventify.storefront_config %}
+  {% assign preventify_config = shop.metafields.app.storefront_config %}
   {% if preventify_config != blank %}
     window.PREVENTIFY_SETTINGS = {{ preventify_config.value | json }};
   {% endif %}
