@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getDownsells, deleteDownsell, toggleDownsellEnabled } from "../lib/db.server";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -19,20 +20,25 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   await getOrCreateShop(session.shop, session.accessToken);
 
   const formData = await request.formData();
   const actionType = formData.get("action");
   const downsellId = formData.get("downsellId");
 
+  // Refresh the inlined storefront config metafield after a mutation (non-blocking).
+  const sync = () => syncStorefrontConfigByDomain(admin, session.shop);
+
   if (actionType === "delete" && downsellId) {
     await deleteDownsell(downsellId);
+    await sync();
     return Response.json({ success: true });
   }
 
   if (actionType === "toggle" && downsellId) {
     await toggleDownsellEnabled(downsellId);
+    await sync();
     return Response.json({ success: true });
   }
 

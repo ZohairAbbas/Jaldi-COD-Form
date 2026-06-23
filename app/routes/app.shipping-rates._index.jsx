@@ -10,6 +10,7 @@ import {
   toggleShippingRateEnabled,
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -26,20 +27,25 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   await getOrCreateShop(session.shop, session.accessToken);
 
   const formData = await request.formData();
   const actionType = formData.get("action");
   const rateId = formData.get("rateId");
 
+  // Refresh the inlined storefront config metafield after a mutation (non-blocking).
+  const sync = () => syncStorefrontConfigByDomain(admin, session.shop);
+
   if (actionType === "delete" && rateId) {
     await deleteShippingRate(rateId);
+    await sync();
     return Response.json({ success: true });
   }
 
   if (actionType === "toggle" && rateId) {
     await toggleShippingRateEnabled(rateId);
+    await sync();
     return Response.json({ success: true });
   }
 

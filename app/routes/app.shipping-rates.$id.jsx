@@ -11,6 +11,7 @@ import {
   getDefaultShippingRate,
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -33,7 +34,7 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
   const rateData = await request.json();
@@ -44,10 +45,11 @@ export const action = async ({ request, params }) => {
   delete rateData.createdAt;
   delete rateData.updatedAt;
 
+  let result;
   if (params.id === "new") {
     // Create new rate
     const newRate = await createShippingRate(shop.id, rateData);
-    return Response.json({ success: true, shippingRate: newRate });
+    result = Response.json({ success: true, shippingRate: newRate });
   } else {
     // Update existing rate
     const existingRate = await getShippingRateById(params.id);
@@ -56,8 +58,12 @@ export const action = async ({ request, params }) => {
     }
 
     const updatedRate = await updateShippingRate(params.id, rateData);
-    return Response.json({ success: true, shippingRate: updatedRate });
+    result = Response.json({ success: true, shippingRate: updatedRate });
   }
+
+  // Refresh the inlined storefront config metafield (non-blocking on failure).
+  await syncStorefrontConfigByDomain(admin, session.shop);
+  return result;
 };
 
 export default function ShippingRateEditor() {

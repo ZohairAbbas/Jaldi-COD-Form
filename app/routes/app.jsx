@@ -4,16 +4,27 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import ErrorPage from "../components/ErrorPage";
 import { getOrCreateShop, getMonthlyOrderCount } from "../lib/db.server";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 import { getSubscription } from "../lib/mantle.server";
 import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import MixpanelProvider from "../components/MixpanelProvider";
 import BillingBanner from "../components/BillingBanner";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   // Get shop and subscription data for billing banner and analytics
   const shop = await getOrCreateShop(session.shop, session.accessToken);
+
+  // Backfill / keep fresh the inlined storefront config metafield. Fire-and-forget
+  // so it never slows the admin load; ensures existing merchants get the metafield
+  // populated (instant storefront button) without needing to re-save settings.
+  // Uses the by-domain loader so it reads the FULL relation set (bundles,
+  // downsells, etc.) — getOrCreateShop omits those and would write a partial config.
+  syncStorefrontConfigByDomain(admin, session.shop).catch((e) =>
+    console.error("[Preventify] admin-load metafield sync failed:", e)
+  );
+
   const subscription = await getSubscription(shop.id);
 
   // Compute plan usage for billing banner

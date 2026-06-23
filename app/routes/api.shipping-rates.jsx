@@ -9,6 +9,7 @@ import {
   upsertShopifyShippingRates,
 } from "../lib/db.server";
 import { normalizePrice } from "../lib/constants";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 /**
  * GET /api/shipping-rates - List all shipping rates for the shop
@@ -25,11 +26,15 @@ export async function loader({ request }) {
  * DELETE /api/shipping-rates - Delete shipping rate
  */
 export async function action({ request }) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
   const data = await request.json();
   const method = request.method;
+
+  // Refresh the inlined storefront config metafield after a successful mutation
+  // so shipping rates reflect on the storefront's first paint (non-blocking).
+  const sync = () => syncStorefrontConfigByDomain(admin, session.shop);
 
   try {
     if (method === "POST") {
@@ -42,6 +47,7 @@ export async function action({ request }) {
           shop.accessToken
         );
         const savedRates = await upsertShopifyShippingRates(shop.id, importedRates);
+        await sync();
         return Response.json({ success: true, imported: savedRates.length, rates: savedRates });
       }
 
@@ -52,16 +58,19 @@ export async function action({ request }) {
           shop.accessToken
         );
         const savedRates = await upsertShopifyShippingRates(shop.id, importedRates);
+        await sync();
         return Response.json({ success: true, synced: savedRates.length, rates: savedRates });
       }
 
       if (id) {
         // Update existing rate
         const rate = await updateShippingRate(id, rateData);
+        await sync();
         return Response.json({ success: true, shippingRate: rate });
       } else {
         // Create new rate
         const rate = await createShippingRate(shop.id, rateData);
+        await sync();
         return Response.json({ success: true, shippingRate: rate });
       }
     }
@@ -78,6 +87,7 @@ export async function action({ request }) {
       }
 
       await deleteShippingRate(id);
+      await sync();
       return Response.json({ success: true });
     }
 

@@ -11,6 +11,7 @@ import {
   getDefaultBundle,
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
+import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request, params }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -64,7 +65,7 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
 
   const bundleData = await request.json();
@@ -108,17 +109,22 @@ export const action = async ({ request, params }) => {
     bundleData.enabled = false;
   }
 
+  let result;
   if (params.id === "new") {
     const newBundle = await createBundle(shop.id, bundleData);
-    return Response.json({ success: true, bundle: newBundle });
+    result = Response.json({ success: true, bundle: newBundle });
   } else {
     const existing = await getBundleById(params.id);
     if (!existing || existing.shopId !== shop.id) {
       return Response.json({ error: "Bundle not found" }, { status: 404 });
     }
     const updated = await updateBundle(params.id, bundleData);
-    return Response.json({ success: true, bundle: updated });
+    result = Response.json({ success: true, bundle: updated });
   }
+
+  // Refresh the inlined storefront config metafield (non-blocking on failure).
+  await syncStorefrontConfigByDomain(admin, session.shop);
+  return result;
 };
 
 // ============================================
