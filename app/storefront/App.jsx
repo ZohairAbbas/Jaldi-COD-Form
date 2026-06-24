@@ -43,14 +43,36 @@ const defaultConfig = {
   },
 };
 
+// Read the server-inlined config (window.PREVENTIFY_SETTINGS) synchronously so
+// it can seed initial state — this is what makes the COD button / bundle render
+// on the FIRST paint with no flash. Returns null when not inlined (fallback to
+// fetch). Defensive: only accept a well-formed object.
+function getInlinedConfig() {
+  if (typeof window !== 'undefined' && window.PREVENTIFY_SETTINGS && window.PREVENTIFY_SETTINGS.settings) {
+    return window.PREVENTIFY_SETTINGS;
+  }
+  return null;
+}
+
 export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: initialProduct, isCartDrawer = false, initialInventoryQuantity = null, isProductCard = false }) {
-  const [config, setConfig] = useState(defaultConfig);
+  // Seed config from the inlined settings when available so the first render is
+  // already correct (no default-config flash). Merge per-request/env values the
+  // metafield omits (appPath, ENV) the same way applyConfig does.
+  const [config, setConfig] = useState(() => {
+    const inlined = getInlinedConfig();
+    if (!inlined) return defaultConfig;
+    return {
+      ...inlined,
+      appPath: window.PREVENTIFY_APP_PATH || inlined.appPath || '/apps/preventify/',
+      ENV: inlined.ENV || (window.ENV ? window.ENV : {}),
+    };
+  });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(initialProduct);
   const [cart, setCart] = useState({ items: initialProduct ? [initialProduct] : [] });
   const [fullCart, setFullCart] = useState({ items: [] }); // Store full cart separately
   const [productSelection, setProductSelection] = useState('current+cart'); // 'current' or 'current+cart'
-  const [configLoaded, setConfigLoaded] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(() => !!getInlinedConfig());
   const [currentPageType, setCurrentPageType] = useState('unknown');
   const [isProductAvailable, setIsProductAvailable] = useState(true); // Track if current product is available
   const [appPath, setAppPath] = useState('/apps/preventify/'); // Dynamic app path
