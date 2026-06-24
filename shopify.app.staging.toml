@@ -35,11 +35,3 @@ redirect_urls = [ "https://example.com/api/auth" ]
 url = "https://example.com"
 subpath = "preventify-staging"
 prefix = "apps"
-
-# App-owned shop metafield holding the inlined storefront config. The app embed
-# block reads shop.metafields.app.storefront_config in Liquid to render the COD
-# button/hide-ATC on first paint with no proxy round-trip. App-owned, so no extra
-# access scope is required to write it via metafieldsSet (namespace "$app").
-[shop.metafields.app.storefront_config]
-type = "json"
-name = "Preventify Storefront Config"
