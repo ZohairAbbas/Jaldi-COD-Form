@@ -1,4 +1,4 @@
-import { getShopByDomain, getEnabledPixels, getEnabledShippingRates, ensureFreeShippingRate } from "./db.server";
+import { getShopByDomain, getEnabledPixels, getEnabledShippingRates, ensureFreeShippingRate } from "./db.server.js";
 
 // Metafield location for the inlined storefront config.
 // Inlined by the app embed Liquid (window.PREVENTIFY_SETTINGS) so the storefront
