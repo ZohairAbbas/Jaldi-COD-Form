@@ -917,16 +917,42 @@ async function initializePreventify() {
 
   const productData = appEmbedContainer ? getProductData(appEmbedContainer) : null;
 
-  // Fetch config from proxy API
   // Use app path from global variable (set by liquid) or data attribute, fallback to default
   const initialAppPath = window.PREVENTIFY_APP_PATH
     || appEmbedContainer?.dataset.appPath
     || '/apps/preventify/';
 
+  // INSTANT PATH: the app embed inlines the config as window.PREVENTIFY_SETTINGS.
+  // When present, hide native buttons + render the COD button synchronously so
+  // there is NO Add-to-Cart flash and NO blocking proxy/config round-trip.
+  // Falls back to the fetch below only when the inlined config is absent.
+  const inlinedConfig = window.PREVENTIFY_SETTINGS && window.PREVENTIFY_SETTINGS.settings
+    ? window.PREVENTIFY_SETTINGS
+    : null;
+
+  if (inlinedConfig) {
+    try {
+      renderFromConfig(inlinedConfig, shopDomain, productData, appEmbedContainer);
+    } catch (e) {
+      console.error('Preventify: failed to render from inlined config', e);
+    }
+    return;
+  }
+
   try {
     const response = await fetch(`${initialAppPath}proxy/config?shop=${shopDomain}`);
     const config = await response.json();
+    renderFromConfig(config, shopDomain, productData, appEmbedContainer);
+  } catch (error) {
+    console.error('Preventify: Failed to load config', error);
+  }
+}
 
+// Apply a resolved config: hide native buttons and render the button/form.
+// Shared by the instant (inlined) path and the fetch fallback so behaviour is
+// identical regardless of where the config came from.
+function renderFromConfig(config, shopDomain, productData, appEmbedContainer) {
+  try {
     // Hide native buttons based on settings (runs on product/cart pages)
     hideNativeButtons(config);
 
@@ -963,7 +989,7 @@ async function initializePreventify() {
       renderEmbeddedAtDefault(shopDomain, productData);
     }
   } catch (error) {
-    console.error('Preventify: Failed to load config', error);
+    console.error('Preventify: Failed to render config', error);
   }
 }
 

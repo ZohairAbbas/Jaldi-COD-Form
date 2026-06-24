@@ -23,6 +23,34 @@
   Main button/form only renders on product/cart pages based on settings
 {% endcomment %}
 
+{% assign preventify_config = shop.metafields.preventify.storefront_config %}
+
+{% comment %}
+  Pre-paint hide of native buttons. Emitted server-side from the inlined config
+  so the theme's Add-to-Cart / Buy Now / Checkout buttons never flash before the
+  JS runs. JS (hideNativeButtons) still runs as a fallback for shops without the
+  metafield and to catch theme-specific variants the CSS may miss.
+  Our own COD button lives inside [data-preventify-app-embed] / #preventify-*,
+  which these selectors deliberately do not match.
+{% endcomment %}
+{% if preventify_config != blank %}
+  {% assign pf_settings = preventify_config.value.settings %}
+  <style id="preventify-hide-native">
+    {% if pf_settings.hideAddToCartButton and template.name == 'product' %}
+      button[name="add"]:not(#preventify-popup *):not(#preventify-embedded *),
+      .product-form__submit,
+      [data-add-to-cart],
+      form[action*="/cart/add"] button[type="submit"]:not(.shopify-payment-button__button) { display: none !important; }
+    {% endif %}
+    {% if pf_settings.hideBuyNowButton and template.name == 'product' %}
+      .shopify-payment-button, [data-shopify-buttoncontainer] { display: none !important; }
+    {% endif %}
+    {% if pf_settings.hideCheckoutButton and template.name == 'cart' %}
+      button[name="checkout"], #checkout, .cart__checkout-button, [data-checkout-button] { display: none !important; }
+    {% endif %}
+  </style>
+{% endif %}
+
 {% comment %} Always load scripts for cart drawer popup support {% endcomment %}
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -37,13 +65,12 @@
 
   {% comment %}
     Inline the storefront config server-side from the shop metafield so the COD
-    button (and hide-ATC) render on first paint with NO network round-trip.
-    Custom namespace `preventify` with storefront (Online Store) visibility.
+    button renders on first paint with NO network round-trip. (preventify_config
+    is assigned at the top of this block, also used for the pre-paint hide CSS.)
     Falls back to the proxy/config fetch when the metafield is absent (e.g. a
     shop not yet synced / first install). The payload contains no secrets — it
     is the same data already served publicly by proxy/config.
   {% endcomment %}
-  {% assign preventify_config = shop.metafields.preventify.storefront_config %}
   {% if preventify_config != blank %}
     window.PREVENTIFY_SETTINGS = {{ preventify_config.value | json }};
   {% endif %}
