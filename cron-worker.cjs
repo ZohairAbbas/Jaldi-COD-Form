@@ -9,6 +9,7 @@ const locks = {
   draftOrders: false,
   fulfillmentSync: false,
   courierifySync: false,
+  googleSheetsSync: false,
 };
 
 async function runJob(jobName, endpoint) {
@@ -91,6 +92,14 @@ cron.schedule('0 2 * * *', () => {
   timezone: 'Asia/Karachi'
 });
 
+// Job 5: Google Sheets Sync - Every 2 minutes (cursor-based, only new orders)
+cron.schedule('*/2 * * * *', () => {
+  runJob('googleSheetsSync', '/proxy/cron-google-sheets-sync');
+}, {
+  scheduled: true,
+  timezone: 'Asia/Karachi'
+});
+
 // ============================================
 // STARTUP
 // ============================================
@@ -105,6 +114,7 @@ console.log('  - Abandoned cart detection: Every 5 minutes');
 console.log('  - Draft order creation: Every 30 minutes');
 console.log('  - Fulfillment sync: Every 3 hours');
 console.log('  - Courierify data sync: Daily at 02:00 PKT');
+console.log('  - Google Sheets sync: Every 2 minutes');
 console.log('========================================');
 
 // Run jobs immediately on startup for testing (optional - comment out in production)
