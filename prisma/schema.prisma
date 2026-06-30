@@ -53,6 +53,37 @@ model Shop {
   subscription       Subscription?
   blockedUsers       BlockedUser[]
   bundles            Bundle[]
+  googleSheets       GoogleSheetsIntegration?
+}
+
+model GoogleSheetsIntegration {
+  id                      String    @id @default(cuid())
+  shopId                  String    @unique
+  // OAuth
+  googleEmail             String?
+  accessToken             String?   // short-lived; refreshed as needed
+  refreshToken            String?   // long-lived (offline access)
+  tokenExpiry             DateTime?
+  // Target
+  enabled                 Boolean   @default(false)
+  spreadsheetId           String?
+  spreadsheetName         String?
+  ordersSheetName         String?   @default("ALL") // tab for normal orders
+  abandonedSheetName      String?   // separate tab; null = disabled
+  importAbandonedSeparate Boolean   @default(false)
+  orderTypeFilter         String    @default("normal") // "normal" | "abandoned" | "both"
+  oneProductPerLine       Boolean   @default(false)
+  // Mapping: ordered array of column configs, e.g.
+  // [{ "col": "A", "field": "order_number" }, { "col": "B", "field": "custom_text", "value": "..." }]
+  columnMapping           Json      @default("[]")
+  // Incremental cursors ("only new orders")
+  lastSyncedOrderAt       DateTime?
+  lastSyncedAbandonedAt   DateTime?
+  lastSyncError           String?
+  lastSyncedAt            DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  shop                    Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model Subscription {

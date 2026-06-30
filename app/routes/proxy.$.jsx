@@ -2,6 +2,7 @@ import db from "../db.server";
 import { createDraftOrderForAbandonedCart } from "../lib/abandoned-cart.server";
 import { syncShopFulfillments } from "../lib/fulfillment-sync.server";
 import { syncCourierifyData } from "../lib/courierify-sync.server";
+import { runGoogleSheetsSync } from "../lib/google-sheets-sync.server";
 
 
 const ABANDONED_THRESHOLD_MINUTES = 10;
@@ -25,6 +26,8 @@ export const action = async ({ request, params }) => {
       return handleFulfillmentSync(request);
     case "cron-courierify-sync":
       return handleCourierifySync(request);
+    case "cron-google-sheets-sync":
+      return handleGoogleSheetsSync(request);
     case "cron-health":
       return handleCronHealth(request);
     default:
@@ -54,6 +57,49 @@ async function logCronJob(jobName, status, details = {}) {
     });
   } catch (error) {
     console.error("Failed to log cron job:", error);
+  }
+}
+
+// Handler for Google Sheets sync
+async function handleGoogleSheetsSync(request) {
+  if (request.method !== "POST") {
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
+  }
+  if (!verifyCronSecret(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startTime = Date.now();
+  await logCronJob("google-sheets-sync", "started");
+
+  try {
+    const results = await runGoogleSheetsSync();
+    const duration = Date.now() - startTime;
+
+    await logCronJob("google-sheets-sync", "completed", {
+      message: `Synced ${results.processed} rows across ${results.shops} shops`,
+      processed: results.processed,
+      errors: results.errors,
+      duration,
+    });
+
+    return Response.json({
+      success: true,
+      message: `Synced ${results.processed} rows across ${results.shops} shops`,
+      results,
+      duration: `${duration}ms`,
+    });
+  } catch (error) {
+    console.error("Google Sheets sync cron job error:", error);
+    const duration = Date.now() - startTime;
+    await logCronJob("google-sheets-sync", "failed", {
+      message: error.message,
+      duration,
+    });
+    return Response.json(
+      { success: false, error: error.message || "Failed to sync Google Sheets" },
+      { status: 500 }
+    );
   }
 }
 

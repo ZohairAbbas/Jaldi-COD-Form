@@ -5,12 +5,28 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getPixelsByShop, getBlockedUsers } from "../lib/db.server";
 import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE } from "../lib/constants";
+import prisma from "../db.server";
+import { FIELD_CATALOG, COLUMN_PRESETS } from "../lib/google-sheets.server";
+import GoogleSheetsIntegration from "../components/Settings/GoogleSheetsIntegration";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop, session.accessToken);
   const pixels = await getPixelsByShop(shop.id);
   const blockedUsers = await getBlockedUsers(shop.id);
+
+  const gsRow = await prisma.googleSheetsIntegration.findUnique({
+    where: { shopId: shop.id },
+  });
+  const googleSheets = gsRow
+    ? (() => {
+        const connected = Boolean(gsRow.refreshToken);
+        const safe = { ...gsRow };
+        delete safe.accessToken;
+        delete safe.refreshToken;
+        return { ...safe, connected };
+      })()
+    : null;
 
   return {
     settings: shop.settings,
@@ -20,17 +36,24 @@ export const loader = async ({ request }) => {
       enableMultiCountry: shop.enableMultiCountry || false,
       supportedCountries: shop.supportedCountries || [],
     },
+    shopDomain: session.shop,
     pixels,
     blockedUsers,
+    googleSheets,
+    googleSheetsFieldCatalog: FIELD_CATALOG,
+    googleSheetsPresets: COLUMN_PRESETS,
   };
 };
 
 export default function Settings() {
-  const { settings: initialSettings, shop: initialShop, pixels: initialPixels, blockedUsers: initialBlockedUsers } = useLoaderData();
+  const { settings: initialSettings, shop: initialShop, pixels: initialPixels, blockedUsers: initialBlockedUsers, googleSheets, googleSheetsFieldCatalog, googleSheetsPresets } = useLoaderData();
   const shopify = useAppBridge();
   const saveButtonRef = useRef(null);
 
-  const [activeTab, setActiveTab] = useState("general");
+  const initialTab = (typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("tab")
+    : null) || "general";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [settings, setSettings] = useState(initialSettings);
   const [shop, setShop] = useState(initialShop);
   const [pixels, setPixels] = useState(initialPixels || []);
@@ -420,6 +443,34 @@ export default function Settings() {
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             User Blocking
+          </button>
+          <button
+            onClick={() => setActiveTab("google-sheets")}
+            style={{
+              padding: "10px 20px",
+              border: "none",
+              backgroundColor: activeTab === "google-sheets" ? "#FFFFFF" : "transparent",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500",
+              color: activeTab === "google-sheets" ? "#000000" : "#6b7280",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              transition: "all 0.2s ease",
+              boxShadow: activeTab === "google-sheets" ? "0 1px 3px rgba(0, 0, 0, 0.1)" : "none",
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="3" y1="15" x2="21" y2="15" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+              <line x1="15" y1="3" x2="15" y2="21" />
+            </svg>
+            Google Sheets
           </button>
         </div>
       </div>
@@ -1946,6 +1997,15 @@ export default function Settings() {
             </>
           )}
         </>
+      )}
+
+      {/* Google Sheets Tab */}
+      {activeTab === "google-sheets" && (
+        <GoogleSheetsIntegration
+          initialIntegration={googleSheets}
+          fieldCatalog={googleSheetsFieldCatalog}
+          columnPresets={googleSheetsPresets}
+        />
       )}
 
       {/* Pixel Modal */}
