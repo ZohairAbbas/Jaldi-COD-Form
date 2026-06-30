@@ -59,8 +59,20 @@ export default function GoogleSheetsIntegration({
     return () => window.removeEventListener("message", onMessage);
   }, [refreshIntegration]);
 
-  const handleConnect = () => {
-    window.open("/api/google/connect", "_blank", "width=520,height=640");
+  const handleConnect = async () => {
+    // Open the popup synchronously (so it isn't blocked), then navigate it to the
+    // Google consent URL we fetch from the authenticated API. We can't open
+    // /api/google/connect directly because a fresh popup has no embedded admin
+    // session and Shopify would bounce it to /auth/login.
+    const popup = window.open("about:blank", "_blank", "width=520,height=640");
+    const data = await api({ intent: "getAuthUrl" });
+    if (data.success && data.authUrl) {
+      if (popup) popup.location.href = data.authUrl;
+      else window.location.href = data.authUrl; // popup blocked → fall back to full redirect
+    } else {
+      if (popup) popup.close();
+      setMessage(data.error || "Could not start Google sign-in");
+    }
   };
 
   const handleDisconnect = async () => {

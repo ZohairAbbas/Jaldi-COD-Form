@@ -5,6 +5,7 @@ import {
   listSpreadsheets,
   listSheetTabs,
   createSpreadsheet,
+  getAuthUrl,
 } from "../lib/google-sheets.server";
 
 /**
@@ -40,6 +41,15 @@ export async function action({ request }) {
 
   try {
     switch (intent) {
+      case "getAuthUrl": {
+        // Build the Google consent URL here (authenticated via App Bridge session
+        // token), so the client can open it directly in a popup. The popup can't
+        // carry the embedded admin session, so we must NOT route the popup through
+        // an authenticate.admin() route.
+        const authUrl = getAuthUrl(session.shop);
+        return Response.json({ success: true, authUrl });
+      }
+
       case "disconnect": {
         await prisma.googleSheetsIntegration.deleteMany({ where: { shopId: shop.id } });
         return Response.json({ success: true });
