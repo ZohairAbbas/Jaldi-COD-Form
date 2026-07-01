@@ -53,13 +53,19 @@ export async function runGoogleSheetsSync() {
         data: { lastSyncedAt: new Date(), lastSyncError: null },
       });
     } catch (error) {
-      console.error(`[GoogleSheets] sync failed for shop ${integration.shopId}:`, error.message);
-      shopResult.error = error.message;
+      const details =
+        error?.response?.data?.error ||
+        error?.response?.data ||
+        error?.errors ||
+        null;
+      const fullMsg = details ? `${error.message} :: ${JSON.stringify(details)}` : error.message;
+      console.error(`[GoogleSheets] sync failed for shop ${integration.shopId}:`, fullMsg);
+      shopResult.error = fullMsg;
       summary.errors++;
       try {
         await prisma.googleSheetsIntegration.update({
           where: { id: integration.id },
-          data: { lastSyncedAt: new Date(), lastSyncError: error.message },
+          data: { lastSyncedAt: new Date(), lastSyncError: fullMsg.slice(0, 500) },
         });
       } catch {
         /* ignore */

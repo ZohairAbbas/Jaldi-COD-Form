@@ -88,8 +88,17 @@ export async function action({ request }) {
         return Response.json({ success: false, error: "Unknown intent" }, { status: 400 });
     }
   } catch (error) {
-    console.error("[GoogleSheets] api error:", error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    // Surface the full Google API error so we can see the real reason/status.
+    const details =
+      error?.response?.data?.error ||
+      error?.errors ||
+      error?.response?.data ||
+      null;
+    console.error("[GoogleSheets] api error:", JSON.stringify(details || error.message, null, 2));
+    return Response.json(
+      { success: false, error: error.message, details },
+      { status: 500 }
+    );
   }
 }
 
