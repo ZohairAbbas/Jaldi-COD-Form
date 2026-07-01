@@ -138,10 +138,20 @@ export default function GoogleSheetsIntegration({
 
   const saveConfig = async (overrides = {}) => {
     const merged = { ...config, ...overrides };
+
+    // Auto-enable on save when the config is complete (spreadsheet + tab + at
+    // least one mapped field). Configuring the integration is effectively opting
+    // in — this avoids the "saved but nothing syncs" footgun. The merchant can
+    // still explicitly turn it off via the toggle.
+    if (!merged.enabled && isConfigComplete(merged)) {
+      merged.enabled = true;
+    }
+
     setLoading(true);
     const data = await api({ intent: "saveConfig", ...merged });
     if (data.success) {
       setIntegration(data.integration);
+      setConfig((c) => ({ ...c, enabled: merged.enabled }));
       setMessage("Saved");
       setTimeout(() => setMessage(null), 2000);
     } else {
@@ -216,6 +226,19 @@ export default function GoogleSheetsIntegration({
         <s-text variant="body-sm">
           Connected as <strong>{integration.googleEmail || "your Google account"}</strong>
         </s-text>
+
+        {/* Sync status banner — reflects the last SAVED state, not unsaved edits. */}
+        <div style={statusBanner(integration)}>
+          {integration.lastSyncError
+            ? `⚠️ Last sync failed: ${integration.lastSyncError}`
+            : integration.enabled
+            ? `✅ Syncing is active${
+                integration.lastSyncedAt
+                  ? ` — last synced ${formatRelative(integration.lastSyncedAt)}`
+                  : " — waiting for the first sync"
+              }`
+            : "⚠️ Import is disabled — turn on “Enable automatic import” and Save to start syncing orders to your sheet."}
+        </div>
 
         {/* 1. Spreadsheet + tab selection */}
         <s-box padding="base" borderWidth="base" borderRadius="base">
@@ -410,6 +433,33 @@ function deriveConfig(integration) {
   };
 }
 
+// Config is "complete" (safe to auto-enable) when there's a destination sheet
+// and at least one mapped field. If abandoned orders go on a separate sheet,
+// that tab must be chosen too.
+function isConfigComplete(cfg) {
+  if (!cfg.spreadsheetId) return false;
+  if (!cfg.ordersSheetName) return false;
+  const hasMapping =
+    Array.isArray(cfg.columnMapping) &&
+    cfg.columnMapping.some((c) => c.field && c.field !== "empty");
+  if (!hasMapping) return false;
+  if (cfg.importAbandonedSeparate && !cfg.abandonedSheetName) return false;
+  return true;
+}
+
+function formatRelative(dateStr) {
+  const then = new Date(dateStr).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 function colLetter(i) {
   return String.fromCharCode(65 + (i % 26));
 }
@@ -418,6 +468,22 @@ function nextCol(i) {
 }
 
 // ---- styles ----
+function statusBanner(integration) {
+  const ok = integration.enabled && !integration.lastSyncError;
+  const error = Boolean(integration.lastSyncError);
+  const bg = error ? "#fef2f2" : ok ? "#f0fdf4" : "#fffbeb";
+  const border = error ? "#fecaca" : ok ? "#bbf7d0" : "#fde68a";
+  const color = error ? "#991b1b" : ok ? "#065f46" : "#92400e";
+  return {
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: `1px solid ${border}`,
+    backgroundColor: bg,
+    color,
+    fontSize: "13px",
+    fontWeight: 500,
+  };
+}
 const primaryBtn = {
   padding: "10px 16px",
   backgroundColor: "#000",
