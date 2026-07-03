@@ -1,6 +1,41 @@
 import { createRoot } from 'react-dom/client';
 import JaldiCODFormApp from './App';
-import { normalizePrice } from '../lib/constants';
+import { normalizePrice, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
+
+// Country restriction gate. Returns true if the COD form is allowed to render
+// on this visit. Fail-open: if detection fails/times out, allow rendering.
+const COUNTRY_ALLOW_CACHE_KEY = 'preventify_country_allowed';
+async function isCountryAllowed(config, shopDomain, appPath) {
+  const settings = config?.settings || {};
+  if (!settings.enableCountryRestriction) return true;
+
+  const allowed = Array.isArray(settings.allowedCountries) ? settings.allowedCountries : [];
+  if (allowed.length === 0) return false; // restriction on, nothing allowed → hide
+
+  // Session cache to avoid repeat lookups across page views.
+  try {
+    const cached = sessionStorage.getItem(COUNTRY_ALLOW_CACHE_KEY);
+    if (cached === 'yes') return true;
+    if (cached === 'no') return false;
+  } catch (e) { /* sessionStorage may be unavailable */ }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${appPath}proxy/detect-country?shop=${shopDomain}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    const data = await res.json();
+    const iso = data?.isoCountry ? String(data.isoCountry).toUpperCase() : null;
+    if (!iso) return true; // couldn't determine country → fail-open
+    const internal = SHOPIFY_COUNTRY_CODE_MAP[iso] || iso;
+    const isAllowed = allowed.includes(internal) || allowed.includes(iso);
+    try { sessionStorage.setItem(COUNTRY_ALLOW_CACHE_KEY, isAllowed ? 'yes' : 'no'); } catch (e) { /* ignore */ }
+    return isAllowed;
+  } catch (e) {
+    // Timeout / network error → fail-open (show the form)
+    return true;
+  }
+}
 
 // Helper to get Pumper Bundles data if available
 function getPumperBundleData() {
@@ -932,6 +967,10 @@ async function initializePreventify() {
 
   if (inlinedConfig) {
     try {
+      // Country gate: when restriction is on and this visitor isn't allowed,
+      // don't render the COD form OR hide native buttons (leave native checkout).
+      const allowed = await isCountryAllowed(inlinedConfig, shopDomain, initialAppPath);
+      if (!allowed) return;
       renderFromConfig(inlinedConfig, shopDomain, productData, appEmbedContainer);
     } catch (e) {
       console.error('Preventify: failed to render from inlined config', e);
@@ -942,6 +981,8 @@ async function initializePreventify() {
   try {
     const response = await fetch(`${initialAppPath}proxy/config?shop=${shopDomain}`);
     const config = await response.json();
+    const allowed = await isCountryAllowed(config, shopDomain, initialAppPath);
+    if (!allowed) return;
     renderFromConfig(config, shopDomain, productData, appEmbedContainer);
   } catch (error) {
     console.error('Preventify: Failed to load config', error);

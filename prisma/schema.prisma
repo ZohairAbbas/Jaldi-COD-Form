@@ -146,6 +146,9 @@ model Settings {
   disableSpecificProducts Boolean @default(false)
   disabledProductIds   Json     @default("[]")
   disabledProductTitles Json    @default("[]")
+  // Country restriction — only show the COD form to visitors in allowed countries
+  enableCountryRestriction Boolean @default(false)
+  allowedCountries         Json    @default("[]") // array of ISO alpha-2 codes, e.g. ["PK","AE"]
   enableUserBlocking   Boolean  @default(false)
   blockedUserMessage   String   @default("You are not allowed to place orders. Please contact support.")
   // Fraud prevention — order rate limit & high-quantity block
