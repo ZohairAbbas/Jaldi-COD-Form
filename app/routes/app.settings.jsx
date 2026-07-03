@@ -85,6 +85,11 @@ export default function Settings() {
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const countrySearchRef = useRef(null);
 
+  // Country-restriction allow-list search (separate from multi-country pricing)
+  const [allowedSearch, setAllowedSearch] = useState('');
+  const [showAllowedDropdown, setShowAllowedDropdown] = useState(false);
+  const allowedSearchRef = useRef(null);
+
   // Fraud prevention state
   const [blockedEmails, setBlockedEmails] = useState(
     (initialBlockedUsers || []).filter(b => b.type === 'email').map(b => b.value).join('\n')
@@ -313,6 +318,9 @@ export default function Settings() {
     const handleClickOutside = (event) => {
       if (countrySearchRef.current && !countrySearchRef.current.contains(event.target)) {
         setShowCountryDropdown(false);
+      }
+      if (allowedSearchRef.current && !allowedSearchRef.current.contains(event.target)) {
+        setShowAllowedDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -1438,6 +1446,108 @@ export default function Settings() {
                     </label>
                   </s-stack>
                 </s-box>
+              )}
+            </s-stack>
+          </s-section>
+
+          {/* Country Restriction */}
+          <s-section>
+            <s-stack direction="block" gap="base">
+              <s-heading>Restrict by Country</s-heading>
+              <s-text variant="body-sm" tone="subdued">
+                Only show the COD form to visitors from the countries you choose (detected by IP). Visitors from other countries see your normal Shopify checkout. If a visitor&apos;s country can&apos;t be determined, the form is shown.
+              </s-text>
+
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={settings.enableCountryRestriction || false}
+                  onChange={(e) => handleUpdate({ enableCountryRestriction: e.target.checked })}
+                  style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+                />
+                <div>
+                  <div style={{ fontWeight: "600", fontSize: "14px" }}>Enable country restriction</div>
+                  <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "2px" }}>
+                    When enabled, the COD form only appears for the allowed countries below.
+                  </div>
+                </div>
+              </label>
+
+              {settings.enableCountryRestriction && (
+                <>
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="heading-sm">Allowed countries</s-text>
+                    <div style={{ position: 'relative' }} ref={allowedSearchRef}>
+                      <input
+                        type="text"
+                        value={allowedSearch}
+                        onChange={(e) => setAllowedSearch(e.target.value)}
+                        onFocus={() => setShowAllowedDropdown(true)}
+                        placeholder="Search countries to allow"
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px', boxSizing: 'border-box' }}
+                      />
+                      {showAllowedDropdown && (
+                        <div style={{
+                          position: 'absolute', top: '100%', left: 0, right: 0,
+                          backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '6px',
+                          marginTop: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 100,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        }}>
+                          {COUNTRY_OPTIONS
+                            .filter(c =>
+                              c.label.toLowerCase().includes(allowedSearch.toLowerCase()) &&
+                              !(settings.allowedCountries || []).includes(c.value)
+                            )
+                            .map(country => (
+                              <div
+                                key={country.value}
+                                onClick={() => {
+                                  handleUpdate({ allowedCountries: [...(settings.allowedCountries || []), country.value] });
+                                  setAllowedSearch('');
+                                  setShowAllowedDropdown(false);
+                                }}
+                                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f5'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                              >
+                                {country.label}
+                              </div>
+                            ))}
+                          {COUNTRY_OPTIONS.filter(c =>
+                            c.label.toLowerCase().includes(allowedSearch.toLowerCase()) &&
+                            !(settings.allowedCountries || []).includes(c.value)
+                          ).length === 0 && (
+                            <div style={{ padding: '10px 12px', color: '#999' }}>No countries found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </s-stack>
+
+                  {(settings.allowedCountries || []).length > 0 ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {settings.allowedCountries.map(code => {
+                        const country = COUNTRY_OPTIONS.find(c => c.value === code);
+                        return (
+                          <div key={code} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: '#f5f5f5', borderRadius: '20px', fontSize: '14px' }}>
+                            <span>{country?.label || code}</span>
+                            <button
+                              onClick={() => handleUpdate({ allowedCountries: settings.allowedCountries.filter(c => c !== code) })}
+                              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', fontSize: '16px', lineHeight: 1, padding: 0 }}
+                              aria-label={`Remove ${country?.label || code}`}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                      <s-text variant="body-sm">No countries selected — with restriction enabled and no allowed countries, the COD form is hidden everywhere. Add at least one country.</s-text>
+                    </s-box>
+                  )}
+                </>
               )}
             </s-stack>
           </s-section>

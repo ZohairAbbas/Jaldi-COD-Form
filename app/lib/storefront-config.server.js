@@ -115,6 +115,11 @@ export async function buildStorefrontConfig(shopData) {
       disabledProductIds: Array.isArray(shopData.settings.disabledProductIds)
         ? shopData.settings.disabledProductIds
         : (typeof shopData.settings.disabledProductIds === 'string' ? JSON.parse(shopData.settings.disabledProductIds) : []),
+      // Country restriction — only show the COD form to allowed countries
+      enableCountryRestriction: shopData.settings.enableCountryRestriction || false,
+      allowedCountries: Array.isArray(shopData.settings.allowedCountries)
+        ? shopData.settings.allowedCountries
+        : (typeof shopData.settings.allowedCountries === 'string' ? JSON.parse(shopData.settings.allowedCountries) : []),
       // Post-order redirection (COD)
       redirectMode: shopData.settings.redirectMode || 'shopify',
       redirectUrl: shopData.settings.redirectUrl || null,

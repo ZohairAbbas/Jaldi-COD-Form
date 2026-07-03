@@ -30,6 +30,13 @@ function isCountrySupported(countryCode, supportedCountries) {
   return supportedCountries.includes(countryCode);
 }
 
+// Normalize an ISO alpha-2 code (uppercase, trimmed) or null
+function normalizeIso(isoCode) {
+  if (!isoCode) return null;
+  const upper = isoCode.toUpperCase().trim();
+  return /^[A-Z]{2}$/.test(upper) ? upper : null;
+}
+
 // Extract client IP from request headers
 function getClientIP(request) {
   const xForwardedFor = request.headers.get('x-forwarded-for');
@@ -58,7 +65,7 @@ async function detectCountryFromIP(ip) {
 
     const data = await response.json();
     if (data.status === 'success' && data.countryCode) {
-      return mapCountryCode(data.countryCode);
+      return { iso: normalizeIso(data.countryCode), internal: mapCountryCode(data.countryCode) };
     }
     return null;
   } catch (error) {
@@ -95,10 +102,27 @@ export const loader = async ({ request }) => {
       ? shopData.supportedCountries
       : [];
 
-    // If multi-country is disabled, return shop's default country
+    // Detect the visitor's raw ISO country (Cloudflare first, then IP geo).
+    // This runs regardless of multi-country pricing so the country-restriction
+    // feature can gate the COD form even when multi-country is off.
+    let isoCountry = normalizeIso(request.headers.get('cf-ipcountry')) ;
+    let ipInternal = null; // internal-mapped code from IP lookup, reused below
+    if (!isoCountry) {
+      const clientIP = getClientIP(request);
+      if (clientIP && !isPrivateIP(clientIP)) {
+        const ipResult = await detectCountryFromIP(clientIP);
+        if (ipResult) {
+          isoCountry = ipResult.iso;
+          ipInternal = ipResult.internal;
+        }
+      }
+    }
+
+    // If multi-country is disabled, return shop's default country (+ detected ISO)
     if (!shopData.enableMultiCountry) {
       return Response.json({
         country: defaultCountry,
+        isoCountry,
         source: 'shop_default',
         supportedCountries: [defaultCountry],
       });
@@ -108,38 +132,31 @@ export const loader = async ({ request }) => {
     if (supportedCountries.length === 0) {
       return Response.json({
         country: defaultCountry,
+        isoCountry,
         source: 'fallback',
         supportedCountries: [defaultCountry],
       });
     }
 
-    let detectedCountry = null;
-    let source = 'fallback';
-
-    // 1. Try Cloudflare header first (instant, no API call)
-    const cfCountry = request.headers.get('cf-ipcountry');
-    if (cfCountry && cfCountry !== 'XX') {
-      detectedCountry = mapCountryCode(cfCountry);
-      if (detectedCountry && isCountrySupported(detectedCountry, supportedCountries)) {
-        return Response.json({
-          country: detectedCountry,
-          source: 'cloudflare',
-          supportedCountries,
-        });
-      }
+    // 1. Cloudflare-derived country (isoCountry already set from CF header)
+    const cfInternal = isoCountry ? mapCountryCode(isoCountry) : null;
+    if (cfInternal && !ipInternal && isCountrySupported(cfInternal, supportedCountries)) {
+      return Response.json({
+        country: cfInternal,
+        isoCountry,
+        source: 'cloudflare',
+        supportedCountries,
+      });
     }
 
-    // 2. Try IP geolocation via ip-api.com
-    const clientIP = getClientIP(request);
-    if (clientIP && !isPrivateIP(clientIP)) {
-      detectedCountry = await detectCountryFromIP(clientIP);
-      if (detectedCountry && isCountrySupported(detectedCountry, supportedCountries)) {
-        return Response.json({
-          country: detectedCountry,
-          source: 'ip-api',
-          supportedCountries,
-        });
-      }
+    // 2. IP-geo-derived country
+    if (ipInternal && isCountrySupported(ipInternal, supportedCountries)) {
+      return Response.json({
+        country: ipInternal,
+        isoCountry,
+        source: 'ip-api',
+        supportedCountries,
+      });
     }
 
     // 3. Fallback: Use shop's primary country if it's in supported list, otherwise first supported
@@ -149,6 +166,7 @@ export const loader = async ({ request }) => {
 
     return Response.json({
       country: fallbackCountry,
+      isoCountry,
       source: 'fallback',
       supportedCountries,
     });
