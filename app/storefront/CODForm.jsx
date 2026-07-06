@@ -1660,6 +1660,40 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     switch (field.type) {
       case 'text':
+        // City behaves like province: show a dropdown when the country has a
+        // predefined city list, otherwise fall through to the free-text input.
+        if (field.id === 'city' && country.cities && country.cities.length > 0) {
+          return (
+            <div key={field.id} style={{ marginBottom: '0' }}>
+              <div className="jaldi-field-row" style={fieldRowStyle}>
+                <label className="jaldi-field-label" style={labelStyle}>
+                  {getFieldLabel(field)} {field.required && <span style={{ color: '#EF4444' }}>*</span>}
+                </label>
+                <div style={{ flex: 1 }}>
+                  <div style={inputGroupStyle}>
+                    {hasIcon && (
+                      <div style={iconContainerStyle}>
+                        {getFieldIcon(field.id)}
+                      </div>
+                    )}
+                    <select
+                      name={field.id}
+                      value={value}
+                      onChange={(e) => setFieldValue(e.target.value)}
+                      style={{ ...inputStyle, cursor: 'pointer' }}
+                    >
+                      <option value="">{field.placeholder || 'Select...'}</option>
+                      {country.cities.map((cityName, idx) => (
+                        <option key={idx} value={cityName}>{cityName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {error && <div style={errorStyle}>{error}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        }
         return (
           <div key={field.id} style={{ marginBottom: '0' }}>
             <div className="jaldi-field-row" style={fieldRowStyle}>
