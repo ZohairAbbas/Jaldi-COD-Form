@@ -107,6 +107,7 @@ export const COUNTRIES = {
       "Hingorja",
       "Hub",
       "Hyderabad",
+      "Islamabad",
       "Islamkot",
       "Jacobabad",
       "Jalalpur Jattan",

@@ -1,9 +1,168 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
 import { getCurrencyCode, COUNTRIES, validatePhone } from '../lib/constants';
 import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } from './device-recognition';
 import { t, fieldTranslations } from './translations';
 import PayFastModal from './PayFastModal';
+
+/**
+ * City input with a custom, fully-styled suggestions dropdown.
+ *
+ * The predefined city list acts as SUGGESTIONS only — the customer can pick one
+ * or type any city, so nobody is blocked by "city not found". We render our own
+ * dropdown (not a native <datalist>, which browsers render un-styled/ugly and
+ * can't be controlled). Keyboard: ↑/↓ to move, Enter to pick, Esc to close.
+ */
+function CityCombobox({ value, onChange, cities, placeholder, inputStyle, name }) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const [rect, setRect] = useState(null); // input position for the portalled dropdown
+  const wrapRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Filter suggestions by what's typed (case-insensitive substring). Empty input
+  // shows the full list. Cap to keep the dropdown snappy on long lists (PAK ~310).
+  const query = (value || '').trim().toLowerCase();
+  const suggestions = (query
+    ? cities.filter((c) => c.toLowerCase().includes(query))
+    : cities
+  ).slice(0, 50);
+
+  const showList = open && suggestions.length > 0;
+
+  // Compute the dropdown position from the input's viewport rect. The list is
+  // portalled to <body> with position:fixed so it escapes the form's
+  // overflow:hidden section containers (which would otherwise clip it).
+  const updateRect = () => {
+    if (inputRef.current) setRect(inputRef.current.getBoundingClientRect());
+  };
+
+  useLayoutEffect(() => {
+    if (!showList) return undefined;
+    updateRect();
+    // Keep it anchored while scrolling/resizing. Capture:true catches scrolls on
+    // inner scroll containers (the popup form body), not just the window.
+    const onReposition = () => updateRect();
+    window.addEventListener('scroll', onReposition, true);
+    window.addEventListener('resize', onReposition);
+    return () => {
+      window.removeEventListener('scroll', onReposition, true);
+      window.removeEventListener('resize', onReposition);
+    };
+  }, [showList]);
+
+  // Close when clicking outside (the portalled list is outside wrapRef, so also
+  // ignore clicks that land on it — handled via its own onMouseDown preventing blur).
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocClick = (e) => {
+      if (
+        wrapRef.current && !wrapRef.current.contains(e.target) &&
+        !(e.target.closest && e.target.closest('[data-jaldi-city-dropdown]'))
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const commit = (city) => {
+    onChange(city);
+    setOpen(false);
+    setHighlight(-1);
+  };
+
+  const onKeyDown = (e) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      setOpen(true);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight((h) => Math.min(h + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      if (open && highlight >= 0 && suggestions[highlight]) {
+        e.preventDefault();
+        commit(suggestions[highlight]);
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      setHighlight(-1);
+    }
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1 }}>
+      <input
+        ref={inputRef}
+        type="text"
+        name={name}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setHighlight(-1); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        style={inputStyle}
+      />
+      {showList && rect && createPortal(
+        <ul
+          data-jaldi-city-dropdown
+          role="listbox"
+          style={{
+            position: 'fixed',
+            top: rect.bottom + 4,
+            left: rect.left,
+            width: rect.width,
+            margin: 0,
+            padding: '4px 0',
+            listStyle: 'none',
+            background: '#FFFFFF',
+            border: '1px solid #D1D5DB',
+            borderRadius: '6px',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.12)',
+            maxHeight: '220px',
+            overflowY: 'auto',
+            zIndex: 2147483647, // above the COD form modal
+            fontFamily: 'inherit',
+          }}
+        >
+          {suggestions.map((city, idx) => (
+            <li
+              key={city}
+              role="option"
+              aria-selected={idx === highlight}
+              // onMouseDown (not onClick) so it fires before the input blur closes the list.
+              onMouseDown={(e) => { e.preventDefault(); commit(city); }}
+              onMouseEnter={() => setHighlight(idx)}
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                color: '#111827',
+                cursor: 'pointer',
+                background: idx === highlight ? '#F3F4F6' : 'transparent',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {city}
+            </li>
+          ))}
+        </ul>,
+        document.body
+      )}
+    </div>
+  );
+}
 
 export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
   // Manual country selection state (for user override)
@@ -1660,8 +1819,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     switch (field.type) {
       case 'text':
-        // City behaves like province: show a dropdown when the country has a
-        // predefined city list, otherwise fall through to the free-text input.
+        // City: when the selected country has a predefined city list, render a
+        // free-text input backed by a <datalist> so the list acts as SUGGESTIONS
+        // (customers can pick or type any city — never blocked by "city not
+        // found"). Falls through to the plain text input when no list exists.
         if (field.id === 'city' && country.cities && country.cities.length > 0) {
           return (
             <div key={field.id} style={{ marginBottom: '0' }}>
@@ -1676,17 +1837,14 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                         {getFieldIcon(field.id)}
                       </div>
                     )}
-                    <select
+                    <CityCombobox
                       name={field.id}
                       value={value}
-                      onChange={(e) => setFieldValue(e.target.value)}
-                      style={{ ...inputStyle, cursor: 'pointer' }}
-                    >
-                      <option value="">{field.placeholder || 'Select...'}</option>
-                      {country.cities.map((cityName, idx) => (
-                        <option key={idx} value={cityName}>{cityName}</option>
-                      ))}
-                    </select>
+                      onChange={setFieldValue}
+                      cities={country.cities}
+                      placeholder={field.placeholder || 'City'}
+                      inputStyle={inputStyle}
+                    />
                   </div>
                   {error && <div style={errorStyle}>{error}</div>}
                 </div>
