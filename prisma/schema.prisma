@@ -26,34 +26,38 @@ model Session {
 }
 
 model Shop {
-  id                 String          @id @default(cuid())
-  shopifyDomain      String          @unique
-  accessToken        String
-  name               String?
-  ownerEmail         String?
-  ownerPhone         String?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  country            String          @default("PAK")
-  enableMultiCountry Boolean         @default(false)
-  supportedCountries Json            @default("[]")
-  setupProgress      Json?           @default("{\"step1Completed\": false, \"step2Completed\": false, \"welcomeDismissed\": false, \"setupGuideDismissed\": false}")
+  id                  String                   @id @default(cuid())
+  shopifyDomain       String                   @unique
+  accessToken         String
+  name                String?
+  ownerEmail          String?
+  ownerPhone          String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  country             String                   @default("PAK")
+  enableMultiCountry  Boolean                  @default(false)
+  supportedCountries  Json                     @default("[]")
+  setupProgress       Json?                    @default("{\"step1Completed\": false, \"step2Completed\": false, \"welcomeDismissed\": false, \"setupGuideDismissed\": false}")
   themeEmbedEnabled   Boolean?
   themeEmbedCheckedAt DateTime?
-  tokenInvalid        Boolean   @default(false)  // Set true when Shopify returns 401 — skip in cron
-  abandonedCarts     AbandonedCart[]
-  downsells          Downsell[]
-  formConfig         FormConfig?
-  orders             Order[]
-  orderSessions      OrderSession[]
-  pixels             Pixel[]
-  settings           Settings?
-  shippingRates      ShippingRate[]
-  upsells            Upsell[]
-  subscription       Subscription?
-  blockedUsers       BlockedUser[]
-  bundles            Bundle[]
-  googleSheets       GoogleSheetsIntegration?
+  tokenInvalid        Boolean                  @default(false) // Set true when Shopify returns 401 — skip in cron
+  // GID of the auto-created automatic discount that powers the bundle Discount
+  // Function (native-checkout bundles mode). Null until first created; used as
+  // an idempotency guard so we don't create duplicates.
+  bundleDiscountId    String?
+  abandonedCarts      AbandonedCart[]
+  downsells           Downsell[]
+  formConfig          FormConfig?
+  orders              Order[]
+  orderSessions       OrderSession[]
+  pixels              Pixel[]
+  settings            Settings?
+  shippingRates       ShippingRate[]
+  upsells             Upsell[]
+  subscription        Subscription?
+  blockedUsers        BlockedUser[]
+  bundles             Bundle[]
+  googleSheets        GoogleSheetsIntegration?
 }
 
 model GoogleSheetsIntegration {
@@ -61,15 +65,15 @@ model GoogleSheetsIntegration {
   shopId                  String    @unique
   // OAuth
   googleEmail             String?
-  accessToken             String?   // short-lived; refreshed as needed
-  refreshToken            String?   // long-lived (offline access)
+  accessToken             String? // short-lived; refreshed as needed
+  refreshToken            String? // long-lived (offline access)
   tokenExpiry             DateTime?
   // Target
   enabled                 Boolean   @default(false)
   spreadsheetId           String?
   spreadsheetName         String?
   ordersSheetName         String?   @default("ALL") // tab for normal orders
-  abandonedSheetName      String?   // separate tab; null = disabled
+  abandonedSheetName      String? // separate tab; null = disabled
   importAbandonedSeparate Boolean   @default(false)
   orderTypeFilter         String    @default("normal") // "normal" | "abandoned" | "both"
   oneProductPerLine       Boolean   @default(false)
@@ -87,99 +91,109 @@ model GoogleSheetsIntegration {
 }
 
 model Subscription {
-  id                 String    @id @default(cuid())
-  shopId             String    @unique
-  mantleCustomerId   String?
-  planId             String?
-  planName           String?
-  status             String    @default("trialing")
-  currentPeriodEnd   DateTime?
-  cancelAtPeriodEnd  Boolean   @default(false)
-  trialEndsAt        DateTime?
-  usageCharges       Json      @default("[]")
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  shop               Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  shopId            String    @unique
+  mantleCustomerId  String?
+  planId            String?
+  planName          String?
+  status            String    @default("trialing")
+  currentPeriodEnd  DateTime?
+  cancelAtPeriodEnd Boolean   @default(false)
+  trialEndsAt       DateTime?
+  usageCharges      Json      @default("[]")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  shop              Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([status])
 }
 
 model Settings {
-  id                   String   @id @default(cuid())
-  shopId               String   @unique
-  formMode             String   @default("popup")
-  buttonText           String   @default("Buy with Cash on Delivery")
-  buttonBgColor        String   @default("rgba(0,0,0,1)")
-  buttonTextColor      String   @default("rgba(255,255,255,1)")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  buttonAnimation      String   @default("none")
-  buttonBorderColor    String   @default("#000000")
-  buttonBorderRadius   Int      @default(4)
-  buttonBorderWidth    Int      @default(0)
-  buttonFontSize       Int      @default(16)
-  buttonIcon           String   @default("cart")
-  buttonShadow         Int      @default(4)
-  allowCartItems       Boolean  @default(true)
-  enableRTL            Boolean  @default(false)
-  buttonPageVisibility String   @default("both")
-  hideAddToCartButton  Boolean  @default(false)
-  hideBuyNowButton     Boolean  @default(false)
-  hideCheckoutButton   Boolean  @default(false)
-  enableCartPermalink  Boolean  @default(false)
-  hideCompleteOrderButton Boolean @default(false)
-  cardButtonText       String   @default("PAY WITH CARD")
-  cardButtonBgColor    String   @default("#FFFFFF")
-  cardButtonTextColor  String   @default("#000000")
-  cardButtonFontSize   Int      @default(14)
-  cardDiscountEnabled  Boolean  @default(false)
-  cardDiscountType     String   @default("percentage")
-  cardDiscountValue    Float    @default(0)
-  allowDiscountOnBundles Boolean @default(true)
-  enableOTP            Boolean  @default(false)
-  enableSmartCheckout  Boolean  @default(false)
-  language             String   @default("en")
-  enableSpecificProducts Boolean @default(false)
-  specificProductIds   Json     @default("[]")
-  specificProductTitles Json    @default("[]")
-  disableSpecificProducts Boolean @default(false)
-  disabledProductIds   Json     @default("[]")
-  disabledProductTitles Json    @default("[]")
+  id                           String   @id @default(cuid())
+  shopId                       String   @unique
+  formMode                     String   @default("popup")
+  buttonText                   String   @default("Buy with Cash on Delivery")
+  buttonBgColor                String   @default("rgba(0,0,0,1)")
+  buttonTextColor              String   @default("rgba(255,255,255,1)")
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  buttonAnimation              String   @default("none")
+  buttonBorderColor            String   @default("#000000")
+  buttonBorderRadius           Int      @default(4)
+  buttonBorderWidth            Int      @default(0)
+  buttonFontSize               Int      @default(16)
+  buttonIcon                   String   @default("cart")
+  buttonShadow                 Int      @default(4)
+  allowCartItems               Boolean  @default(true)
+  enableRTL                    Boolean  @default(false)
+  buttonPageVisibility         String   @default("both")
+  hideAddToCartButton          Boolean  @default(false)
+  hideBuyNowButton             Boolean  @default(false)
+  hideCheckoutButton           Boolean  @default(false)
+  enableCartPermalink          Boolean  @default(false)
+  hideCompleteOrderButton      Boolean  @default(false)
+  cardButtonText               String   @default("PAY WITH CARD")
+  cardButtonBgColor            String   @default("#FFFFFF")
+  cardButtonTextColor          String   @default("#000000")
+  cardButtonFontSize           Int      @default(14)
+  cardDiscountEnabled          Boolean  @default(false)
+  cardDiscountType             String   @default("percentage")
+  cardDiscountValue            Float    @default(0)
+  allowDiscountOnBundles       Boolean  @default(true)
+  // Native-checkout bundles mode: master enable. When true, bundles drive the
+  // theme's native Add-to-Cart + Shopify checkout (the bundle Discount Function
+  // applies the tier discount) and the Preventify COD button is hidden. When
+  // false, the current COD form flow is unchanged.
+  nativeBundleCheckout         Boolean  @default(false)
+  // Countries (ISO alpha-2) where native-bundle mode applies. Empty = applies
+  // everywhere (backwards-compatible with a plain global toggle). Native mode
+  // and COD are mutually exclusive per country: a bundle product uses native
+  // mode when the visitor's country is in this list, else the COD form.
+  nativeBundleCountries        Json     @default("[]")
+  enableOTP                    Boolean  @default(false)
+  enableSmartCheckout          Boolean  @default(false)
+  language                     String   @default("en")
+  enableSpecificProducts       Boolean  @default(false)
+  specificProductIds           Json     @default("[]")
+  specificProductTitles        Json     @default("[]")
+  disableSpecificProducts      Boolean  @default(false)
+  disabledProductIds           Json     @default("[]")
+  disabledProductTitles        Json     @default("[]")
   // Country restriction — only show the COD form to visitors in allowed countries
-  enableCountryRestriction Boolean @default(false)
-  allowedCountries         Json    @default("[]") // array of ISO alpha-2 codes, e.g. ["PK","AE"]
-  enableUserBlocking   Boolean  @default(false)
-  blockedUserMessage   String   @default("You are not allowed to place orders. Please contact support.")
+  enableCountryRestriction     Boolean  @default(false)
+  allowedCountries             Json     @default("[]") // array of ISO alpha-2 codes, e.g. ["PK","AE"]
+  enableUserBlocking           Boolean  @default(false)
+  blockedUserMessage           String   @default("You are not allowed to place orders. Please contact support.")
   // Fraud prevention — order rate limit & high-quantity block
-  limitOrdersEnabled        Boolean @default(false)
-  limitOrdersWindowMinutes  Int     @default(1440) // default 24h
-  blockHighQuantityEnabled  Boolean @default(false)
-  maxQuantityPerOrder       Int     @default(10)
+  limitOrdersEnabled           Boolean  @default(false)
+  limitOrdersWindowMinutes     Int      @default(1440) // default 24h
+  blockHighQuantityEnabled     Boolean  @default(false)
+  maxQuantityPerOrder          Int      @default(10)
   // Sticky page bar (mobile) — opens the COD form
-  stickyBarEnabled          Boolean @default(false)
-  stickyBarPosition         String  @default("bottom") // bottom | top
-  stickyBarAlwaysVisible    Boolean @default(true)
+  stickyBarEnabled             Boolean  @default(false)
+  stickyBarPosition            String   @default("bottom") // bottom | top
+  stickyBarAlwaysVisible       Boolean  @default(true)
   // PayFast configuration
-  payfastEnabled        Boolean  @default(false)
-  payfastMerchantId     String?
-  payfastSecuredKey     String?
-  payfastButtonText     String   @default("PAY WITH PAYFAST")
-  payfastButtonBgColor  String   @default("#00B140")
-  payfastButtonTextColor String  @default("#FFFFFF")
-  payfastButtonFontSize Int      @default(14)
+  payfastEnabled               Boolean  @default(false)
+  payfastMerchantId            String?
+  payfastSecuredKey            String?
+  payfastButtonText            String   @default("PAY WITH PAYFAST")
+  payfastButtonBgColor         String   @default("#00B140")
+  payfastButtonTextColor       String   @default("#FFFFFF")
+  payfastButtonFontSize        Int      @default(14)
   // Post-order redirection (COD)
-  redirectMode            String   @default("shopify") // shopify | custom_page | whatsapp | none
-  redirectUrl             String?
-  redirectWhatsappNumber  String?
-  redirectWhatsappMessage String?
-  thankYouMessage         String?
+  redirectMode                 String   @default("shopify") // shopify | custom_page | whatsapp | none
+  redirectUrl                  String?
+  redirectWhatsappNumber       String?
+  redirectWhatsappMessage      String?
+  thankYouMessage              String?
   // Free shipping progress nudge
-  freeShippingNudgeEnabled     Boolean @default(false)
-  freeShippingNudgeAmountText  String  @default("🚚 Add {{amount}} more to get free delivery")
-  freeShippingNudgeQtyText     String  @default("🚚 Add {{count}} more item(s) to get free delivery")
-  freeShippingNudgeSuccessText String  @default("🎉 You've unlocked free delivery!")
-  shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  freeShippingNudgeEnabled     Boolean  @default(false)
+  freeShippingNudgeAmountText  String   @default("🚚 Add {{amount}} more to get free delivery")
+  freeShippingNudgeQtyText     String   @default("🚚 Add {{count}} more item(s) to get free delivery")
+  freeShippingNudgeSuccessText String   @default("🎉 You've unlocked free delivery!")
+  shop                         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model FormConfig {
@@ -195,49 +209,49 @@ model FormConfig {
   shadowIntensity        Int      @default(5)
   sections               Json     @default("[]")
   fields                 Json     @default("[]")
-  requiredFieldErrorText   String   @default("This field is required.")
-  invalidFieldErrorText    String   @default("Enter a valid value.")
-  submitButtonText         String   @default("")
-  submitButtonBgColor      String   @default("rgba(0,0,0,1)")
-  submitButtonTextColor    String   @default("rgba(255,255,255,1)")
-  submitButtonFontSize     Int      @default(14)
-  submitButtonIcon         String   @default("none")
-  formTitleAlign           String   @default("left") // left | center | right
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
-  shop                     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  requiredFieldErrorText String   @default("This field is required.")
+  invalidFieldErrorText  String   @default("Enter a valid value.")
+  submitButtonText       String   @default("")
+  submitButtonBgColor    String   @default("rgba(0,0,0,1)")
+  submitButtonTextColor  String   @default("rgba(255,255,255,1)")
+  submitButtonFontSize   Int      @default(14)
+  submitButtonIcon       String   @default("none")
+  formTitleAlign         String   @default("left") // left | center | right
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  shop                   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model Order {
-  id                 String   @id @default(cuid())
-  shopId             String
-  shopifyOrderId     String?  @unique
-  shopifyOrderNumber String?
-  firstName          String
-  lastName           String
-  email              String?
-  phone              String
-  address            String
-  address2           String?
-  city               String
-  province           String
-  postalCode         String?
-  country            String   @default("Pakistan")
-  subtotal           Float
-  shipping           Float    @default(0)
-  total              Float
-  customFields       Json     @default("{}")
-  items              Json
-  status             String   @default("pending")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  paymentMethod      String   @default("cod")
-  fulfillmentStatus  String?    // Raw Shopify FulfillmentDisplayStatus value
-  deliveryOutcome    String?    // Mapped: "delivered" | "returned" | "cancelled" | "in_transit" | "unfulfilled"
+  id                  String    @id @default(cuid())
+  shopId              String
+  shopifyOrderId      String?   @unique
+  shopifyOrderNumber  String?
+  firstName           String
+  lastName            String
+  email               String?
+  phone               String
+  address             String
+  address2            String?
+  city                String
+  province            String
+  postalCode          String?
+  country             String    @default("Pakistan")
+  subtotal            Float
+  shipping            Float     @default(0)
+  total               Float
+  customFields        Json      @default("{}")
+  items               Json
+  status              String    @default("pending")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  paymentMethod       String    @default("cod")
+  fulfillmentStatus   String? // Raw Shopify FulfillmentDisplayStatus value
+  deliveryOutcome     String? // Mapped: "delivered" | "returned" | "cancelled" | "in_transit" | "unfulfilled"
   fulfillmentSyncedAt DateTime? // Last time cron checked this order
-  riskLevel          String?    // "LOW" | "MEDIUM" | "HIGH" | null (set at creation)
+  riskLevel           String? // "LOW" | "MEDIUM" | "HIGH" | null (set at creation)
   verificationMethod  String?
-  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop                Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([status])
@@ -413,35 +427,35 @@ model Downsell {
 }
 
 model Pixel {
-  id                     String       @id @default(cuid())
-  shopId                 String
-  type                   String       // "facebook_pixel" | "facebook_capi" | "snapchat_pixel" | "tiktok_pixel" | "tiktok_events_api"
-  label                  String?
-  pixelId                String
-  accessToken            String?
+  id          String  @id @default(cuid())
+  shopId      String
+  type        String // "facebook_pixel" | "facebook_capi" | "snapchat_pixel" | "tiktok_pixel" | "tiktok_events_api"
+  label       String?
+  pixelId     String
+  accessToken String?
 
   // Facebook-specific fields
-  purchaseEvent          String       @default("Purchase")
-  enableAddToCart        Boolean      @default(false)
-  enableAddPaymentInfo   Boolean      @default(false)
-  enableInitiateCheckout Boolean      @default(true)
+  purchaseEvent          String  @default("Purchase")
+  enableAddToCart        Boolean @default(false)
+  enableAddPaymentInfo   Boolean @default(false)
+  enableInitiateCheckout Boolean @default(true)
 
   // Snapchat-specific fields
-  enableStartCheckout    Boolean      @default(true)   // START_CHECKOUT event
-  enablePurchase         Boolean      @default(true)   // PURCHASE event
+  enableStartCheckout Boolean @default(true) // START_CHECKOUT event
+  enablePurchase      Boolean @default(true) // PURCHASE event
 
   // TikTok-specific fields
-  enableTikTokInitiateCheckout Boolean @default(true)  // InitiateCheckout event (pixel only)
-  enablePlaceAnOrder            Boolean @default(true)  // PlaceAnOrder event (pixel + API)
-  enableCompletePayment         Boolean @default(true)  // CompletePayment event (pixel + API)
+  enableTikTokInitiateCheckout Boolean @default(true) // InitiateCheckout event (pixel only)
+  enablePlaceAnOrder           Boolean @default(true) // PlaceAnOrder event (pixel + API)
+  enableCompletePayment        Boolean @default(true) // CompletePayment event (pixel + API)
 
-  enabled                Boolean      @default(true)
-  testMode               Boolean      @default(false)
-  testEventCode          String?
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
-  shop                   Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  events                 PixelEvent[]
+  enabled       Boolean      @default(true)
+  testMode      Boolean      @default(false)
+  testEventCode String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  shop          Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  events        PixelEvent[]
 
   @@index([shopId])
   @@index([shopId, type, enabled])
@@ -504,17 +518,17 @@ model CustomerProfile {
 }
 
 model OTPSession {
-  id          String           @id @default(cuid())
-  shopId      String
-  phone       String
-  otp         String
-  verified    Boolean          @default(false)
-  expiresAt   DateTime
-  attempts    Int              @default(0)
+  id         String           @id @default(cuid())
+  shopId     String
+  phone      String
+  otp        String
+  verified   Boolean          @default(false)
+  expiresAt  DateTime
+  attempts   Int              @default(0)
   channel    String           @default("whatsapp")
-  createdAt   DateTime         @default(now())
-  customerId  String?
-  customer    CustomerProfile? @relation(fields: [customerId], references: [id])
+  createdAt  DateTime         @default(now())
+  customerId String?
+  customer   CustomerProfile? @relation(fields: [customerId], references: [id])
 
   @@index([shopId, phone])
   @@index([expiresAt])
@@ -533,14 +547,14 @@ model GlobalBuyer {
   whatsappVerified       Boolean            @default(false)
   totalOrdersGlobal      Int                @default(0)
   lastVerifiedAt         DateTime?
-  preferredPaymentMethod String?            // "cod" | "card" — last used payment method
-  lastCity               String?            // Last used city for smart defaults
-  lastProvince           String?            // Last used province for smart defaults
+  preferredPaymentMethod String? // "cod" | "card" — last used payment method
+  lastCity               String? // Last used city for smart defaults
+  lastProvince           String? // Last used province for smart defaults
   deliveredOrdersGlobal  Int                @default(0)
   rtoOrdersGlobal        Int                @default(0)
   cancelledOrdersGlobal  Int                @default(0)
   rtoRateGlobal          Float              @default(0)
-  riskScoreGlobal        String             @default("UNKNOWN")  // "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"
+  riskScoreGlobal        String             @default("UNKNOWN") // "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"
   lastRiskCalculatedAt   DateTime?
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
@@ -642,43 +656,43 @@ model BlockedUser {
 }
 
 model Bundle {
-  id                String   @id @default(cuid())
-  shopId            String
-  name              String   @default("My Bundle Offer")
-  priority          Int      @default(1)
-  enabled           Boolean  @default(false)
-  status            String   @default("draft")
+  id       String  @id @default(cuid())
+  shopId   String
+  name     String  @default("My Bundle Offer")
+  priority Int     @default(1)
+  enabled  Boolean @default(false)
+  status   String  @default("draft")
 
   // Display
-  headerText        String   @default("Buy More Save More")
-  hideHeaderLines   Boolean  @default(false)
+  headerText      String  @default("Buy More Save More")
+  hideHeaderLines Boolean @default(false)
 
   // Product Targeting
-  applyOn           String   @default("all")
-  productIds        Json     @default("[]")
-  productTitles     Json     @default("[]")
-  collectionIds     Json     @default("[]")
-  collectionTitles  Json     @default("[]")
+  applyOn          String @default("all")
+  productIds       Json   @default("[]")
+  productTitles    Json   @default("[]")
+  collectionIds    Json   @default("[]")
+  collectionTitles Json   @default("[]")
 
   // Basic Setup
-  allowVariantMix   Boolean  @default(false)
-  hideThemeVariants  Boolean  @default(false)
-  volumeDiscount     Boolean  @default(false)
-  showStockWarning   Boolean  @default(true)
+  allowVariantMix   Boolean @default(false)
+  hideThemeVariants Boolean @default(false)
+  volumeDiscount    Boolean @default(false)
+  showStockWarning  Boolean @default(true)
 
   // Tiers (JSON array)
-  tiers             Json     @default("[]")
+  tiers Json @default("[]")
 
   // Styling (JSON object)
-  styling           Json     @default("{}")
+  styling Json @default("{}")
 
   // Stats
-  impressions       Int      @default(0)
-  accepts           Int      @default(0)
+  impressions Int @default(0)
+  accepts     Int @default(0)
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([shopId, status])
@@ -691,8 +705,8 @@ model Bundle {
 
 model DeviceFingerprint {
   id            String   @id @default(cuid())
-  fingerprintId String   // ThumbmarkJS hash
-  phone         String   // Normalized phone (e.g., +923240310716)
+  fingerprintId String // ThumbmarkJS hash
+  phone         String // Normalized phone (e.g., +923240310716)
   lastSeenAt    DateTime @default(now())
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -716,11 +730,11 @@ model FulfillmentSyncCursor {
 
 model ExternalDeliveryRecord {
   id               String   @id @default(cuid())
-  phone            String   // Normalized phone — matches GlobalBuyer.phone
-  sourceApp        String   // "courierify" | "financify" (future)
-  sourceShopDomain String   // The shop this shipment belongs to
-  externalId       String   // Source record ID — used for deduplication
-  deliveryOutcome  String   // "delivered" | "returned" | "cancelled" | "in_transit" | "booked"
+  phone            String // Normalized phone — matches GlobalBuyer.phone
+  sourceApp        String // "courierify" | "financify" (future)
+  sourceShopDomain String // The shop this shipment belongs to
+  externalId       String // Source record ID — used for deduplication
+  deliveryOutcome  String // "delivered" | "returned" | "cancelled" | "in_transit" | "booked"
   orderValue       Decimal? @db.Decimal(10, 2)
   createdAt        DateTime @default(now())
   syncedAt         DateTime @default(now())

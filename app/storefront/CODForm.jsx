@@ -3629,6 +3629,20 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     cursor: 'pointer',
                   }}
                 />
+                {upsell.imageUrl && (
+                  <img
+                    src={upsell.imageUrl}
+                    alt=""
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      objectFit: 'cover',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(0,0,0,0.1)',
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
                 <div style={{ flex: 1 }}>
                   <div
                     style={{
