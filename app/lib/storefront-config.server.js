@@ -95,6 +95,14 @@ export async function buildStorefrontConfig(shopData) {
       cardDiscountType: shopData.settings.cardDiscountType,
       cardDiscountValue: shopData.settings.cardDiscountValue,
       allowDiscountOnBundles: shopData.settings.allowDiscountOnBundles,
+      // Native-checkout bundles mode: hide the COD button and let bundles drive
+      // the theme's native Add-to-Cart + Shopify checkout (Discount Function
+      // applies the tier discount). Master enable + per-country list (empty =
+      // everywhere). Native mode and COD are mutually exclusive per country.
+      nativeBundleCheckout: shopData.settings.nativeBundleCheckout || false,
+      nativeBundleCountries: Array.isArray(shopData.settings.nativeBundleCountries)
+        ? shopData.settings.nativeBundleCountries
+        : (typeof shopData.settings.nativeBundleCountries === 'string' ? JSON.parse(shopData.settings.nativeBundleCountries) : []),
       // PayFast settings (credentials never exposed to storefront)
       payfastEnabled: shopData.settings.payfastEnabled || false,
       payfastButtonText: shopData.settings.payfastButtonText,

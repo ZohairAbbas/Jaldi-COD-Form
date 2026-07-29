@@ -89,6 +89,9 @@ export default function Settings() {
   const [allowedSearch, setAllowedSearch] = useState('');
   const [showAllowedDropdown, setShowAllowedDropdown] = useState(false);
   const allowedSearchRef = useRef(null);
+  const [nativeBundleSearch, setNativeBundleSearch] = useState('');
+  const [showNativeBundleDropdown, setShowNativeBundleDropdown] = useState(false);
+  const nativeBundleSearchRef = useRef(null);
 
   // Fraud prevention state
   const [blockedEmails, setBlockedEmails] = useState(
@@ -321,6 +324,9 @@ export default function Settings() {
       }
       if (allowedSearchRef.current && !allowedSearchRef.current.contains(event.target)) {
         setShowAllowedDropdown(false);
+      }
+      if (nativeBundleSearchRef.current && !nativeBundleSearchRef.current.contains(event.target)) {
+        setShowNativeBundleDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -1206,6 +1212,118 @@ export default function Settings() {
               </s-text>
             </s-stack>
           </label>
+        </s-stack>
+      </s-section>
+
+      {/* Native Bundle Checkout Setting */}
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>Native Bundle Checkout</s-heading>
+          <s-paragraph>
+            Use Preventify bundles as a full bundle platform. When enabled, on products
+            with a bundle the COD button is hidden and customers add the selected tier
+            through your theme's own Add to Cart, checking out via Shopify's native
+            checkout. The tier discount is applied automatically by the bundle discount.
+          </s-paragraph>
+
+          <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={settings.nativeBundleCheckout || false}
+              onChange={(e) => handleUpdate({ nativeBundleCheckout: e.target.checked })}
+              style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+            />
+            <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+              <s-text variant="heading-sm">Enable native bundle checkout</s-text>
+              <s-text variant="body-sm" tone="subdued">
+                Requires a published bundle. The COD form is only hidden on products that
+                have a bundle — other products keep the COD button. Note: variant-mix
+                bundles are not yet supported in this mode and should use the COD form.
+              </s-text>
+            </s-stack>
+          </label>
+
+          {settings.nativeBundleCheckout && (
+            <>
+              <s-stack direction="block" gap="tight">
+                <s-text variant="heading-sm">Countries using native bundle checkout</s-text>
+                <s-text variant="body-sm" tone="subdued">
+                  Leave empty to apply everywhere. Add countries to use native bundle
+                  checkout only there — visitors from other countries keep the COD form
+                  on bundle products. Native mode and the COD form never both appear.
+                </s-text>
+                <div style={{ position: 'relative' }} ref={nativeBundleSearchRef}>
+                  <input
+                    type="text"
+                    value={nativeBundleSearch}
+                    onChange={(e) => setNativeBundleSearch(e.target.value)}
+                    onFocus={() => setShowNativeBundleDropdown(true)}
+                    placeholder="Search countries (leave empty for all)"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px', boxSizing: 'border-box' }}
+                  />
+                  {showNativeBundleDropdown && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0,
+                      backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '6px',
+                      marginTop: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 100,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    }}>
+                      {COUNTRY_OPTIONS
+                        .filter(c =>
+                          c.label.toLowerCase().includes(nativeBundleSearch.toLowerCase()) &&
+                          !(settings.nativeBundleCountries || []).includes(c.value)
+                        )
+                        .map(country => (
+                          <div
+                            key={country.value}
+                            onClick={() => {
+                              handleUpdate({ nativeBundleCountries: [...(settings.nativeBundleCountries || []), country.value] });
+                              setNativeBundleSearch('');
+                              setShowNativeBundleDropdown(false);
+                            }}
+                            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f5'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                          >
+                            {country.label}
+                          </div>
+                        ))}
+                      {COUNTRY_OPTIONS.filter(c =>
+                        c.label.toLowerCase().includes(nativeBundleSearch.toLowerCase()) &&
+                        !(settings.nativeBundleCountries || []).includes(c.value)
+                      ).length === 0 && (
+                        <div style={{ padding: '10px 12px', color: '#999' }}>No countries found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </s-stack>
+
+              {(settings.nativeBundleCountries || []).length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {settings.nativeBundleCountries.map(code => {
+                    const country = COUNTRY_OPTIONS.find(c => c.value === code);
+                    return (
+                      <div key={code} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: '#f5f5f5', borderRadius: '20px', fontSize: '14px' }}>
+                        <span>{country?.label || code}</span>
+                        <button
+                          onClick={() => handleUpdate({ nativeBundleCountries: settings.nativeBundleCountries.filter(c => c !== code) })}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', fontSize: '16px', lineHeight: 1, padding: 0 }}
+                          aria-label={`Remove ${country?.label || code}`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+                  <s-text variant="body-sm">No countries selected — native bundle checkout applies in all countries.</s-text>
+                </s-box>
+              )}
+            </>
+          )}
         </s-stack>
       </s-section>
 

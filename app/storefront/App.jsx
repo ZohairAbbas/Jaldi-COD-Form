@@ -11,6 +11,26 @@ import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from '
 import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
 import { resolveOrderRedirect } from './order-redirect';
 
+// Write a quantity into the theme's native quantity input so the theme's own
+// Add-to-Cart adds the right amount. Used in native-bundle-checkout mode, where
+// bundle tier selection must drive the native cart (not the COD form).
+// Dispatches input/change so theme quantity widgets (web components) react.
+function writeThemeQuantity(quantity) {
+  const inForm = document.querySelector('form[action*="/cart/add"] input[name="quantity"]');
+  let input = inForm;
+  if (!input) {
+    const all = document.querySelectorAll('input[name="quantity"]');
+    for (const el of all) {
+      if (el.type !== 'hidden' && el.offsetParent !== null) { input = el; break; }
+    }
+  }
+  if (!input) return false;
+  input.value = String(quantity);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
 // Default config to show button immediately while real config loads
 const defaultConfig = {
   settings: {
@@ -1777,10 +1797,36 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     buildVariantMixCartItems(selectedBundleTier, unitPrice, newSelections.length, newSelections);
   };
 
+  // Whether native-checkout bundle mode is active for THIS visitor. Requires the
+  // master toggle on, and — if a country list is configured — the visitor's
+  // detected country to be in it. Empty list = applies everywhere. Country still
+  // pending (null) counts as "not in list" so we fail toward COD until known
+  // (unless the list is empty, which is country-agnostic).
+  const nativeBundleMode = (() => {
+    const s = config?.settings || {};
+    if (!s.nativeBundleCheckout) return false;
+    const countries = Array.isArray(s.nativeBundleCountries) ? s.nativeBundleCountries : [];
+    if (countries.length === 0) return true; // everywhere
+    return !!detectedCountry && countries.includes(detectedCountry);
+  })();
+
   // Handle bundle tier selection
   const handleBundleTierSelect = (tier) => {
     console.log('[Preventify Debug] handleBundleTierSelect ENTER:', { tierQty: tier.quantity, inventoryQuantity, hasCurrentProduct: !!currentProduct, currentProductQty: currentProduct?.quantity, currentProductVariantId: currentProduct?.variantId });
     setSelectedBundleTier(tier);
+
+    // Native-checkout bundles mode: the COD form is hidden; selecting a tier
+    // just writes the tier quantity into the theme's native quantity input so
+    // the theme's own Add-to-Cart adds the right amount. The bundle Discount
+    // Function then applies the tier discount natively at checkout. We skip all
+    // the COD cart/price state below (it drives the hidden COD form only).
+    // NOTE: single-variant tiers only — variant-mix native support is a
+    // follow-up (it needs the theme's multi-item add form). Variant-mix bundles
+    // should not enable native mode until then.
+    if (nativeBundleMode) {
+      writeThemeQuantity(tier.quantity);
+      return;
+    }
 
     if (!currentProduct) return;
 
@@ -2426,11 +2472,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         />
       )}
 
-      <BuyButton
-        config={config}
-        onClick={handleBuyButtonClick}
-        compact={isProductCard}
-      />
+      {/* COD button — hidden in native-checkout bundles mode ONLY when a bundle
+          is actually active on this product (the theme's native Add-to-Cart
+          drives checkout instead, and the BundleWidget above lets customers pick
+          a tier). On products without a bundle, the COD button shows as normal. */}
+      {!(nativeBundleMode && activeBundleConfig && currentPageType === 'product') && (
+        <BuyButton
+          config={config}
+          onClick={handleBuyButtonClick}
+          compact={isProductCard}
+        />
+      )}
 
       {/* Sticky page bar (mobile) — only on the single main product/cart instance.
           Excluded from product-card grids, collection/homepage, and the cart drawer,
