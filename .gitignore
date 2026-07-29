@@ -74,3 +74,12 @@ coverage/
 *.pid.lock
 image/
 *.md
+
+Inventorify Current Flow/
+Google Sheets Flow/
+Smart Checkout Flow/
+Gokwik Checkout Flow/
+*.png
+*.txt
+courierify-schema.prisma
+financify-schema.prisma

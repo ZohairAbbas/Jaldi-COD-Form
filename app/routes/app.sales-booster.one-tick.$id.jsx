@@ -378,6 +378,28 @@ export default function OneTickUpsellEditor() {
                     />
                   </s-stack>
 
+                  {/* Image URL */}
+                  <s-stack direction="block" gap="tight">
+                    <s-text variant="body-sm">Image URL</s-text>
+                    <input
+                      type="text"
+                      value={upsell.imageUrl || ""}
+                      onChange={(e) => handleUpdate({ imageUrl: e.target.value })}
+                      placeholder="https://cdn.shopify.com/..."
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid #d1d5db",
+                        fontSize: "14px",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <s-text variant="body-sm" tone="subdued">
+                      Paste an image URL (e.g. from Shopify Content &gt; Files). An icon appears next to the offer. Leave blank to hide it.
+                    </s-text>
+                  </s-stack>
+
                   {/* Text and Description Colors */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                     <s-stack direction="block" gap="tight">
@@ -630,6 +652,20 @@ export default function OneTickUpsellEditor() {
                           cursor: "pointer",
                         }}
                       />
+                      {upsell.imageUrl && (
+                        <img
+                          src={upsell.imageUrl}
+                          alt=""
+                          style={{
+                            width: "44px",
+                            height: "44px",
+                            objectFit: "cover",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(0,0,0,0.1)",
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
                       <div style={{ flex: 1 }}>
                         <div
                           style={{

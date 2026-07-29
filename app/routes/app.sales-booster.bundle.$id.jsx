@@ -12,6 +12,8 @@ import {
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
+import { getShopByDomain } from "../lib/db.server";
+import { ensureBundleDiscount } from "../lib/bundle-function.server";
 
 export const loader = async ({ request, params }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -124,6 +126,14 @@ export const action = async ({ request, params }) => {
 
   // Refresh the inlined storefront config metafield (non-blocking on failure).
   await syncStorefrontConfigByDomain(admin, session.shop);
+
+  // Keep the native-checkout bundle Discount Function's config in sync and
+  // ensure its automatic discount exists (non-blocking on failure). Reloads the
+  // shop with its published bundles so the function config reflects this save.
+  const shopWithBundles = await getShopByDomain(session.shop);
+  if (shopWithBundles) {
+    await ensureBundleDiscount(admin, shopWithBundles);
+  }
   return result;
 };
 
