@@ -31,6 +31,52 @@ function writeThemeQuantity(quantity) {
   return true;
 }
 
+// Read the currently-selected Bucks currency (ISO code, e.g. "EUR").
+// The hidden #bucksSelector.value is unreliable (stays stale on the first-load
+// currency). The live sources are the widget's `.bucks-selected` text and the
+// `buckscc_last_manual` localStorage entry Bucks writes on every switch.
+function getBucksActiveCurrency() {
+  try {
+    const el = document.querySelector('.bucks-selected');
+    const code = el?.textContent?.trim();
+    if (code && /^[A-Z]{3}$/.test(code)) return code;
+    const ls = localStorage.getItem('buckscc_last_manual');
+    if (ls) {
+      const parsed = JSON.parse(ls);
+      if (parsed?.currency && /^[A-Z]{3}$/.test(parsed.currency)) return parsed.currency;
+    }
+  } catch (e) {
+    // DOM/storage unavailable — caller falls back.
+  }
+  return null;
+}
+
+// Extract the display currency symbol from a Bucks `money_format` template.
+// Templates vary widely, e.g.:
+//   "${{amount}}"                              → "$"
+//   "&pound;{{amount}}"                        → "£"   (HTML entity)
+//   "&euro;{{amount_with_comma_separator}}"    → "€"   (entity + comma variant)
+//   "QAR {{amount_with_comma_separator}}"      → "QAR"
+//   "<span class=money>Rs.{{amount}}</span>"   → "Rs."
+// So we must: strip HTML tags, decode HTML entities, and split on ANY
+// {{amount...}} placeholder (not just the literal {{amount}}). Returns the part
+// before the placeholder (prefix symbol); '' if the symbol is a suffix.
+function parseBucksSymbol(moneyFormat, fallback) {
+  try {
+    if (!moneyFormat) return fallback;
+    let s = moneyFormat.replace(/<[^>]*>/g, ''); // strip HTML tags
+    // Decode HTML entities via a detached element (handles &pound; &euro; etc.)
+    const ta = document.createElement('textarea');
+    ta.innerHTML = s;
+    s = ta.value;
+    // Take everything before the first {{...}} placeholder.
+    const prefix = s.split(/\{\{[^}]*\}\}/)[0]?.trim();
+    return prefix || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
 // Default config to show button immediately while real config loads
 const defaultConfig = {
   settings: {
@@ -403,6 +449,56 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             return { currencySymbol: symbol, price: null, currencyCode: '', exchangeRate: null };
           }
         }
+      }
+
+      // 2b. Bucks API fallback — when the theme's price element is hidden, there
+      // is no converted .money node in the DOM to scrape (branches 1 & 2 above
+      // find nothing), so bundle prices would stay in base currency. Bucks
+      // exposes its own converter: window.bucksCC.Currency.convert(amount, from, to)
+      // = amount * rates[from] / rates[to]. We derive the base→active rate from
+      // it directly, independent of any visible price element. Bucks reloads the
+      // page on currency switch (getConfig().multiCurrencyForceReload), so reading
+      // the active currency once at render stays correct.
+      try {
+        const cc = window.bucksCC;
+        if (cc?.Currency?.convert && typeof cc.getConfig === 'function') {
+          const cfg = cc.getConfig() || {};
+          const base = cfg.baseCurrency;
+          // Active currency: the hidden #bucksSelector.value is STALE (stays on the
+          // first-load currency), and cfg.userCurrency reads the base. The reliable
+          // live source is the widget's .bucks-selected text, backed by the
+          // buckscc_last_manual localStorage entry Bucks writes on each switch.
+          const active = getBucksActiveCurrency() || cfg.userCurrency;
+          if (base && active && active !== base) {
+            const rate = cc.Currency.convert(1, base, active);
+            if (rate && rate > 0 && isFinite(rate)) {
+              // Symbol from Bucks' own currencyFormats so it matches the rest of
+              // the page (handles HTML entities and the {{amount_with_comma_separator}}
+              // placeholder variant). Fall back to the currency code.
+              const fmt = cc.currencyFormats?.[active]?.money_format || '';
+              const symbol = parseBucksSymbol(fmt, active);
+              return { currencySymbol: symbol, price: null, currencyCode: active, exchangeRate: rate };
+            }
+          } else if (base && active && active === base) {
+            // Active currency IS the base (e.g. PKR selected, or auto-selected on
+            // load). No conversion needed, but we STILL return a result so every
+            // caller sets the BASE symbol ("Rs.") consistently — otherwise callers
+            // omit displayCurrencySymbol and the widget falls back to
+            // getCurrencySymbol(shop.country), which can be a different currency
+            // (e.g. shop country UAE → "Dhs." while base is PKR). exchangeRate is
+            // null so amounts stay in base. Only return once Bucks has populated
+            // baseMoneyFormat/baseCurrency (undefined for a moment after load) —
+            // else return null so the caller keeps its value and the next poll
+            // retries. parseBucksSymbol falls back to the base code if the format
+            // isn't ready but the code is.
+            const baseSymbol = parseBucksSymbol(cfg.baseMoneyFormat, base);
+            if (baseSymbol) {
+              return { currencySymbol: baseSymbol, price: null, currencyCode: base, exchangeRate: null };
+            }
+          }
+        }
+      } catch (e) {
+        // Bucks internals changed / unavailable — fall through to other detection.
       }
 
       // 3. Check for Shopify Markets (multi-currency via window.Shopify.currency)
@@ -953,13 +1049,19 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           // Re-read quantity-breaks display prices for the new currency
           const qbData = getQuantityBreaksData();
 
+          // When rate is explicitly null, the active currency IS the base (e.g.
+          // PKR selected). We must CLEAR any prior currency's conversion so
+          // amounts fall back to base — otherwise a stale EUR rate would keep
+          // converting the numbers even though the symbol is now the base symbol.
+          const isBase = rate == null;
+
           setCurrentProduct(prev => {
             if (!prev) return prev;
             const updated = {
               ...prev,
               displayCurrencySymbol: displayedPriceData.currencySymbol,
               displayCurrencyCode: displayedPriceData.currencyCode,
-              displayExchangeRate: displayedPriceData.exchangeRate || prev.displayExchangeRate,
+              displayExchangeRate: isBase ? undefined : (displayedPriceData.exchangeRate || prev.displayExchangeRate),
             };
             // Use bundle display price if available, otherwise convert base price
             if (qbData?.displayDiscountedPrice) {
@@ -969,7 +1071,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
               updated.displayPrice = parseFloat((prev.price * rate).toFixed(2));
               if (prev.originalPrice) updated.displayOriginalPrice = parseFloat((prev.originalPrice * rate).toFixed(2));
             } else {
-              updated.displayPrice = displayedPriceData.price;
+              // Base currency: clear display prices so base amounts show.
+              updated.displayPrice = undefined;
+              updated.displayOriginalPrice = undefined;
             }
             return updated;
           });
@@ -985,6 +1089,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
               if (item.originalPrice) {
                 updatedItem.displayOriginalPrice = parseFloat((item.originalPrice * rate).toFixed(2));
               }
+            } else if (isBase) {
+              // Base currency: clear stale conversion.
+              updatedItem.displayPrice = undefined;
+              updatedItem.displayOriginalPrice = undefined;
+              updatedItem.displayExchangeRate = undefined;
             }
             return updatedItem;
           };
@@ -996,6 +1105,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           }));
         }
       }
+      // NOTE: the base-currency case (Bucks active === base, e.g. PKR) is now
+      // handled INSIDE getDisplayedPriceData(), which returns a base result
+      // (base symbol, exchangeRate null) once Bucks is initialized. So the
+      // `if (displayedPriceData)` branch above sets the base symbol consistently
+      // for every writer — no separate reset branch needed.
     }, 300);
 
     // Listen for quantity changes
@@ -1281,8 +1395,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           initializePixels(data.pixels);
         }
 
-        // Detect country if multi-country is enabled
-        if (data.shop?.enableMultiCountry) {
+        // Detect country if multi-country pricing is enabled, OR native-bundle
+        // checkout is scoped to a country list (which also needs the visitor's
+        // country). Without this, detectedCountry stays null and native-bundle
+        // mode never activates for a configured country list.
+        const nbCountries = Array.isArray(data.settings?.nativeBundleCountries)
+          ? data.settings.nativeBundleCountries
+          : [];
+        const nativeBundleNeedsCountry = data.settings?.nativeBundleCheckout && nbCountries.length > 0;
+        if (data.shop?.enableMultiCountry || nativeBundleNeedsCountry) {
           detectCountry(data);
         }
 
