@@ -1134,9 +1134,22 @@ function watchProductCards(shopDomain) {
   });
 }
 
+// Re-entry guard: preventify.js can be loaded more than once on a page — the
+// app-embed block AND the manual COD-button/embedded-form blocks each include a
+// <script src="preventify.js">. Without this guard, initializePreventify() runs
+// once per script load, mounting a SECOND React root on the same container (e.g.
+// two createRoot() calls on #preventify-popup-manual) → duplicate COD button /
+// bundle widget. Guarding on window ensures init happens exactly once per page,
+// regardless of how many times the bundle is loaded.
+function initPreventifyOnce() {
+  if (window.__preventifyInitialized) return;
+  window.__preventifyInitialized = true;
+  initializePreventify();
+}
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializePreventify);
+  document.addEventListener('DOMContentLoaded', initPreventifyOnce);
 } else {
-  initializePreventify();
+  initPreventifyOnce();
 }
