@@ -8,7 +8,7 @@ import DownsellModal from './DownsellModal';
 import BundleWidget, { calculateTierPrice } from './BundleWidget';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
-import { normalizePrice, getCurrencyCode, getCurrencySymbol } from '../lib/constants';
+import { normalizePrice, getCurrencyCode, getCurrencySymbol, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
 import { resolveOrderRedirect } from './order-redirect';
 
 // Write a quantity into the theme's native quantity input so the theme's own
@@ -179,6 +179,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Guards one-time side effects in applyConfig (impression/pixel/mixpanel init)
   // so they don't double-fire when config is applied twice (inlined + reconcile).
   const configSideEffectsRanRef = React.useRef(false);
+
+  // Latest tier/product for the native-bundle add interception (below), read
+  // from a capture-phase click handler that must not use stale closure values.
+  const selectedBundleTierRef = React.useRef(null);
+  const currentProductRef = React.useRef(null);
 
   useEffect(() => {
     loadConfig();
@@ -1453,10 +1458,34 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }
   };
 
+  // The visitor's REAL country (mapped internal code from isoCountry), cached
+  // separately from `detectedCountry`. Used ONLY for native-bundle matching so
+  // it's never confused with the shop-default `country`. Shared across all app
+  // instances (cards/drawer) via sessionStorage, keyed by shopDomain.
+  const REAL_COUNTRY_KEY = `preventify_real_country_${shopDomain}`;
+  const cacheRealVisitorCountry = (country) => {
+    try {
+      sessionStorage.setItem(REAL_COUNTRY_KEY, JSON.stringify({ country, timestamp: Date.now() }));
+    } catch (e) { /* ignore */ }
+  };
+  const getRealVisitorCountry = () => {
+    try {
+      const cached = sessionStorage.getItem(REAL_COUNTRY_KEY);
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (Date.now() - data.timestamp < 3600000) return data.country; // 1h TTL
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  };
+
   const detectCountry = async (configData) => {
-    // Check cache first
+    // Check cache first. Only short-circuit when BOTH caches are warm — the
+    // shop-default `detectedCountry` AND the real-visitor country (needed for
+    // native-bundle matching). If the real-country cache is missing/expired,
+    // fall through to the fetch so it gets populated.
     const cached = getCachedCountry();
-    if (cached) {
+    if (cached && getRealVisitorCountry()) {
       setDetectedCountry(cached);
       return;
     }
@@ -1475,6 +1504,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const data = await response.json();
       setDetectedCountry(data.country);
       cacheCountry(data.country);
+      // Separately cache the visitor's REAL country (from isoCountry, mapped to
+      // internal format e.g. PK→PAK) for native-bundle matching. `data.country`
+      // is the SHOP DEFAULT when multi-country pricing is off, so it must NOT be
+      // used to decide native mode — that would match against the store's
+      // operating country, not the visitor's. Mirrors isCountryAllowed()
+      // in index.jsx which correctly uses isoCountry.
+      const iso = data?.isoCountry ? String(data.isoCountry).toUpperCase() : null;
+      const realInternal = iso ? (SHOPIFY_COUNTRY_CODE_MAP[iso] || iso) : null;
+      if (realInternal) cacheRealVisitorCountry(realInternal);
     } catch (error) {
       if (error.name === 'AbortError') {
         console.warn('Preventify: Country detection timeout');
@@ -1928,7 +1966,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     if (!s.nativeBundleCheckout) return false;
     const countries = Array.isArray(s.nativeBundleCountries) ? s.nativeBundleCountries : [];
     if (countries.length === 0) return true; // everywhere
-    return !!detectedCountry && countries.includes(detectedCountry);
+    // Match against the visitor's REAL country (from isoCountry, mapped internal),
+    // NOT `detectedCountry`/shop-default — which would be the store's operating
+    // country (e.g. UAE) even for a visitor in PAK. Read from the shared cache so
+    // it resolves consistently on the product page, collection cards, and drawer.
+    const country = getRealVisitorCountry();
+    return !!country && countries.includes(country);
   })();
 
   // Handle bundle tier selection
@@ -2134,6 +2177,163 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       }
     }
   }, [currentProduct?.variantId, selectedBundleTier, activeBundleConfig, bundleBasePrice]);
+
+  // Keep refs current for the capture-phase click handler below.
+  useEffect(() => { selectedBundleTierRef.current = selectedBundleTier; }, [selectedBundleTier]);
+  useEffect(() => { currentProductRef.current = currentProduct; }, [currentProduct]);
+
+  // Native bundle mode: intercept the theme's Add-to-Cart and Buy-it-now on
+  // bundle products and drive our OWN /cart/add with an explicit quantity.
+  //
+  // Why: relying on the theme's form serialization (writeThemeQuantity) is
+  // theme-dependent — on some themes the quantity input lives outside the
+  // /cart/add form and Buy-it-now serializes qty=1 (or omits it), so bundles
+  // check out with the wrong quantity. Pumper avoids this by building its own
+  // /cart/add payload; we do the same so quantity is correct on EVERY theme.
+  //
+  // Behaviour matches Pumper (confirmed against their network flows):
+  //   Add-to-Cart → POST /cart/add.js (qty=N) → open the cart drawer, stay on page
+  //   Buy-it-now  → POST /cart/add.js (qty=N) → navigate to /checkout, which
+  //                 Shopify 302-redirects to the tokenized /checkouts/cn/... URL
+  //                 (verified: Pumper's flow shows a `checkout` 302 document req).
+  useEffect(() => {
+    const active = nativeBundleMode && !!activeBundleConfig && currentPageType === 'product' && !isCartDrawer;
+    if (!active) return;
+
+    let submitting = false;
+
+    const numericVariantId = () => {
+      const gid = currentProductRef.current?.variantId || '';
+      const n = String(gid).split('/').pop();
+      return /^\d+$/.test(n) ? n : null;
+    };
+
+    const addToCart = async (quantity) => {
+      const id = numericVariantId();
+      if (!id) return null;
+      const res = await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ id: Number(id), quantity }],
+          sections: 'cart-drawer,cart-icon-bubble',
+        }),
+      });
+      if (!res.ok) return null;
+      return res.json().catch(() => null); // contains `sections` HTML for re-render
+    };
+
+    // Re-render the theme's cart drawer from the sections HTML returned by
+    // /cart/add.js, THEN open it. Without injecting the fresh HTML, the drawer
+    // shows its stale page-load (empty) state even though the cart has items.
+    // The theme toggles an `is-empty` class ON the <cart-drawer> element itself,
+    // so we must sync BOTH the inner HTML and that class from the returned markup
+    // (missing the class = the drawer stays styled empty / white).
+    const refreshAndOpenDrawer = (addResult) => {
+      const liveDrawer = document.querySelector('cart-drawer');
+      // No <cart-drawer> element on this theme → we can't reliably re-render or
+      // open a drawer. Degrade safely by navigating to the /cart page, which
+      // always shows the correct contents. (The add itself already succeeded.)
+      if (!liveDrawer) {
+        window.location.href = '/cart';
+        return;
+      }
+
+      try {
+        const html = addResult?.sections?.['cart-drawer'];
+        if (html) {
+          const parsed = new DOMParser().parseFromString(html, 'text/html');
+          const newDrawer = parsed.querySelector('cart-drawer');
+          if (newDrawer) {
+            liveDrawer.innerHTML = newDrawer.innerHTML;
+            // Sync the element's own classes (esp. `is-empty` on/off).
+            liveDrawer.className = newDrawer.className;
+          }
+        }
+        const bubbleHtml = addResult?.sections?.['cart-icon-bubble'];
+        if (bubbleHtml) {
+          const liveBubble = document.querySelector('#cart-icon-bubble');
+          const parsedBubble = new DOMParser().parseFromString(bubbleHtml, 'text/html').querySelector('#cart-icon-bubble');
+          if (liveBubble && parsedBubble) liveBubble.innerHTML = parsedBubble.innerHTML;
+        }
+      } catch (err) { /* fall through to opening attempts below */ }
+
+      // Open the drawer. If none of the open paths work on this theme, fall back
+      // to the /cart page so the customer still reaches their (correct) cart.
+      if (typeof liveDrawer.open === 'function') { liveDrawer.open(); return; }
+      document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
+      const toggle = document.querySelector('#cart-icon-bubble, .cart-icon-bubble, a[href$="/cart"]');
+      if (toggle) { toggle.click(); return; }
+      // Last resort: no way to open the drawer on this theme.
+      window.location.href = '/cart';
+    };
+
+    const handleCapture = async (e) => {
+      // CRITICAL: never intercept clicks inside the CART DRAWER / cart area. The
+      // drawer's "Checkout" button (name="checkout") lives there — intercepting
+      // it would re-add the product (doubling quantity) when the customer only
+      // wants to check out the existing cart. Scope out those containers first.
+      if (e.target.closest?.('cart-drawer, #CartDrawer, .cart-drawer, cart-notification, #cart-notification')) return;
+
+      // Add-to-Cart: the submit button named "add" (the Shopify convention,
+      // near-universal across themes).
+      const atc = e.target.closest?.('button[name="add"]');
+
+      // Buy-it-now / express checkout on the PRODUCT page. Themes render this
+      // MANY ways, so detect broadly, then exclude the named ATC. Note: we do
+      // NOT match [name="checkout"] here — that's the cart/drawer checkout
+      // button, not a product Buy-it-now. Covers:
+      //  - Shopify's standard dynamic-checkout button (.shopify-payment-button)
+      //  - Dawn-family "skip cart" buttons (data-skip-cart-button, id SectionAtcBtn*)
+      //  - Common express/buy-now classes and data attributes across themes
+      //  - Any product-form button whose text is "Buy it now"
+      let binEl = e.target.closest?.(
+        '.shopify-payment-button, .shopify-payment-button__button, [data-shopify="payment-button"], ' +
+        '[data-skip-cart-button], button[id^="SectionAtcBtn"], ' +
+        '.product-form__buy-now, [data-buy-now], .buy-now-button, .shopify-buy-it-now'
+      );
+      // Fallback: a product-form button (not name="add") whose label says "buy it now".
+      if (!binEl) {
+        const btn = e.target.closest?.('button, [role="button"]');
+        if (btn && !btn.matches?.('button[name="add"]') && /buy it now/i.test(btn.textContent || '')) {
+          binEl = btn;
+        }
+      }
+      // A matched express button that isn't the named ATC = Buy-it-now.
+      const bin = binEl && !(binEl.matches?.('button[name="add"]'));
+      if (!atc && !bin) return;
+      // Never touch our own injected UI.
+      if (e.target.closest?.('#preventify-popup, #preventify-embedded, [data-preventify-app-embed], [data-preventify-manual-popup], [data-preventify-manual-embedded]')) return;
+
+      const tier = selectedBundleTierRef.current;
+      // Only take over when a bundle tier is actually selected; otherwise let the
+      // theme handle a normal single-item add.
+      if (!tier) return;
+      const quantity = tier.quantity || 1;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (submitting) return;
+      submitting = true;
+
+      try {
+        const result = await addToCart(quantity);
+        if (!result) { submitting = false; return; }
+        if (bin) {
+          window.location.href = '/checkout';
+        } else {
+          submitting = false;
+          refreshAndOpenDrawer(result);
+        }
+      } catch (err) {
+        submitting = false;
+      }
+    };
+
+    // Capture phase (true) so we run BEFORE the theme's own click handlers.
+    document.addEventListener('click', handleCapture, true);
+    return () => document.removeEventListener('click', handleCapture, true);
+  }, [nativeBundleMode, activeBundleConfig, currentPageType, isCartDrawer]);
 
   // Handle button click - check for upsell first
   const handleBuyButtonClick = () => {
@@ -2593,11 +2793,13 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         />
       )}
 
-      {/* COD button — hidden in native-checkout bundles mode ONLY when a bundle
-          is actually active on this product (the theme's native Add-to-Cart
-          drives checkout instead, and the BundleWidget above lets customers pick
-          a tier). On products without a bundle, the COD button shows as normal. */}
-      {!(nativeBundleMode && activeBundleConfig && currentPageType === 'product') && (
+      {/* COD button — hidden entirely when native-checkout bundle mode is active
+          for this visitor. In native mode the store uses Shopify's native
+          checkout (theme Add-to-Cart + Buy-it-now, with our Discount Function),
+          so the COD button is suppressed on ALL surfaces: product page,
+          collection product cards, and the cart drawer. When native mode is off,
+          the COD button shows as normal everywhere. */}
+      {!nativeBundleMode && (
         <BuyButton
           config={config}
           onClick={handleBuyButtonClick}
