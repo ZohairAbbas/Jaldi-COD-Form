@@ -2182,6 +2182,51 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   useEffect(() => { selectedBundleTierRef.current = selectedBundleTier; }, [selectedBundleTier]);
   useEffect(() => { currentProductRef.current = currentProduct; }, [currentProduct]);
 
+  // Native bundle mode: the bundle widget is the PRIMARY purchase UI, so it
+  // should sit ABOVE the theme's Add-to-Cart / Buy-it-now buttons. By default
+  // Preventify injects its app container AFTER the product-form buttons (correct
+  // for the COD button, which belongs below ATC). In native mode we move that
+  // container above the buttons instead. Native mode is resolved here in React
+  // (single source of truth, incl. async country), avoiding a duplicate/guessed
+  // decision at inject time in index.jsx. Idempotent + reverts if native mode
+  // turns out false. Skipped for product cards, cart drawer, and non-product pages.
+  useEffect(() => {
+    if (isCartDrawer || isProductCard || currentPageType !== 'product') return;
+
+    // Our mounted app container (default popup/embedded, or a manual block).
+    const container = document.querySelector(
+      '#preventify-popup, #preventify-embedded, [data-preventify-manual-popup], [data-preventify-manual-embedded]'
+    );
+    if (!container) return;
+
+    // Anchor: the product-form buttons wrapper, else the ATC button, else the
+    // product form/section — same anchors index.jsx uses for insertion.
+    const atc = document.querySelector('form[action*="/cart/add"] button[name="add"], button[name="add"]');
+    const anchor = atc?.closest('.product-form-buttons, .product-form__buttons')
+      || atc
+      || document.querySelector('form[action*="/cart/add"]:not(.payment-terms)');
+    if (!anchor || !anchor.parentElement) return;
+
+    if (nativeBundleMode && activeBundleConfig) {
+      // Move ABOVE the buttons (only if not already positioned there).
+      if (container.nextElementSibling !== anchor) {
+        // Remember original position once, so we can restore if native flips off.
+        if (!container.dataset.preventifyOrigParent) {
+          container.dataset.preventifyOrigParent = '1';
+          container._preventifyOrigNext = container.nextSibling;
+          container._preventifyOrigParentEl = container.parentElement;
+        }
+        anchor.parentElement.insertBefore(container, anchor);
+      }
+    } else if (container.dataset.preventifyOrigParent) {
+      // Native mode turned off — restore to original DOM position.
+      const origParent = container._preventifyOrigParentEl;
+      const origNext = container._preventifyOrigNext;
+      if (origParent) origParent.insertBefore(container, origNext || null);
+      delete container.dataset.preventifyOrigParent;
+    }
+  }, [nativeBundleMode, activeBundleConfig, currentPageType, isCartDrawer, isProductCard]);
+
   // Native bundle mode: intercept the theme's Add-to-Cart and Buy-it-now on
   // bundle products and drive our OWN /cart/add with an explicit quantity.
   //
