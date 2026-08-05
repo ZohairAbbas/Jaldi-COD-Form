@@ -396,10 +396,10 @@ export const COUNTRIES = {
     provinces: [
       'Al Asimah',
       'Hawalli',
-      'Farwaniya',
+      'Al Farwaniyah',
       'Mubarak Al-Kabeer',
-      'Ahmadi',
-      'Jahra'
+      'Al Ahmadi',
+      'Al Jahra'
     ]
   },
   KSA: {
