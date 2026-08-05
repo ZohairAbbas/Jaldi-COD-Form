@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import JaldiCODFormApp from './App';
 import { normalizePrice, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
+import { isNativeBundleMode } from './native-bundle';
 
 // Country restriction gate. Returns true if the COD form is allowed to render
 // on this visit. Fail-open: if detection fails/times out, allow rendering.
@@ -688,6 +689,14 @@ function renderPopupOnProductCards(shopDomain) {
     return;
   }
 
+  // Safety net: never replace the theme's ATC on cards in native bundle mode
+  // (the COD button doesn't render there, so the card would be left with no buy
+  // button). Guards against any call path reaching here in native mode.
+  const inlined = window.PREVENTIFY_SETTINGS;
+  if (inlined && isNativeBundleMode(inlined, shopDomain)) {
+    return;
+  }
+
   // Find all product cards - try multiple selectors for different themes
   let productCards = document.querySelectorAll('product-card[data-product-id]');
 
@@ -1005,11 +1014,16 @@ function renderFromConfig(config, shopDomain, productData, appEmbedContainer) {
     // Detect current page type
     const pageType = detectPageType();
 
-    // Handle collection and homepage separately - always show if app embed is enabled
+    // Handle collection and homepage separately - always show if app embed is enabled.
+    // In native bundle mode we do NOT replace the theme's Add-to-Cart on product
+    // cards: the COD button doesn't render in native mode, so replacing ATC would
+    // leave the card with no buy button at all. Leave the theme's native ATC intact.
     if ((pageType === 'collection' || pageType === 'homepage') && config.settings.formMode === 'popup') {
-      renderPopupOnProductCards(shopDomain);
-      // Watch for dynamically loaded product cards
-      watchProductCards(shopDomain);
+      if (!isNativeBundleMode(config, shopDomain)) {
+        renderPopupOnProductCards(shopDomain);
+        // Watch for dynamically loaded product cards
+        watchProductCards(shopDomain);
+      }
       return; // Don't render default button
     }
 
