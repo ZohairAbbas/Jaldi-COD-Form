@@ -9,6 +9,7 @@ import BundleWidget, { calculateTierPrice } from './BundleWidget';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
+import { isNativeBundleMode } from './native-bundle';
 import { resolveOrderRedirect } from './order-redirect';
 
 // Write a quantity into the theme's native quantity input so the theme's own
@@ -1961,18 +1962,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // detected country to be in it. Empty list = applies everywhere. Country still
   // pending (null) counts as "not in list" so we fail toward COD until known
   // (unless the list is empty, which is country-agnostic).
-  const nativeBundleMode = (() => {
-    const s = config?.settings || {};
-    if (!s.nativeBundleCheckout) return false;
-    const countries = Array.isArray(s.nativeBundleCountries) ? s.nativeBundleCountries : [];
-    if (countries.length === 0) return true; // everywhere
-    // Match against the visitor's REAL country (from isoCountry, mapped internal),
-    // NOT `detectedCountry`/shop-default — which would be the store's operating
-    // country (e.g. UAE) even for a visitor in PAK. Read from the shared cache so
-    // it resolves consistently on the product page, collection cards, and drawer.
-    const country = getRealVisitorCountry();
-    return !!country && countries.includes(country);
-  })();
+  // Single source of truth (shared with index.jsx via ./native-bundle). Matches
+  // against the visitor's REAL country (from isoCountry, mapped internal) — NOT
+  // `detectedCountry`/shop-default, which would be the store's operating country
+  // (e.g. UAE) even for a visitor in PAK. We pass getRealVisitorCountry() as the
+  // override so both files resolve identically from the shared cache.
+  const nativeBundleMode = isNativeBundleMode(config, shopDomain, getRealVisitorCountry());
 
   // Handle bundle tier selection
   const handleBundleTierSelect = (tier) => {
