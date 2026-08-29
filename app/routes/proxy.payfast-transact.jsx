@@ -1,8 +1,8 @@
 import { getShopByDomain, getEnabledPixels, isUserBlocked } from "../lib/db.server";
 import { buildHmac, executeTransaction, getTransactionStatus, isPayfastSuccess, isPayfastPending } from "../lib/payfast.server";
 import { createShopifyOrder } from "../lib/order.server";
-import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
-import { normalizePrice, parseJsonColumn } from "../lib/constants";
+import { firePurchaseEvent, fireTikTokEvents } from "../lib/pixels.server";
+import { normalizePrice, parseJsonColumn, resolvePixelCurrency } from "../lib/constants";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import prisma from "../db.server";
@@ -303,7 +303,13 @@ export const action = async ({ request }) => {
     try {
       const pixels = await getEnabledPixels(shop.id);
       if (pixels && pixels.length > 0) {
-        const currency = getCurrencyFromCountry(shop.country);
+        // Report the currency the customer was actually charged in — never the
+        // country dropdown, which is unrelated to the store's real currency.
+        const currency = resolvePixelCurrency({
+          presentmentCurrency: data.presentmentCurrencyCode,
+          shopCurrencyCode: shop.currencyCode,
+          country: shop.country,
+        });
         const clientIpAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
         const clientUserAgent = request.headers.get("user-agent") || "";
         const utmData = {

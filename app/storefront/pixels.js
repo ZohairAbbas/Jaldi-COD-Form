@@ -543,9 +543,19 @@ export function trackTikTokInitiateCheckout(cart, currency = 'PKR') {
 }
 
 /**
- * Track PlaceAnOrder event on TikTok
+ * Track the TikTok Purchase event for a completed order.
+ *
+ * `Purchase` is the only valid TikTok Events API 2.0 web conversion event —
+ * "PlaceAnOrder" and "CompletePayment" are legacy pixel event names. Both
+ * toggles therefore map to a single Purchase, exactly as the server-side path
+ * in pixels.server.js does. They used to be fired as two separate ttq.track
+ * calls with no event_id, which TikTok could not deduplicate and which
+ * double-counted orders and revenue for any shop with both toggles enabled.
+ *
+ * The event_id is the same one used for the server-side event, so TikTok
+ * collapses the browser and server copies into one conversion.
  */
-export function trackTikTokPlaceAnOrder(orderData, currency = 'PKR') {
+export function trackTikTokPurchase(orderData, currency = 'PKR') {
   if (!pixelConfig || !pixelConfig.tiktok || pixelConfig.tiktok.length === 0) {
     return;
   }
@@ -555,7 +565,8 @@ export function trackTikTokPlaceAnOrder(orderData, currency = 'PKR') {
     return;
   }
 
-  const { items, total, orderNumber } = orderData;
+  const { items, total } = orderData;
+  const eventId = orderData.eventId || getEventId();
 
   const eventData = {
     content_type: 'product',
@@ -572,58 +583,19 @@ export function trackTikTokPlaceAnOrder(orderData, currency = 'PKR') {
   };
 
   pixelConfig.tiktok.forEach(pixel => {
-    if (!pixel.enablePlaceAnOrder) {
+    // Either toggle means "report purchases"; neither means the merchant has
+    // turned purchase reporting off for this pixel.
+    if (!pixel.enablePlaceAnOrder && !pixel.enableCompletePayment) {
       return;
     }
 
     try {
-      window.ttq.track('Purchase', eventData);
-      console.log(`[TikTok Pixel] Fired PlaceAnOrder on pixel ${pixel.pixelId}`, eventData);
+      window.ttq.track('Purchase', eventData, { event_id: eventId });
+      console.log(`[TikTok Pixel] Fired Purchase on pixel ${pixel.pixelId}`, eventData);
     } catch (error) {
-      console.error(`Error tracking PlaceAnOrder on TikTok pixel ${pixel.pixelId}:`, error);
+      console.error(`Error tracking Purchase on TikTok pixel ${pixel.pixelId}:`, error);
     }
   });
-}
 
-/**
- * Track CompletePayment event on TikTok
- */
-export function trackTikTokCompletePayment(orderData, currency = 'PKR') {
-  if (!pixelConfig || !pixelConfig.tiktok || pixelConfig.tiktok.length === 0) {
-    return;
-  }
-
-  if (!window.ttq) {
-    console.warn('TikTok Pixel not loaded');
-    return;
-  }
-
-  const { items, total, orderNumber } = orderData;
-
-  const eventData = {
-    content_type: 'product',
-    quantity: items.length,
-    description: 'Payment Completed',
-    value: total,
-    currency: currency,
-    contents: items.map(item => ({
-      content_id: item.variantId || item.id,
-      content_type: 'product',
-      quantity: item.quantity || 1,
-      price: item.price,
-    })),
-  };
-
-  pixelConfig.tiktok.forEach(pixel => {
-    if (!pixel.enableCompletePayment) {
-      return;
-    }
-
-    try {
-      window.ttq.track('Purchase', eventData);
-      console.log(`[TikTok Pixel] Fired CompletePayment on pixel ${pixel.pixelId}`, eventData);
-    } catch (error) {
-      console.error(`Error tracking CompletePayment on TikTok pixel ${pixel.pixelId}:`, error);
-    }
-  });
+  return eventId;
 }

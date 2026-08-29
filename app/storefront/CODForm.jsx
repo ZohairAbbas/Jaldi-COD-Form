@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
-import { getCurrencyCode, COUNTRIES, validatePhone } from '../lib/constants';
+import { resolvePixelCurrency, getCurrencySymbolForCurrency, COUNTRIES, validatePhone } from '../lib/constants';
 import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } from './device-recognition';
 import { t, fieldTranslations } from './translations';
 import PayFastModal from './PayFastModal';
@@ -177,11 +177,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     ? (config.shop.supportedCountries || []).map(code => COUNTRIES[code]).filter(Boolean)
     : [country];
 
-  // Use displayed currency symbol from currency converter if available, otherwise fall back to SHOP's base country symbol
-  // Country dropdown is for shipping address, NOT currency conversion - prices stay in shop's base currency
+  // Use displayed currency symbol from currency converter if available, otherwise fall back to the
+  // symbol for the SHOP's actual Shopify currency, and only then to its base country's symbol.
+  // Country dropdown is for shipping address, NOT currency conversion - prices stay in shop's base currency.
+  // Preferring the real currency matters: a store selling in AED with its country left on another
+  // market would otherwise price the whole form in that market's symbol.
   const displayCurrency = cart.items?.find(item => item.displayCurrencySymbol);
   const shopBaseCountry = COUNTRIES[config.shop?.country] || COUNTRIES.PAK;
-  const currencySymbol = displayCurrency?.displayCurrencySymbol || shopBaseCountry.currencySymbol;
+  const currencySymbol = displayCurrency?.displayCurrencySymbol
+    || getCurrencySymbolForCurrency(config.shop?.currencyCode)
+    || shopBaseCountry.currencySymbol;
   
   // Language & RTL
   const lang = config.settings?.language || 'en';
@@ -295,7 +300,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   // Track InitiateCheckout event when form first opens
   useEffect(() => {
-    const currency = getCurrencyCode(config.shop?.country);
+    const currency = resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
     trackInitiateCheckout(cart, currency);
     trackSnapchatStartCheckout(cart, currency);
     trackTikTokInitiateCheckout(cart, currency);
@@ -380,7 +385,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       trackSession(email, phone);
 
       // Track AddPaymentInfo pixel event
-      const currency = getCurrencyCode(config.shop?.country);
+      const currency = resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
       trackAddPaymentInfo(cart, currency);
     }
   }, [formData.email, formData.phone]);
@@ -3580,7 +3585,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           const oneTickPrice = hasDisplayPrice && displayExchangeRate
             ? parseFloat((upsell.upsellPrice * displayExchangeRate).toFixed(2))
             : upsell.upsellPrice;
-          const oneTickCurrency = hasDisplayPrice ? currencySymbol : getCurrencyCode(config.shop?.country);
+          const oneTickCurrency = hasDisplayPrice ? currencySymbol : resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
           const checkboxText = upsell.checkboxText
             .replace('{title}', `<strong>${upsell.upsellTitle || ''}</strong>`)
             .replace('{price}', `<strong>${oneTickCurrency} ${oneTickPrice?.toFixed(2) || '0.00'}</strong>`);
@@ -3613,7 +3618,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
                     // Track AddToCart event when upsell is selected
                     if (e.target.checked) {
-                      const currency = getCurrencyCode(config.shop?.country);
+                      const currency = resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
                       const upsellItem = {
                         id: upsell.product?.id || `upsell-${upsell.id}`,
                         variantId: upsell.product?.variantId,
