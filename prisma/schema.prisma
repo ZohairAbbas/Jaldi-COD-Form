@@ -35,6 +35,12 @@ model Shop {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   country             String                   @default("PAK")
+  // The shop's real Shopify store currency (e.g. "AED"), read from Admin API at
+  // install and refreshed on demand. `country` is a merchant-editable dropdown
+  // that drives form defaults — it is NOT a reliable currency source, so pixel
+  // events must resolve currency from here (or the order's presentment
+  // currency), never from `country`. Null for shops installed before this field.
+  currencyCode        String?
   enableMultiCountry  Boolean                  @default(false)
   supportedCountries  Json                     @default("[]")
   setupProgress       Json?                    @default("{\"step1Completed\": false, \"step2Completed\": false, \"welcomeDismissed\": false, \"setupGuideDismissed\": false}")

@@ -1,5 +1,6 @@
 import { getShopByDomain, getEnabledPixels } from "../lib/db.server";
-import { fireInitiateCheckoutEvent, getCurrencyFromCountry } from "../lib/pixels.server";
+import { fireInitiateCheckoutEvent } from "../lib/pixels.server";
+import { resolvePixelCurrency } from "../lib/constants";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -29,7 +30,11 @@ export const action = async ({ request }) => {
       || '';
     const clientUserAgent = request.headers.get('user-agent') || '';
 
-    const resolvedCurrency = currency || getCurrencyFromCountry(shop.country);
+    const resolvedCurrency = resolvePixelCurrency({
+      presentmentCurrency: currency,
+      shopCurrencyCode: shop.currencyCode,
+      country: shop.country,
+    });
 
     const utmData = {
       ...(pixelAttribution?.utm_source && { utm_source: pixelAttribution.utm_source }),
