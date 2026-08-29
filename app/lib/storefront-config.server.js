@@ -142,6 +142,9 @@ export async function buildStorefrontConfig(shopData) {
     },
     shop: {
       country: shopData.country || 'PAK',
+      // Real Shopify store currency. `country` drives form defaults only and is
+      // not a currency source — see resolvePixelCurrency in constants.js.
+      currencyCode: shopData.currencyCode || null,
       enableMultiCountry: shopData.enableMultiCountry || false,
       supportedCountries: shopData.supportedCountries || [],
     },

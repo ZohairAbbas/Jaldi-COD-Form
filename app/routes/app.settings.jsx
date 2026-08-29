@@ -4,7 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getPixelsByShop, getBlockedUsers } from "../lib/db.server";
-import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE } from "../lib/constants";
+import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE, getCurrencyCode, getCountryData } from "../lib/constants";
 import prisma from "../db.server";
 import { FIELD_CATALOG, COLUMN_PRESETS } from "../lib/google-sheets.server";
 import GoogleSheetsIntegration from "../components/Settings/GoogleSheetsIntegration";
@@ -33,6 +33,7 @@ export const loader = async ({ request }) => {
     shop: {
       id: shop.id,
       country: shop.country,
+      currencyCode: shop.currencyCode || null,
       enableMultiCountry: shop.enableMultiCountry || false,
       supportedCountries: shop.supportedCountries || [],
     },
@@ -603,6 +604,22 @@ export default function Settings() {
           <s-section>
         <s-stack direction="block" gap="base">
           <s-heading>Operating Country</s-heading>
+
+          {/* This setting drives form defaults, not the store's currency. When the
+              two disagree the merchant should know, because it is otherwise
+              invisible until ad-platform revenue looks wrong. */}
+          {shop.currencyCode && getCurrencyCode(shop.country) !== shop.currencyCode && (
+            <s-banner tone="warning">
+              <s-text>
+                Your Shopify store sells in <strong>{shop.currencyCode}</strong>, but the country
+                selected here ({getCountryData(shop.country).name}) uses{' '}
+                <strong>{getCurrencyCode(shop.country)}</strong>. This setting controls form
+                defaults such as phone code and provinces — your prices and conversion tracking
+                already use {shop.currencyCode}. Pick the country matching how you sell if this
+                looks wrong.
+              </s-text>
+            </s-banner>
+          )}
 
           {!shop.enableMultiCountry ? (
             // Single country mode
@@ -2023,16 +2040,17 @@ export default function Settings() {
                 • <strong>InitiateCheckout:</strong> Fired when COD form opens (pixel only)
               </s-text>
               <s-text variant="body-sm">
-                • <strong>PlaceAnOrder:</strong> Fired after successful order
-              </s-text>
-              <s-text variant="body-sm">
-                • <strong>CompletePayment:</strong> Fired after successful order
+                • <strong>Purchase:</strong> Fired once after successful order
               </s-text>
               <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
                 TikTok Pixel: Client-side tracking
               </s-text>
               <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
-                TikTok Events API: Server-side tracking (PlaceAnOrder & CompletePayment only)
+                TikTok Events API: Server-side tracking (Purchase only)
+              </s-text>
+              <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '16px' }}>
+                Replaces PlaceAnOrder and CompletePayment, which TikTok retired as
+                separate events — both now map to a single deduplicated Purchase.
               </s-text>
             </s-stack>
           </s-box>
@@ -2397,26 +2415,28 @@ export default function Settings() {
                   </div>
                 )}
 
+                {/* One toggle, two columns. PlaceAnOrder and CompletePayment were
+                    legacy pixel event names; TikTok's Events API 2.0 has a single
+                    web conversion event, Purchase, so both columns now describe the
+                    same thing and are written together. Showing them separately
+                    implied two distinct events could be sent. */}
                 <div style={{ marginBottom: '16px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                     <input
                       type="checkbox"
-                      checked={pixelFormData.enablePlaceAnOrder}
-                      onChange={(e) => setPixelFormData({ ...pixelFormData, enablePlaceAnOrder: e.target.checked })}
+                      checked={pixelFormData.enablePlaceAnOrder || pixelFormData.enableCompletePayment}
+                      onChange={(e) => setPixelFormData({
+                        ...pixelFormData,
+                        enablePlaceAnOrder: e.target.checked,
+                        enableCompletePayment: e.target.checked,
+                      })}
                     />
-                    <span>Enable PlaceAnOrder event</span>
+                    <span>Enable Purchase event</span>
                   </label>
-                </div>
-
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={pixelFormData.enableCompletePayment}
-                      onChange={(e) => setPixelFormData({ ...pixelFormData, enableCompletePayment: e.target.checked })}
-                    />
-                    <span>Enable CompletePayment event</span>
-                  </label>
+                  <s-text variant="body-sm" style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
+                    Sent once per order. Replaces the separate PlaceAnOrder and CompletePayment
+                    toggles — TikTok no longer treats those as distinct events.
+                  </s-text>
                 </div>
               </>
             )}

@@ -721,6 +721,68 @@ export function getCurrencyCode(countryCode) {
 }
 
 /**
+ * Resolve the currency to report on a pixel/CAPI event.
+ *
+ * Order matters. `country` is a merchant-editable dropdown that drives form
+ * defaults (phone code, provinces, city list) and has no reliable relationship
+ * to what the store actually charges in — a store can be registered in the UK,
+ * have "Oman" selected here, and take every order in AED. Deriving currency
+ * from it mislabels the event value, and the ad platform then converts at the
+ * wrong FX rate, skewing reported revenue and ROAS by that factor.
+ *
+ * 1. The order's own presentment currency — what the customer was actually
+ *    charged. Correct even on multi-currency stores.
+ * 2. The shop's Shopify store currency, read from the Admin API.
+ * 3. The country-derived guess, kept only as a last resort for shops installed
+ *    before `currencyCode` existed and not yet backfilled.
+ *
+ * @param {{presentmentCurrency?: string|null, shopCurrencyCode?: string|null, country?: string|null}} opts
+ * @returns {string} ISO-4217 currency code
+ */
+export function resolvePixelCurrency({ presentmentCurrency, shopCurrencyCode, country } = {}) {
+  return (
+    normalizeCurrencyCode(presentmentCurrency) ||
+    normalizeCurrencyCode(shopCurrencyCode) ||
+    getCurrencyCode(country)
+  );
+}
+
+/**
+ * Currency code -> symbol, derived from the country table. Lets us render the
+ * right symbol for a store's actual currency without knowing which country it
+ * "belongs" to — an AED store shows "Dhs." whether its country is set to UAE,
+ * Oman or the UK. First country to declare a currency wins; the entries that
+ * share a currency also share its symbol, so the order is not significant.
+ */
+const CURRENCY_SYMBOLS = Object.values(COUNTRIES).reduce((acc, country) => {
+  if (country.currencyCode && !acc[country.currencyCode]) {
+    acc[country.currencyCode] = country.currencySymbol;
+  }
+  return acc;
+}, {});
+
+/**
+ * Symbol for a currency code, falling back to the code itself so an unmapped
+ * currency renders as "USD 25.00" rather than silently borrowing another
+ * country's symbol.
+ */
+export function getCurrencySymbolForCurrency(currencyCode) {
+  const normalized = normalizeCurrencyCode(currencyCode);
+  if (!normalized) return null;
+  return CURRENCY_SYMBOLS[normalized] || normalized;
+}
+
+/**
+ * Accept only a well-formed ISO-4217 code; anything else falls through to the
+ * next source rather than being sent to Meta/TikTok as-is.
+ */
+function normalizeCurrencyCode(value) {
+  if (typeof value !== 'string') return null;
+  const upper = value.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(upper) ? upper : null;
+}
+
+/**
  * Get currency symbol for a country
  */
 export function getCurrencySymbol(countryCode) {
