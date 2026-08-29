@@ -4,7 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getPixelsByShop, getBlockedUsers } from "../lib/db.server";
-import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE } from "../lib/constants";
+import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE, getCurrencyCode, getCountryData } from "../lib/constants";
 import prisma from "../db.server";
 import { FIELD_CATALOG, COLUMN_PRESETS } from "../lib/google-sheets.server";
 import GoogleSheetsIntegration from "../components/Settings/GoogleSheetsIntegration";
@@ -33,6 +33,7 @@ export const loader = async ({ request }) => {
     shop: {
       id: shop.id,
       country: shop.country,
+      currencyCode: shop.currencyCode || null,
       enableMultiCountry: shop.enableMultiCountry || false,
       supportedCountries: shop.supportedCountries || [],
     },
@@ -603,6 +604,22 @@ export default function Settings() {
           <s-section>
         <s-stack direction="block" gap="base">
           <s-heading>Operating Country</s-heading>
+
+          {/* This setting drives form defaults, not the store's currency. When the
+              two disagree the merchant should know, because it is otherwise
+              invisible until ad-platform revenue looks wrong. */}
+          {shop.currencyCode && getCurrencyCode(shop.country) !== shop.currencyCode && (
+            <s-banner tone="warning">
+              <s-text>
+                Your Shopify store sells in <strong>{shop.currencyCode}</strong>, but the country
+                selected here ({getCountryData(shop.country).name}) uses{' '}
+                <strong>{getCurrencyCode(shop.country)}</strong>. This setting controls form
+                defaults such as phone code and provinces — your prices and conversion tracking
+                already use {shop.currencyCode}. Pick the country matching how you sell if this
+                looks wrong.
+              </s-text>
+            </s-banner>
+          )}
 
           {!shop.enableMultiCountry ? (
             // Single country mode
