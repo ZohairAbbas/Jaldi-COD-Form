@@ -31,6 +31,20 @@ export const STOREFRONT_CONFIG_TYPE = "json";
  * merged in by the caller (proxy.config) or inlined separately in Liquid and
  * merged client-side. This keeps the metafield pure and free of secrets.
  */
+/**
+ * Per-offer country targeting, shared by every offer mapper below. `targetCountries`
+ * is a JSON column so it may arrive as an array or a serialized string.
+ */
+function offerCountryTargeting(offer) {
+  const raw = offer.targetCountries;
+  return {
+    countryTargeting: offer.countryTargeting || 'all',
+    targetCountries: Array.isArray(raw)
+      ? raw
+      : (typeof raw === 'string' ? JSON.parse(raw) : []),
+  };
+}
+
 export async function buildStorefrontConfig(shopData) {
   // Get enabled pixels for storefront (without sensitive data like access tokens)
   const pixels = await getEnabledPixels(shopData.id);
@@ -156,6 +170,7 @@ export async function buildStorefrontConfig(shopData) {
         .map(upsell => ({
           id: upsell.id,
           enabled: upsell.enabled,
+          ...offerCountryTargeting(upsell),
           product: {
             id: upsell.productId,
             title: upsell.productTitle,
@@ -182,6 +197,7 @@ export async function buildStorefrontConfig(shopData) {
         .map(upsell => ({
           id: upsell.id,
           enabled: upsell.enabled,
+          ...offerCountryTargeting(upsell),
           product: {
             id: upsell.productId,
             title: upsell.productTitle,
@@ -207,6 +223,7 @@ export async function buildStorefrontConfig(shopData) {
         .filter(u => u.upsellType === 'one-tick' && u.enabled)
         .map(upsell => ({
           id: upsell.id,
+          ...offerCountryTargeting(upsell),
           upsellTitle: upsell.upsellTitle,
           upsellPrice: upsell.upsellPrice,
           checkboxText: upsell.checkboxText,
@@ -233,6 +250,7 @@ export async function buildStorefrontConfig(shopData) {
     downsells: (shopData.downsells || [])
       .map(downsell => ({
         id: downsell.id,
+        ...offerCountryTargeting(downsell),
         showCount: downsell.showCount,
         disableOtherDiscounts: downsell.disableOtherDiscounts,
         discount: {

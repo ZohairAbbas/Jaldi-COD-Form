@@ -12,6 +12,7 @@ import {
 } from "../lib/db.server";
 import { getCurrencyCode } from "../lib/constants";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
+import CountryTargetingPicker from "../components/CountryTargetingPicker";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -281,6 +282,15 @@ export default function OneTickUpsellEditor() {
                     <s-text variant="heading-sm">Show the upsell for:</s-text>
                     <s-text variant="body-md">All products</s-text>
                   </s-stack>
+
+                  {/* Country targeting */}
+                  <CountryTargetingPicker
+                    countryTargeting={upsell.countryTargeting}
+                    targetCountries={upsell.targetCountries}
+                    onChange={handleUpdate}
+                    label="Show the upsell in:"
+                    offerNoun="upsell"
+                  />
                 </s-stack>
               </s-box>
             </s-stack>

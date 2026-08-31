@@ -10,6 +10,7 @@ import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackS
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol, resolvePixelCurrency, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
 import { isNativeBundleMode } from './native-bundle';
+import { matchesOfferCountry, offersNeedCountry } from './offer-country';
 import { resolveOrderRedirect } from './order-redirect';
 
 // Write a quantity into the theme's native quantity input so the theme's own
@@ -173,6 +174,22 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Multi-country detection state
   const [detectedCountry, setDetectedCountry] = useState(null);
+
+  // The visitor's REAL country, mirrored into state so offer country targeting
+  // re-renders when detection resolves after first paint. `getRealVisitorCountry()`
+  // reads sessionStorage, which alone would not trigger a re-render — ticksells
+  // render as soon as the form opens, so a late-arriving country must push an update.
+  // Seeded from the cache so warm loads match on the very first render.
+  const [realVisitorCountry, setRealVisitorCountry] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem(`preventify_real_country_${shopDomain}`);
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (Date.now() - data.timestamp < 3600000) return data.country;
+      }
+    } catch (e) { /* sessionStorage unavailable */ }
+    return null;
+  });
 
   // Holds the submitted order data for post-success redirect resolution
   const lastOrderDataRef = React.useRef(null);
@@ -1409,7 +1426,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           ? data.settings.nativeBundleCountries
           : [];
         const nativeBundleNeedsCountry = data.settings?.nativeBundleCheckout && nbCountries.length > 0;
-        if (data.shop?.enableMultiCountry || nativeBundleNeedsCountry) {
+        // Upsells/downsells/ticksells scoped to specific countries also need the
+        // visitor's country — without this the real-country cache is never
+        // populated and every country-targeted offer would fail open everywhere.
+        if (data.shop?.enableMultiCountry || nativeBundleNeedsCountry || offersNeedCountry(data)) {
           detectCountry(data);
         }
 
@@ -1468,6 +1488,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     try {
       sessionStorage.setItem(REAL_COUNTRY_KEY, JSON.stringify({ country, timestamp: Date.now() }));
     } catch (e) { /* ignore */ }
+    // Mirror into state so country-targeted offers re-evaluate once detection lands
+    setRealVisitorCountry(country);
   };
   const getRealVisitorCountry = () => {
     try {
@@ -1839,11 +1861,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }
   };
 
-  // Get the first enabled pre-purchase upsell (sorted by priority)
+  // Get the first enabled pre-purchase upsell (sorted by priority) that is also
+  // available in the visitor's country. Offers scoped to other countries are
+  // skipped, so a lower-priority eligible offer still gets its chance.
   const getActivePrePurchaseUpsell = () => {
     const prePurchaseUpsells = config?.upsells?.prePurchase || [];
     // Return the first one (already sorted by priority from backend)
-    return prePurchaseUpsells.find(u => u.enabled && u.product?.id) || null;
+    return prePurchaseUpsells.find(u =>
+      u.enabled &&
+      u.product?.id &&
+      matchesOfferCountry(u, shopDomain, realVisitorCountry)
+    ) || null;
   };
 
   // Build split cart items for variant mix bundles
@@ -2500,6 +2528,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     return downsells.find(d => {
       if (downsellShownCount >= d.showCount) return false;
       if (d.disableOtherDiscounts && cartHasDiscount) return false;
+      if (!matchesOfferCountry(d, shopDomain, realVisitorCountry)) return false;
       return true;
     }) || null;
   };
@@ -2679,6 +2708,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onRemoveItem={handleRemoveItem}
           mode="embedded"
           detectedCountry={detectedCountry}
+          realVisitorCountry={realVisitorCountry}
           appPath={appPath}
           variantMixOosError={variantMixOosError}
         />
@@ -2752,6 +2782,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             fullCartItemCount={fullCart.items.length}
             recoveryDiscount={recoveryDiscount}
             detectedCountry={detectedCountry}
+            realVisitorCountry={realVisitorCountry}
             variantMixOosError={variantMixOosError}
           />
         )}
