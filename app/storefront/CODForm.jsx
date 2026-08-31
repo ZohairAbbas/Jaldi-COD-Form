@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackAddToCart, getEventId, getAttributionData, trackSnapchatStartCheckout, trackTikTokInitiateCheckout } from './pixels';
 import { getCurrencyCode, COUNTRIES, validatePhone } from '../lib/constants';
 import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } from './device-recognition';
 import { t, fieldTranslations } from './translations';
+import { matchesOfferCountry } from './offer-country';
 import PayFastModal from './PayFastModal';
 
 /**
@@ -164,9 +165,20 @@ function CityCombobox({ value, onChange, cities, placeholder, inputStyle, name }
   );
 }
 
-export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
+export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, realVisitorCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
   // Manual country selection state (for user override)
   const [selectedCountry, setSelectedCountry] = useState(null);
+
+  // One-tick upsells available in the visitor's country. Derived ONCE here and
+  // used by every consumer (preselect state, totals, render, submit, draft order)
+  // so a country-blocked upsell can never be preselected, priced, or charged
+  // while being invisible. Uses the IP-detected country, NOT `selectedCountry`.
+  const eligibleOneTickUpsells = useMemo(
+    () => (config.upsells?.oneTick || []).filter(u =>
+      matchesOfferCountry(u, config.shopDomain, realVisitorCountry)
+    ),
+    [config.upsells?.oneTick, config.shopDomain, realVisitorCountry]
+  );
 
   // Priority: user-selected > detected > shop default
   const countryCode = selectedCountry || detectedCountry || config.shop?.country || 'PAK';
@@ -249,12 +261,28 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   // One-Tick Upsells state
   const [selectedUpsells, setSelectedUpsells] = useState(() => {
-    // Initialize with preselected upsells
-    const oneTickUpsells = config.upsells?.oneTick || [];
+    // Initialize with preselected upsells, country-eligible ones only — a
+    // preselected upsell that's hidden in this country must never start ticked.
+    const oneTickUpsells = (config.upsells?.oneTick || []).filter(u =>
+      matchesOfferCountry(u, config.shopDomain, realVisitorCountry)
+    );
     return oneTickUpsells
       .filter(u => u.preselectUpsell)
       .reduce((acc, u) => ({ ...acc, [u.id]: true }), {});
   });
+
+  // Country detection can resolve AFTER mount (the initializer above runs once).
+  // Drop any selection that is no longer eligible, so a late-arriving country
+  // can't leave an invisible upsell ticked and charged.
+  useEffect(() => {
+    const eligibleIds = new Set(eligibleOneTickUpsells.map(u => u.id));
+    setSelectedUpsells(prev => {
+      const next = Object.fromEntries(
+        Object.entries(prev).filter(([id]) => eligibleIds.has(id))
+      );
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+  }, [eligibleOneTickUpsells]);
 
   // Discount code state
   const [discountCodeInput, setDiscountCodeInput] = useState('');
@@ -1144,7 +1172,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setSubmitError('');
 
     // Add selected one-tick upsells to cart items
-    const selectedOneTickItems = oneTickUpsells
+    const selectedOneTickItems = eligibleOneTickUpsells
       .filter(upsell => selectedUpsells[upsell.id])
       .map(upsell => {
         // If connected to a product, use product details but with upsell price
@@ -1389,9 +1417,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         return item;
       });
 
-      // Include one-tick upsells
-      const oneTickUpsells = config.upsells?.oneTick || [];
-      const selectedOneTickItems = oneTickUpsells
+      // Include one-tick upsells (country-eligible only, matching the form)
+      const selectedOneTickItems = eligibleOneTickUpsells
         .filter(u => selectedUpsells[u.id] && u.product)
         .map(u => ({
           variantId: u.product.variantId,
@@ -2099,7 +2126,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   }, 0);
 
   // Calculate total from selected one-tick upsells
-  const oneTickUpsells = config.upsells?.oneTick || [];
+  // Country-eligible only — drives totals, rendering and submit alike
+  const oneTickUpsells = eligibleOneTickUpsells;
   const oneTickTotal = oneTickUpsells.reduce((sum, upsell) => {
     if (selectedUpsells[upsell.id]) {
       return sum + (upsell.upsellPrice || 0);

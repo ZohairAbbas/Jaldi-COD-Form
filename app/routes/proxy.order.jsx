@@ -2,6 +2,7 @@ import { createShopifyOrder, validateOrderData } from "../lib/order.server";
 import { getShopByDomain, getUpsells, getEnabledPixels, isUserBlocked } from "../lib/db.server";
 import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
 import { normalizePrice, CORE_FIELD_IDS, parseJsonColumn } from "../lib/constants";
+import { matchesOfferCountryServer } from "../lib/offer-country.server";
 import prisma from "../db.server";
 import { upsertCustomerProfile } from "../lib/sms.server";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
@@ -465,10 +466,17 @@ export const action = async ({ request }) => {
       // Don't fail the order if pixel tracking fails
     }
 
-    // Check for active post-purchase upsells
+    // Check for active post-purchase upsells. Unlike the other offer types this
+    // is chosen server-side with no IP context, so country targeting matches the
+    // order's own country (the delivery destination) instead.
     const allUpsells = await getUpsells(shop.id);
     const postPurchaseUpsells = allUpsells
-      .filter(u => u.upsellType === "post-purchase" && u.enabled && u.productId)
+      .filter(u =>
+        u.upsellType === "post-purchase" &&
+        u.enabled &&
+        u.productId &&
+        matchesOfferCountryServer(u, orderData.countryCode)
+      )
       .sort((a, b) => a.priority - b.priority);
 
     // Get the first active post-purchase upsell

@@ -710,6 +710,9 @@ export function getDefaultUpsell(upsellType = "pre-purchase") {
     productImage: null,
     productPrice: null,
     variantId: null,
+    // Country targeting — "all" means the offer shows everywhere
+    countryTargeting: "all",
+    targetCountries: [],
   };
 
   // One-Click Upsell defaults
@@ -901,6 +904,9 @@ export function getDefaultDownsell() {
     disableOtherDiscounts: false,
     discountType: "percentage",
     discountValue: 10,
+    // Country targeting — "all" means the downsell shows everywhere
+    countryTargeting: "all",
+    targetCountries: [],
     // Title section
     title: "Wait!",
     titleColor: "rgba(0,0,0,1)",

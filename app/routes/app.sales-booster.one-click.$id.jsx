@@ -12,6 +12,7 @@ import {
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
+import CountryTargetingPicker from "../components/CountryTargetingPicker";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -322,6 +323,15 @@ export default function UpsellEditor() {
                   <option value="post-purchase">Post-purchase</option>
                 </select>
               </s-stack>
+
+              {/* Country targeting */}
+              <CountryTargetingPicker
+                countryTargeting={upsell.countryTargeting}
+                targetCountries={upsell.targetCountries}
+                onChange={handleUpdate}
+                label="Show the upsell in:"
+                offerNoun="upsell"
+              />
 
             </s-stack>
           </s-section>

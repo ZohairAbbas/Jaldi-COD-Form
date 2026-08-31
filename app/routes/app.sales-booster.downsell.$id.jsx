@@ -12,6 +12,7 @@ import {
 } from "../lib/db.server";
 import { getCurrencySymbol } from "../lib/constants";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
+import CountryTargetingPicker from "../components/CountryTargetingPicker";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -256,6 +257,15 @@ export default function DownsellEditor() {
                     <s-text variant="heading-sm">Show the downsell for:</s-text>
                     <s-text variant="body-md">All products</s-text>
                   </s-stack>
+
+                  {/* Country targeting */}
+                  <CountryTargetingPicker
+                    countryTargeting={downsell.countryTargeting}
+                    targetCountries={downsell.targetCountries}
+                    onChange={handleUpdate}
+                    label="Show the downsell in:"
+                    offerNoun="downsell"
+                  />
                 </s-stack>
               </s-box>
 
