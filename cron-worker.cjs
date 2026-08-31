@@ -1,7 +1,23 @@
 const cron = require('node-cron');
 
-const BASE_URL = process.env.APP_URL || 'http://localhost:64554';
-const CRON_SECRET = process.env.CRON_SECRET || 'elIpvaUVOuHiIeNEqSTGcMainhXqFgHTqdaBBuDQ9ig=';
+// Load .env so the worker still targets the right app when started outside PM2.
+// Note: dotenv does not override variables that are already set, and PM2 can
+// inject a stale *empty* value (CRON_SECRET='') that counts as "set" while
+// being useless. So resolve explicitly, treating blank as absent.
+const fileEnv = require('dotenv').config({ path: __dirname + '/.env' }).parsed || {};
+
+const envOr = (key, fallback) => {
+  const fromProcess = (process.env[key] || '').trim();
+  if (fromProcess) return fromProcess;
+  const fromFile = (fileEnv[key] || '').trim();
+  return fromFile || fallback;
+};
+
+// Fall back to the app's own PORT rather than a fixed guess, so the worker
+// follows the app if the port ever changes.
+const PORT = Number(envOr('PORT', 3001)) || 3001;
+const BASE_URL = envOr('APP_URL', `http://localhost:${PORT}`);
+const CRON_SECRET = envOr('CRON_SECRET', '');
 
 // In-memory lock to prevent overlapping jobs on same instance
 const locks = {
@@ -61,7 +77,7 @@ async function runJob(jobName, endpoint) {
 // ============================================
 
 // Job 1: Abandoned Cart Detection - Every 5 minutes
-cron.schedule('*/1 * * * *', () => {
+cron.schedule('*/5 * * * *', () => {
   runJob('abandonedCarts', '/proxy/cron-abandoned-carts');
 }, {
   scheduled: true,
@@ -69,7 +85,7 @@ cron.schedule('*/1 * * * *', () => {
 });
 
 // Job 2: Draft Order Creation - Every 30 minutes
-cron.schedule('*/2 * * * *', () => {
+cron.schedule('*/30 * * * *', () => {
   runJob('draftOrders', '/proxy/abandoned-carts-create-draft');
 }, {
   scheduled: true,
@@ -116,6 +132,37 @@ console.log('  - Fulfillment sync: Every 3 hours');
 console.log('  - Courierify data sync: Daily at 02:00 PKT');
 console.log('  - Google Sheets sync: Every 2 minutes');
 console.log('========================================');
+
+// Preflight: confirm the app is actually reachable and the secret is accepted.
+// A silent misconfiguration here once broke every job for four weeks, so this
+// fails loudly at startup instead of drip-feeding "fetch failed" into the logs.
+(async function preflight() {
+  try {
+    const res = await fetch(`${BASE_URL}/proxy/cron-google-sheets-sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(CRON_SECRET ? { 'X-Cron-Secret': CRON_SECRET } : {}),
+      },
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (res.status === 401) {
+      console.error(`PREFLIGHT FAILED: ${BASE_URL} rejected the cron secret (401).`);
+      console.error('CRON_SECRET in .env must match the value the app validates. Jobs will not run.');
+      return;
+    }
+    if (!res.ok) {
+      console.error(`PREFLIGHT WARNING: ${BASE_URL} returned HTTP ${res.status}.`);
+      return;
+    }
+    console.log(`Preflight OK: app reachable at ${BASE_URL}`);
+  } catch (error) {
+    console.error(`PREFLIGHT FAILED: cannot reach the app at ${BASE_URL} - ${error.message}`);
+    console.error('Check that PORT in .env matches the port the app is listening on.');
+  }
+})();
 
 // Run jobs immediately on startup for testing (optional - comment out in production)
 // Uncomment the lines below to run jobs immediately when the worker starts

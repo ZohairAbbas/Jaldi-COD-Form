@@ -208,7 +208,7 @@ export default function UpsellEditor() {
         button.removeEventListener("click", handleSelectProduct);
       };
     }
-  }, [handleSelectProduct]);
+  }, [handleSelectProduct, upsell.productId]);
 
   // Attach event listener to remove product button
   useEffect(() => {
@@ -219,7 +219,7 @@ export default function UpsellEditor() {
         button.removeEventListener("click", handleRemoveProduct);
       };
     }
-  }, [handleRemoveProduct]);
+  }, [handleRemoveProduct, upsell.productId]);
 
   // Calculate discounted price
   const getDiscountedPrice = () => {

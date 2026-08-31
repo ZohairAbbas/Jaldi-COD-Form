@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(pm2 list *)",
+      "Bash(pm2 jlist *)",
+      "Bash(python3 -c \"import sys,json;[print\\(p['name'], p['pm2_env'].get\\('pm_out_log_path'\\), p['pm2_env'].get\\('pm_err_log_path'\\)\\) for p in json.load\\(sys.stdin\\)]\")"
+    ]
+  },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shopify-dev-mcp"
