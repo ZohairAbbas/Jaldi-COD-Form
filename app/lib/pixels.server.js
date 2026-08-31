@@ -3,6 +3,25 @@ import { logPixelEvent } from './db.server.js';
 import { getCurrencyCode } from './constants.js';
 
 /**
+ * Last line of defence on the currency label. Callers resolve currency from the
+ * order's presentment currency or the shop's Shopify currency; if that somehow
+ * produced nothing we must not quietly substitute a default, because a wrong
+ * currency code is not a cosmetic error — the ad platform converts the value at
+ * that currency's FX rate, silently scaling reported revenue and ROAS. Log
+ * loudly so it is visible rather than absorbed into the numbers.
+ */
+function requireCurrency(currency, eventName) {
+  if (typeof currency === 'string' && /^[A-Z]{3}$/.test(currency.trim().toUpperCase())) {
+    return currency.trim().toUpperCase();
+  }
+  console.error(
+    `[Pixel] Missing/invalid currency for ${eventName} (got ${JSON.stringify(currency)}) — ` +
+    `falling back to ${getCurrencyCode()}. Reported revenue for this event will be wrong.`
+  );
+  return getCurrencyCode();
+}
+
+/**
  * Generate unique event ID for deduplication
  */
 export function generateEventId() {
@@ -26,14 +45,6 @@ export function hashPhone(phone) {
   // Remove all non-digits
   const digitsOnly = phone.replace(/\D/g, '');
   return crypto.createHash('sha256').update(digitsOnly).digest('hex');
-}
-
-/**
- * Get currency code from country
- * @deprecated Use getCurrencyCode from constants.js instead
- */
-export function getCurrencyFromCountry(country) {
-  return getCurrencyCode(country);
 }
 
 /**
@@ -206,7 +217,7 @@ export async function firePurchaseEvent(pixels, orderData) {
           content_ids: items.map(item => item.variantId || item.id),
           content_type: 'product',
           value: total,
-          currency: currency || getCurrencyCode(),
+          currency: requireCurrency(currency, pixel.purchaseEvent || 'Purchase'),
           num_items: items.length,
           order_id: orderNumber,
           ...utmData,
@@ -265,7 +276,7 @@ export async function fireInitiateCheckoutEvent(pixels, checkoutData) {
           content_ids: items.map(item => item.variantId || item.id),
           content_type: 'product',
           value: total,
-          currency: currency || getCurrencyCode(),
+          currency: requireCurrency(currency, 'InitiateCheckout'),
           num_items: items.length,
           ...utmData,
         },
@@ -325,7 +336,7 @@ export async function sendTikTokEventsAPI(pixel, eventData) {
         properties: {
           contents: customData.content_ids ? customData.content_ids.map(id => ({ content_id: id })) : [],
           content_type: customData.content_type || 'product',
-          currency: customData.currency || 'USD',
+          currency: requireCurrency(customData.currency, eventName),
           value: customData.value ? String(customData.value) : '0',
         },
       }],
@@ -345,6 +356,19 @@ export async function sendTikTokEventsAPI(pixel, eventData) {
 
     const result = await response.json();
 
+    // TikTok answers HTTP 200 even when it rejects the event; the real status is
+    // `code` in the body, where 0 means accepted. Trusting response.ok alone
+    // records rejected events as 'sent', so a pixel that is silently dropping
+    // every conversion looks perfectly healthy in our logs.
+    const succeeded = response.ok && result?.code === 0;
+
+    if (!succeeded) {
+      console.error(
+        `[TikTok] ${eventName} rejected by pixel ${pixel.pixelId}: ` +
+        `HTTP ${response.status}, code ${result?.code}, ${result?.message || 'no message'}`
+      );
+    }
+
     // Log the event
     await logPixelEvent({
       pixelId: pixel.id,
@@ -353,15 +377,15 @@ export async function sendTikTokEventsAPI(pixel, eventData) {
       eventId,
       source: 'server',
       eventData: payload,
-      status: response.ok ? 'sent' : 'failed',
+      status: succeeded ? 'sent' : 'failed',
       responseCode: response.status,
-      errorMessage: response.ok ? null : JSON.stringify(result),
+      errorMessage: succeeded ? null : JSON.stringify(result),
       orderId: customData.order_id || null,
       orderNumber: customData.order_id || null,
     });
 
     return {
-      success: response.ok,
+      success: succeeded,
       response: result,
     };
   } catch (error) {

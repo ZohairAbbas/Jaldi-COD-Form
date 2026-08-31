@@ -6,9 +6,9 @@ import StickyBar from './StickyBar';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
 import BundleWidget, { calculateTierPrice } from './BundleWidget';
-import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPlaceAnOrder, trackTikTokCompletePayment } from './pixels';
+import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPurchase } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
-import { normalizePrice, getCurrencyCode, getCurrencySymbol, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
+import { normalizePrice, getCurrencyCode, getCurrencySymbol, resolvePixelCurrency, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
 import { isNativeBundleMode } from './native-bundle';
 import { matchesOfferCountry, offersNeedCountry } from './offer-country';
 import { resolveOrderRedirect } from './order-redirect';
@@ -1804,8 +1804,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         setOrderResult(result);
         lastOrderDataRef.current = orderData;
 
-        // Track Purchase event with the same event ID used for server-side tracking
-        const currency = getCurrencyCode(config.shop?.country);
+        // Track Purchase event with the same event ID used for server-side tracking.
+        // Currency comes from the server response so browser and server-side
+        // events carry an identical label; `country` is a form-defaults setting
+        // and says nothing about what the store actually charges in.
+        const currency = result.currency
+          || resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
 
         trackPurchase({
           items: orderData.items,
@@ -1825,17 +1829,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           lastName: orderData.lastName,
         }, currency);
 
-        // Track TikTok events (PlaceAnOrder and CompletePayment)
-        trackTikTokPlaceAnOrder({
+        // Track TikTok Purchase (single event — see trackTikTokPurchase)
+        trackTikTokPurchase({
           items: orderData.items,
           total: result.total || orderData.total,
           orderNumber: result.shopifyOrderNumber,
-        }, currency);
-
-        trackTikTokCompletePayment({
-          items: orderData.items,
-          total: result.total || orderData.total,
-          orderNumber: result.shopifyOrderNumber,
+          eventId: orderData.pixelEventId, // Same event ID for deduplication
         }, currency);
 
         // Check if there's a post-purchase upsell to show

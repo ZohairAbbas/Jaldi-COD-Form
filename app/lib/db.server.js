@@ -2,10 +2,17 @@ import prisma from "../db.server.js";
 import { CORE_FIELD_IDS, COUNTRIES, mapShopifyCountryCode } from "./constants.js";
 
 /**
- * Fetch the shop's country from Shopify Admin API and map to our internal code
+ * Fetch the shop's country and store currency from Shopify Admin API.
+ *
+ * `currencyCode` is the authoritative store currency and is what pixel events
+ * must report in. It is deliberately independent of `country`: a store can be
+ * registered in one country and sell in another currency entirely (e.g. a UK
+ * billing address on an AED store), so deriving currency from country silently
+ * reports the wrong value to Meta/TikTok and skews ROAS.
+ *
  * @param {string} shopifyDomain - The shop's myshopify.com domain
  * @param {string} accessToken - Shopify Admin API access token
- * @returns {string} Our internal country code (e.g., "GBR", "PAK")
+ * @returns {{country: string, currencyCode: string|null, name: string|null, email: string|null, phone: string|null}}
  */
 async function fetchShopInfo(shopifyDomain, accessToken) {
   try {
@@ -18,33 +25,34 @@ async function fetchShopInfo(shopifyDomain, accessToken) {
           'X-Shopify-Access-Token': accessToken,
         },
         body: JSON.stringify({
-          query: `{ shop { name email billingAddress { countryCodeV2 phone } } }`,
+          query: `{ shop { name email currencyCode billingAddress { countryCodeV2 phone } } }`,
         }),
       }
     );
 
     if (!response.ok) {
       console.error(`[Preventify] Failed to fetch shop info: ${response.status}`);
-      return { country: 'PAK', name: null };
+      return { country: 'PAK', currencyCode: null, name: null, email: null, phone: null };
     }
 
     const data = await response.json();
     const shopData = data?.data?.shop;
     const shopifyCountryCode = shopData?.billingAddress?.countryCodeV2;
+    const currencyCode = shopData?.currencyCode || null;
     const name = shopData?.name || null;
     const email = shopData?.email || null;
     const phone = shopData?.billingAddress?.phone || null;
 
     if (shopifyCountryCode) {
       const mapped = mapShopifyCountryCode(shopifyCountryCode);
-      console.log(`[Preventify] Detected shop country: ${shopifyCountryCode} -> ${mapped}`);
-      return { country: mapped, name, email, phone };
+      console.log(`[Preventify] Detected shop country: ${shopifyCountryCode} -> ${mapped}, currency: ${currencyCode}`);
+      return { country: mapped, currencyCode, name, email, phone };
     }
 
-    return { country: 'PAK', name, email, phone };
+    return { country: 'PAK', currencyCode, name, email, phone };
   } catch (error) {
     console.error('[Preventify] Error fetching shop info:', error.message);
-    return { country: 'PAK', name: null, email: null, phone: null };
+    return { country: 'PAK', currencyCode: null, name: null, email: null, phone: null };
   }
 }
 
@@ -62,8 +70,8 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
   });
 
   if (!shop) {
-    // Detect the shop's actual country and name from Shopify Admin API
-    const { country: detectedCountry, name: shopName, email: ownerEmail, phone: ownerPhone } = await fetchShopInfo(shopifyDomain, accessToken);
+    // Detect the shop's actual country, currency and name from Shopify Admin API
+    const { country: detectedCountry, currencyCode, name: shopName, email: ownerEmail, phone: ownerPhone } = await fetchShopInfo(shopifyDomain, accessToken);
 
     try {
       shop = await prisma.shop.create({
@@ -74,6 +82,7 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
           ownerEmail,
           ownerPhone,
           country: detectedCountry,
+          currencyCode,
           setupProgress: {
             step1Completed: false,
             step2Completed: false,
@@ -122,11 +131,17 @@ export async function getOrCreateShop(shopifyDomain, accessToken) {
       });
     }
 
-    // Backfill shop name if missing — never auto-update country (country is set once at creation)
-    if (!shop.name) {
-      const { name: shopName } = await fetchShopInfo(shopifyDomain, accessToken);
+    // Backfill shop name and currency if missing — never auto-update country
+    // (country is set once at creation and is merchant-editable thereafter).
+    // Currency is different: it is read-only, comes straight from Shopify, and
+    // shops installed before the column existed have it null. Leaving it null
+    // silently falls pixel events back to the country-derived guess, so heal it
+    // on the next load rather than waiting for a reinstall.
+    if (!shop.name || !shop.currencyCode) {
+      const { name: shopName, currencyCode } = await fetchShopInfo(shopifyDomain, accessToken);
       const updateData = {};
       if (shopName && !shop.name) updateData.name = shopName;
+      if (currencyCode && !shop.currencyCode) updateData.currencyCode = currencyCode;
       if (Object.keys(updateData).length > 0) {
         shop = await prisma.shop.update({
           where: { shopifyDomain },
@@ -1224,13 +1239,49 @@ export async function getPixelById(id) {
 }
 
 /**
- * Create a new pixel
+ * Strip whitespace and zero-width/invisible characters from a pixel ID.
+ *
+ * Pixel IDs are almost always pasted from another dashboard, which drags along
+ * leading spaces and characters like U+2060 WORD JOINER. They survive into the
+ * request URL or payload and the platform rejects the event outright, so the
+ * shop silently reports no conversions at all.
+ */
+function sanitizePixelId(pixelId) {
+  if (typeof pixelId !== 'string') return pixelId;
+  // \s covers regular whitespace; the escapes cover Mongolian vowel separator,
+  // zero-width spaces/joiners, directional marks, word joiner and BOM — all
+  // invisible in an input field, all fatal to the request.
+  return pixelId.replace(/[\s\u180E\u200B-\u200F\u2060-\u2064\uFEFF]/g, '');
+}
+
+/**
+ * Create a new pixel.
+ *
+ * Registering the same pixel ID twice for one shop is never intentional — the
+ * browser then fires the same event once per row and the platform counts each
+ * copy, inflating purchases and revenue by the number of duplicates. Treat a
+ * repeat as an update of the existing row rather than a second one.
  */
 export async function createPixel(shopId, pixelData) {
+  const data = { ...pixelData };
+  if (data.pixelId !== undefined) data.pixelId = sanitizePixelId(data.pixelId);
+
+  if (data.pixelId && data.type) {
+    const existing = await prisma.pixel.findFirst({
+      where: { shopId, type: data.type, pixelId: data.pixelId },
+    });
+    if (existing) {
+      console.log(
+        `[Preventify] Pixel ${data.type}:${data.pixelId} already exists for shop ${shopId} — updating instead of duplicating`
+      );
+      return await prisma.pixel.update({ where: { id: existing.id }, data });
+    }
+  }
+
   return await prisma.pixel.create({
     data: {
       shopId,
-      ...pixelData,
+      ...data,
     },
   });
 }
@@ -1239,9 +1290,12 @@ export async function createPixel(shopId, pixelData) {
  * Update a pixel
  */
 export async function updatePixel(id, pixelData) {
+  const data = { ...pixelData };
+  if (data.pixelId !== undefined) data.pixelId = sanitizePixelId(data.pixelId);
+
   return await prisma.pixel.update({
     where: { id },
-    data: pixelData,
+    data,
   });
 }
 

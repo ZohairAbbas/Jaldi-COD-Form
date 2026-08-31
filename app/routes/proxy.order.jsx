@@ -1,7 +1,7 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
 import { getShopByDomain, getUpsells, getEnabledPixels, isUserBlocked } from "../lib/db.server";
-import { firePurchaseEvent, getCurrencyFromCountry, fireTikTokEvents } from "../lib/pixels.server";
-import { normalizePrice, CORE_FIELD_IDS, parseJsonColumn } from "../lib/constants";
+import { firePurchaseEvent, fireTikTokEvents } from "../lib/pixels.server";
+import { normalizePrice, CORE_FIELD_IDS, parseJsonColumn, resolvePixelCurrency } from "../lib/constants";
 import { matchesOfferCountryServer } from "../lib/offer-country.server";
 import prisma from "../db.server";
 import { upsertCustomerProfile } from "../lib/sms.server";
@@ -389,12 +389,20 @@ export const action = async ({ request }) => {
       }
     }
 
+    // Report the currency the customer was actually charged in — never the
+    // country dropdown, which is unrelated to the store's real currency.
+    // Resolved once here and echoed back in the response so the browser pixels
+    // label the event identically to the server-side ones.
+    const pixelCurrency = resolvePixelCurrency({
+      presentmentCurrency: orderData.presentmentCurrencyCode,
+      shopCurrencyCode: shop.currencyCode,
+      country: shop.country,
+    });
+
     // Fire Facebook CAPI Purchase event (async, don't block response)
     try {
       const pixels = await getEnabledPixels(shop.id);
       if (pixels && pixels.length > 0) {
-        const currency = getCurrencyFromCountry(shop.country);
-
         // Get client IP and user agent from request headers
         const clientIpAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
           || request.headers.get('x-real-ip')
@@ -417,7 +425,7 @@ export const action = async ({ request }) => {
           orderNumber: shopifyResult.orderNumber,
           total: calculatedTotal,
           items: items,
-          currency,
+          currency: pixelCurrency,
           customerInfo: {
             firstName: orderData.firstName,
             lastName: orderData.lastName,
@@ -446,7 +454,7 @@ export const action = async ({ request }) => {
           orderNumber: shopifyResult.orderNumber,
           total: calculatedTotal,
           items: items,
-          currency,
+          currency: pixelCurrency,
           customerInfo: {
             email: orderData.email,
             phone: orderData.phone,
@@ -518,6 +526,7 @@ export const action = async ({ request }) => {
       shopifyOrderNumber: shopifyResult.orderNumber,
       orderStatusUrl: shopifyResult.orderStatusUrl,
       total: calculatedTotal,
+      currency: pixelCurrency,
       postPurchaseUpsell: postPurchaseUpsell,
     });
   } catch (error) {
