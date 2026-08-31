@@ -371,6 +371,12 @@ model Upsell {
   textColor              String?
   upsellPrice            Float?
   upsellTitle            String?
+  // Country targeting — which countries this offer shows in. Matched against the
+  // visitor's IP-detected country, NOT the country selected in the COD form.
+  // "all" (or an empty targetCountries list) = shows everywhere, matching
+  // nativeBundleCountries semantics.
+  countryTargeting       String   @default("all") // "all" | "specific"
+  targetCountries        Json     @default("[]") // internal codes from COUNTRY_OPTIONS, e.g. ["PAK","ARE"]
   shop                   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
@@ -425,6 +431,9 @@ model Downsell {
   declines                 Int      @default(0)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
+  // Country targeting — see the matching fields on Upsell for semantics.
+  countryTargeting         String   @default("all") // "all" | "specific"
+  targetCountries          Json     @default("[]") // internal codes from COUNTRY_OPTIONS, e.g. ["PAK","ARE"]
   shop                     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
