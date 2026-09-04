@@ -6,6 +6,15 @@ import { getBuyerFromLocalStorage, saveBuyerToLocalStorage, getFingerprint } fro
 import { t, fieldTranslations } from './translations';
 import { matchesOfferCountry } from './offer-country';
 import PayFastModal from './PayFastModal';
+import ModalShell from './smart/ModalShell';
+import PhoneStep from './smart/PhoneStep';
+import VerifyStep from './smart/VerifyStep';
+import AddressStep from './smart/AddressStep';
+import ReviewStep from './smart/ReviewStep';
+import SummaryRail from './smart/SummaryRail';
+import SuccessStep from './smart/SuccessStep';
+import SmartIcon from './smart/icons';
+import { deriveTheme } from './smart/theme';
 
 /**
  * City input with a custom, fully-styled suggestions dropdown.
@@ -165,7 +174,7 @@ function CityCombobox({ value, onChange, cities, placeholder, inputStyle, name }
   );
 }
 
-export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, realVisitorCountry = null, appPath = '/apps/preventify/', variantMixOosError = false }) {
+export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem, mode = 'popup', showProductSelection = false, productSelection, onProductSelectionChange, fullCartItemCount = 0, recoveryDiscount = null, detectedCountry = null, realVisitorCountry = null, appPath = '/apps/preventify/', variantMixOosError = false, smartSuccess = null }) {
   // Manual country selection state (for user override)
   const [selectedCountry, setSelectedCountry] = useState(null);
 
@@ -212,6 +221,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     return arLabel ? `${enLabel} ${arLabel}` : enLabel;
   };
   const isSmartCheckout = config.settings?.enableSmartCheckout === true;
+  const otpEnabled = config.settings?.enableOTP === true;
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -353,11 +363,28 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   }, []); // Only run once on mount
 
   // Two-step checkout state
-  const [checkoutStep, setCheckoutStep] = useState(isSmartCheckout ? 'phone' : 'details'); // 'phone' | 'details'
+  // Smart Checkout runs the design's multi-step flow:
+  //   'phone' → 'verify' → 'address' → 'review' → 'success'
+  // The basic form has no steps and stays on 'details' for its whole lifetime,
+  // which is what gates its (unchanged) single-page render below.
+  const [checkoutStep, setCheckoutStep] = useState(isSmartCheckout ? 'phone' : 'details');
+
+  // Identity verification is its own step now, rather than an overlay fired at
+  // submit time. `isVerified` records that it already happened so the submit
+  // handlers don't ask a second time; `verificationTag` remembers HOW, since
+  // the order payload needs it and executePendingAction no longer computes it
+  // on the step-2 path.
+  const [isVerified, setIsVerified] = useState(false);
+  const [verificationTag, setVerificationTag] = useState(null);
+
+  // Address step: pick a saved address or type a new one.
+  const [addressMode, setAddressMode] = useState('saved');
+
+  // The success screen is driven by the `smartSuccess` prop, which App sets
+  // only for redirectMode 'none' — the other modes navigate away instead.
   const [isFingerprintMatched, setIsFingerprintMatched] = useState(false);
   const [isTransitioningStep, setIsTransitioningStep] = useState(false);
   const fingerprintRef = useRef(null);
-  const [step1SummaryOpen, setStep1SummaryOpen] = useState(true);
   const [step2SummaryOpen, setStep2SummaryOpen] = useState(true);
   const [shippingMethodOpen, setShippingMethodOpen] = useState(true);
 
@@ -460,8 +487,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         if (data.status === 'verified') {
           clearInterval(pollInterval);
           setWaLoginStatus('verified');
-          // Auto-execute the pending action (COD or Card)
-          await executePendingAction();
+          // Either advances to the address step or places the pending order,
+          // depending on where verification was triggered from.
+          await handleVerificationSuccess();
         } else if (data.status === 'expired') {
           clearInterval(pollInterval);
           setWaLoginStatus('idle');
@@ -530,6 +558,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setErrors({});
     setIsTransitioningStep(true);
 
+    // Decided inside the try (where the lookup result is in scope) and applied
+    // in the finally. Reading buyerData/isFingerprintMatched there wouldn't
+    // work — those setState calls haven't flushed yet.
+    let nextStep = 'verify';
+
     try {
       // Get fingerprint (from cache or compute now)
       const fingerprintId = fingerprintRef.current || await getFingerprint().catch(() => null);
@@ -546,6 +579,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       if (data.buyer) {
         setBuyerData(data.buyer);
         setIsFingerprintMatched(data.fingerprintMatch === true);
+        nextStep = resolveStepAfterPhone(data.buyer, data.fingerprintMatch === true);
 
         if (data.buyer.trustLevel === 'trusted' && data.buyer.address) {
           // Trusted buyer — full address autofill
@@ -572,15 +606,17 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       } else {
         setBuyerData(null);
         setIsFingerprintMatched(false);
+        nextStep = resolveStepAfterPhone(null, false);
       }
     } catch (error) {
       console.error('Step 1 lookup failed:', error);
-      // On error, still proceed to Step 2 with empty data (safe fallback)
+      // On error, still proceed with empty data (safe fallback)
       setBuyerData(null);
       setIsFingerprintMatched(false);
+      nextStep = resolveStepAfterPhone(null, false);
     } finally {
       setIsTransitioningStep(false);
-      setCheckoutStep('details');
+      setCheckoutStep(nextStep);
     }
   };
 
@@ -590,7 +626,60 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setBuyerData(null);
     setIsFingerprintMatched(false);
     setSelectedAddressId(null);
+    setIsVerified(false);
+    setVerificationTag(null);
+    resetVerification();
     // Keep formData intact so user doesn't lose entered data
+  };
+
+  /**
+   * Which step follows phone entry.
+   *
+   * Verification is skipped entirely when the merchant has OTP switched off —
+   * the rail then renders three steps instead of four rather than showing a
+   * step with nothing to do.
+   */
+  function resolveStepAfterPhone(buyer, fingerprintMatch) {
+    if (!otpEnabled) return 'address';
+    // A trusted buyer on a recognised device still goes through step 2, but it
+    // resolves instantly and sends no message — that's the design's `trusted`
+    // variant, and it's where "Welcome back" lives.
+    if (buyer?.trustLevel === 'trusted' && fingerprintMatch) return 'verify';
+    return 'verify';
+  }
+
+  /**
+   * Called when identity is confirmed, by any of the three routes.
+   *
+   * Two callers with different needs: the step-2 flow just advances, while the
+   * legacy submit-time overlay (still used when a buyer reaches Place Order
+   * unverified) has a pending order to place. `pendingAction` distinguishes
+   * them — executePendingAction is a no-op without it.
+   */
+  const handleVerificationSuccess = async (skipped = false, explicitTag = null) => {
+    const tag = explicitTag
+      || (skipped
+        ? 'verification_skipped'
+        : verifyMethod === 'whatsapp-login'
+          ? 'whatsapp_verified'
+          : verifyMethod === 'whatsapp-otp'
+            ? 'whatsapp_otp_verified'
+            : 'sms_otp_verified');
+
+    setIsVerified(true);
+    setVerificationTag(tag);
+
+    if (pendingAction) {
+      await executePendingAction(skipped);
+      return;
+    }
+
+    // Step-2 path: clear the verification UI state and move to the address step.
+    setOtpStep('form');
+    setOtpCode('');
+    setOtpError('');
+    setWaError('');
+    setCheckoutStep('address');
   };
 
   // Send OTP to customer's phone
@@ -634,8 +723,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       });
       const data = await response.json();
       if (data.success) {
-        // OTP verified — execute the pending action (COD or Card)
-        await executePendingAction();
+        // OTP verified — advance, or place the pending order.
+        await handleVerificationSuccess();
       } else {
         setOtpError(data.error || t(lang, 'invalidOTP'));
       }
@@ -1100,8 +1189,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       // Discount code field is handled by its own Apply flow, skip standard validation
       if (field.id === 'discount-code') return;
 
-      // Phone was already validated in Step 1 and is read-only in Step 2
-      if (field.id === 'phone' && checkoutStep === 'details' && isSmartCheckout) return;
+      // Phone is validated on its own step and never re-rendered afterwards, so
+      // an error here would point at a field the buyer cannot see.
+      if (field.id === 'phone' && isSmartCheckout && checkoutStep !== 'phone') return;
 
       // Title fields are presentational (no input) — never validate
       if (field.type === 'title') return;
@@ -1325,9 +1415,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       phoneLast4: orderData.phone?.slice(-4),
     });
 
-    // If OTP/verification is enabled, trigger WhatsApp-first verification
-    // Skip for trusted buyers (already verified within 90 days + have previous orders)
-    if (config.settings?.enableOTP && (!isSmartCheckout || !(buyerData?.trustLevel === 'trusted' && isFingerprintMatched))) {
+    // If OTP/verification is enabled, trigger WhatsApp-first verification.
+    // Skipped when the buyer already verified at step 2 of Smart Checkout, and
+    // for trusted buyers (verified within 90 days + have previous orders).
+    if (config.settings?.enableOTP && !isVerified && (!isSmartCheckout || !(buyerData?.trustLevel === 'trusted' && isFingerprintMatched))) {
       setPendingOrderData(orderData);
       setPendingAction('cod');
       setOtpStep('whatsapp'); // Show WhatsApp verification screen
@@ -1337,9 +1428,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     // OTP disabled or skipped for trusted buyer — submit directly
     // Determine why OTP was skipped so we can still tag the order correctly
-    const bypassTag = config.settings?.enableOTP
-      ? 'trusted_buyer_verified'   // OTP enabled but bypassed for trusted+fingerprint-matched buyer
-      : undefined;                 // OTP disabled entirely — no verification tag
+    const bypassTag = !config.settings?.enableOTP
+      ? undefined                  // OTP disabled entirely — no verification tag
+      : verificationTag            // verified at step 2 — carry how they did it
+        || 'trusted_buyer_verified'; // bypassed for trusted+fingerprint-matched buyer
 
     try {
       await onSubmit({ ...orderData, verificationMethod: bypassTag });
@@ -1516,9 +1608,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         currencyDebug: draftCurrencyDebug,
       };
 
-      // If verification is enabled, gate card payment behind WhatsApp verification too
-      // Skip for trusted buyers (already verified within 90 days + have previous orders)
-      if (config.settings?.enableOTP && (!isSmartCheckout || !(buyerData?.trustLevel === 'trusted' && isFingerprintMatched))) {
+      // Gate card payment behind verification too, with the same exemptions:
+      // already verified at step 2, or a trusted fingerprint-matched buyer.
+      if (config.settings?.enableOTP && !isVerified && (!isSmartCheckout || !(buyerData?.trustLevel === 'trusted' && isFingerprintMatched))) {
         pendingCardPayloadRef.current = cardPayload;
         setPendingAction('card');
         setOtpStep('whatsapp');
@@ -1526,7 +1618,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         return;
       }
 
-      const cardBypassTag = config.settings?.enableOTP ? 'trusted_buyer_verified' : undefined;
+      const cardBypassTag = !config.settings?.enableOTP
+        ? undefined
+        : verificationTag || 'trusted_buyer_verified';
       const response = await fetch(`${appPath}proxy/draft-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1674,7 +1768,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
     const hasIcon = ['full-name', 'first-name', 'last-name', 'email', 'phone', 'address', 'city'].includes(field.id);
 
-    const inputStyle = {
+    // Smart Checkout restyles every field type through these six shared style
+    // objects rather than per-branch, so the design lands on custom fields and
+    // selects too. Layout differs from the basic form: the label sits ABOVE the
+    // input as a small uppercase eyebrow, and the leading icon chip is dropped.
+    const inputStyle = isSmartCheckout ? {
+      width: '100%',
+      padding: 'var(--pad-input)',
+      borderRadius: 'var(--radius)',
+      border: 'none',
+      // 16px stops iOS Safari zooming the page when the field takes focus
+      fontSize: '16px',
+      fontFamily: 'var(--font-sans)',
+      fontWeight: 'var(--fw-medium)',
+      color: 'var(--ink)',
+      backgroundColor: 'transparent',
+      outline: 'none',
+      flex: 1,
+      minWidth: 0,
+    } : {
       width: '100%',
       padding: '10px 12px',
       borderRadius: '0',
@@ -1687,7 +1799,15 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       flex: 1,
     };
 
-    const inputGroupStyle = {
+    const inputGroupStyle = isSmartCheckout ? {
+      display: 'flex',
+      alignItems: 'center',
+      borderRadius: 'var(--radius)',
+      border: error ? '1.5px solid var(--danger)' : '1px solid var(--line)',
+      backgroundColor: 'var(--surface)',
+      overflow: 'hidden',
+      flex: 1,
+    } : {
       display: 'flex',
       alignItems: 'center',
       borderRadius: '4px',
@@ -1697,7 +1817,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       flex: 1,
     };
 
-    const iconContainerStyle = {
+    // The design has no leading icon chip — the label carries the meaning.
+    const iconContainerStyle = isSmartCheckout ? { display: 'none' } : {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -1708,7 +1829,18 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       alignSelf: 'stretch',
     };
 
-    const labelStyle = {
+    const labelStyle = isSmartCheckout ? {
+      display: 'block',
+      fontSize: 'var(--fs-3xs)',
+      fontWeight: 'var(--fw-bold)',
+      color: 'var(--muted)',
+      letterSpacing: '0.5px',
+      textTransform: 'uppercase',
+      width: 'auto',
+      minWidth: 0,
+      marginBottom: 'var(--sp-2)',
+      lineHeight: '1.3',
+    } : {
       display: 'flex',
       alignItems: 'center',
       fontSize: '14px',
@@ -1720,14 +1852,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       lineHeight: '1.3',
     };
 
-    const fieldRowStyle = {
+    const fieldRowStyle = isSmartCheckout ? {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      gap: '0',
+      marginBottom: 'var(--sp-5)',
+    } : {
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
       marginBottom: '16px',
     };
 
-    const errorStyle = {
+    const errorStyle = isSmartCheckout ? {
+      color: 'var(--danger)',
+      fontSize: 'var(--fs-2xs)',
+      fontWeight: 'var(--fw-semi)',
+      marginTop: 'var(--sp-2)',
+    } : {
       color: '#EF4444',
       fontSize: '12px',
       marginTop: '4px',
@@ -2394,6 +2537,470 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const alignToJustify = (align) =>
     align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
 
+  // One-tick upsells. Extracted so Smart Checkout's review step and the basic
+  // form render the identical block — its colours, borders and radius all come
+  // from each upsell's own merchant config, so it must not be restyled.
+  const renderOneTickUpsells = () => (
+    <>
+      {oneTickUpsells.length > 0 && oneTickUpsells.map((upsell) => {
+                const isSelected = selectedUpsells[upsell.id] || false;
+
+                // Replace placeholders in checkbox text (use converted price if available)
+                const oneTickPrice = hasDisplayPrice && displayExchangeRate
+                  ? parseFloat((upsell.upsellPrice * displayExchangeRate).toFixed(2))
+                  : upsell.upsellPrice;
+                const oneTickCurrency = hasDisplayPrice ? currencySymbol : resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
+                const checkboxText = upsell.checkboxText
+                  .replace('{title}', `<strong>${upsell.upsellTitle || ''}</strong>`)
+                  .replace('{price}', `<strong>${oneTickCurrency} ${oneTickPrice?.toFixed(2) || '0.00'}</strong>`);
+
+                return (
+                  <div
+                    key={upsell.id}
+                    style={{
+                      marginBottom: '16px',
+                      padding: '16px',
+                      backgroundColor: upsell.backgroundColor || '#d9ebf6',
+                      border: `${upsell.borderWidth || 2}px ${upsell.borderStyle || 'solid'} ${upsell.borderColor || '#0074bf'}`,
+                      borderRadius: `${upsell.borderRadius || 8}px`,
+                    }}
+                  >
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      cursor: 'pointer',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          setSelectedUpsells(prev => ({
+                            ...prev,
+                            [upsell.id]: e.target.checked
+                          }));
+
+                          // Track AddToCart event when upsell is selected
+                          if (e.target.checked) {
+                            const currency = resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
+                            const upsellItem = {
+                              id: upsell.product?.id || `upsell-${upsell.id}`,
+                              variantId: upsell.product?.variantId,
+                              price: upsell.upsellPrice,
+                            };
+                            trackAddToCart(upsellItem, currency);
+                          }
+                        }}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          marginTop: '2px',
+                          cursor: 'pointer',
+                        }}
+                      />
+                      {upsell.imageUrl && (
+                        <img
+                          src={upsell.imageUrl}
+                          alt=""
+                          style={{
+                            width: '48px',
+                            height: '48px',
+                            objectFit: 'cover',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div
+                          style={{
+                            fontSize: '16px',
+                            fontWeight: '400',
+                            color: upsell.textColor || '#000000',
+                            marginBottom: upsell.descriptionText ? '4px' : '0',
+                          }}
+                          dangerouslySetInnerHTML={{ __html: checkboxText }}
+                        />
+                        {upsell.descriptionText && (
+                          <div
+                            style={{
+                              fontSize: '14px',
+                              color: upsell.descriptionColor || '#595959',
+                            }}
+                          >
+                            {upsell.descriptionText}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                );
+              })}
+    </>
+  );
+
+
+  /**
+   * Inline edit form for a saved address, Smart Checkout styling.
+   *
+   * Backed by the same editFormData / handleSaveAddress pair the basic form
+   * uses, so the address-update call and the local buyerData reconciliation are
+   * unchanged — only the presentation differs.
+   */
+  const renderAddressEditForm = () => {
+    const field = (key, labelKey, opts = {}) => (
+      <div className="jaldi-sc-edit-field" style={opts.half ? { flex: 1, minWidth: 0 } : undefined}>
+        <label className="jaldi-sc-label">{t(lang, labelKey)}</label>
+        <input
+          value={editFormData[key] || ''}
+          onChange={(e) => setEditFormData((prev) => ({ ...prev, [key]: e.target.value }))}
+          className="jaldi-sc-edit-input"
+          type={key === 'email' ? 'email' : 'text'}
+        />
+      </div>
+    );
+
+    return (
+      <div className="jaldi-sc-edit-grid">
+        {field('label', 'addressLabelPlaceholder')}
+        <div className="jaldi-sc-edit-row">
+          {field('firstName', 'firstNamePlaceholder', { half: true })}
+          {field('lastName', 'lastNamePlaceholder', { half: true })}
+        </div>
+        {field('email', 'emailPlaceholder')}
+        {field('address', 'streetAddressPlaceholder')}
+        <div className="jaldi-sc-edit-row">
+          {field('city', 'cityPlaceholder', { half: true })}
+          {field('province', 'provincePlaceholder', { half: true })}
+        </div>
+        {field('postalCode', 'postalCodePlaceholder')}
+
+        <div className="jaldi-sc-edit-actions">
+          <button
+            type="button"
+            className="jaldi-sc-cta jaldi-sc-cta-sm"
+            disabled={isSavingAddress}
+            onClick={(e) => handleSaveAddress(e, editingAddressId)}
+          >
+            {isSavingAddress ? t(lang, 'saving') : t(lang, 'save')}
+          </button>
+          <button type="button" className="jaldi-sc-btn-ghost" onClick={handleCancelEdit}>
+            {t(lang, 'cancel')}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Smart Checkout render
+  //
+  // Returns before the basic form's markup below, which is left untouched —
+  // this is the "Smart Checkout only" scope boundary.
+  // ═══════════════════════════════════════════════════════════════════════
+  if (isSmartCheckout) {
+    // Verification is dropped from the rail entirely when the merchant has OTP
+    // off, rather than showing a step with nothing in it.
+    const smartSteps = otpEnabled
+      ? ['phone', 'verify', 'address', 'review']
+      : ['phone', 'address', 'review'];
+    const smartLabels = otpEnabled
+      ? [t(lang, 'stepPhone'), t(lang, 'stepVerify'), t(lang, 'stepAddress'), t(lang, 'stepReview')]
+      : [t(lang, 'stepPhone'), t(lang, 'stepAddress'), t(lang, 'stepReview')];
+    const stepNumber = smartSteps.indexOf(checkoutStep) + 1;
+
+    // The field stores `phoneCode + digits`; the design shows the code in the
+    // picker, so strip it for display and re-attach on the way back in.
+    const localPhone = (formData.phone || '').startsWith(country.phoneCode)
+      ? formData.phone.slice(country.phoneCode.length)
+      : (formData.phone || '');
+
+    const savedAddresses = (buyerData?.trustLevel === 'trusted' && buyerData?.addresses) || [];
+
+    // Totals, in display currency, mirroring the basic form's breakdown rows.
+    const smartBreakdown = [
+      { label: t(lang, 'subtotal'), value: displaySubtotal },
+      bundleDiscount > 0 && { label: t(lang, 'bundleDiscount'), value: -displayBundleDiscount, kind: 'discount', display: `−${currencySymbol}${displayBundleDiscount.toFixed(2)}` },
+      upsellDiscount > 0 && { label: t(lang, 'upsellDiscount'), value: -displayUpsellDiscount, kind: 'discount', display: `−${currencySymbol}${displayUpsellDiscount.toFixed(2)}` },
+      recoveryDiscountAmount > 0 && { label: t(lang, 'recoveryDiscount'), value: -displayRecoveryDiscountAmount, kind: 'discount', display: `−${currencySymbol}${displayRecoveryDiscountAmount.toFixed(2)}` },
+      userDiscountAmount > 0 && { label: t(lang, 'discount'), value: -displayUserDiscountAmount, kind: 'discount', display: `−${currencySymbol}${displayUserDiscountAmount.toFixed(2)}` },
+      { label: t(lang, 'shipping'), value: displayShippingCost, kind: displayShippingCost === 0 ? 'free' : undefined },
+    ].filter(Boolean);
+
+    // Rate rows carry the free-shipping nudge's disabled/message state so that
+    // merchant feature survives the redesign.
+    const smartRates = displayShippingRates.map((rate) => {
+      const isNudgeFree = freeShippingNudge && rate.id === nudgeFreeRateId;
+      const ratePrice = hasDisplayPrice ? rate.price * displayExchangeRate : rate.price;
+      return {
+        id: rate.id,
+        label: rate.name,
+        eta: isNudgeFree ? null : rate.description,
+        price: ratePrice,
+        priceDisplay: ratePrice === 0 ? t(lang, 'free') : `${currencySymbol}${ratePrice.toFixed(2)}`,
+        disabled: isRateDisabled(rate),
+        message: isNudgeFree ? freeShippingNudge.message : null,
+        unlocked: isNudgeFree ? freeShippingNudge.unlocked : false,
+        raw: rate,
+      };
+    });
+
+    // A null selectedAddressId means "the default address" elsewhere in this
+    // component, so resolve it here rather than leaving the picker unselected.
+    const effectiveAddressId = selectedAddressId
+      || savedAddresses.find((a) => a.isDefault)?.id
+      || savedAddresses[0]?.id
+      || null;
+    const selectedSaved = savedAddresses.find((a) => a.id === effectiveAddressId);
+    const deliverToLine = selectedSaved
+      ? [selectedSaved.address, selectedSaved.city].filter(Boolean).join(', ')
+      : [formData.address, formData.city].filter(Boolean).join(', ');
+    const deliverTo = deliverToLine
+      ? { label: selectedSaved?.label, line: deliverToLine }
+      : null;
+
+    const railShipping = selectedShippingRate
+      ? { label: selectedShippingRate.name, eta: selectedShippingRate.description }
+      : null;
+
+    // Address fields, minus the ones the flow handles itself (phone lives on
+    // step 1; discount code moves to the review step).
+    const addressFields = visibleFields.filter(
+      (f) => f.id !== 'phone' && f.id !== 'discount-code' && f.type !== 'whatsapp'
+    );
+    const discountField = visibleFields.find((f) => f.id === 'discount-code');
+    const whatsappFields = visibleFields.filter((f) => f.type === 'whatsapp');
+
+    const codLabel = `${config.formConfig?.submitButtonText?.trim() || t(lang, 'placeOrder')} — ${currencySymbol}${displayTotal.toFixed(2)}`;
+
+    let pane = null;
+
+    if (smartSuccess) {
+      pane = (
+        <SuccessStep
+          lang={lang}
+          currencySymbol={currencySymbol}
+          total={smartSuccess.total}
+          orderNumber={smartSuccess.orderNumber}
+          messageHtml={smartSuccess.messageHtml}
+          onClose={onClose}
+          onContinueShopping={onClose}
+        />
+      );
+    } else if (checkoutStep === 'phone') {
+      pane = (
+        <PhoneStep
+          lang={lang}
+          isRTL={isRTL}
+          country={country}
+          countryCode={countryCode}
+          supportedCountries={supportedCountries}
+          enableMultiCountry={config.shop?.enableMultiCountry}
+          localPhone={localPhone}
+          otpEnabled={otpEnabled}
+          error={errors.phone}
+          isLoading={isTransitioningStep}
+          onPhoneChange={(digits) => handleChange('phone', country.phoneCode + digits)}
+          onCountryChange={(code) => {
+            setSelectedCountry(code);
+            const next = COUNTRIES[code];
+            if (next) setFormData((prev) => ({ ...prev, phone: next.phoneCode }));
+          }}
+          onContinue={handleContinueToStep2}
+        />
+      );
+    } else if (checkoutStep === 'verify' || otpStep !== 'form') {
+      // `otpStep !== 'form'` covers the submit-time fallback: handleSubmit can
+      // still ask for verification from the review step, and without this the
+      // request would have nowhere to render.
+      const trusted = checkoutStep === 'verify'
+        && otpStep === 'form'
+        && buyerData?.trustLevel === 'trusted'
+        && isFingerprintMatched;
+      pane = (
+        <VerifyStep
+          variant={trusted ? 'trusted' : otpStep === 'otp' ? 'otp' : 'walogin'}
+          lang={lang}
+          isRTL={isRTL}
+          phone={formData.phone}
+          firstName={buyerData?.firstName}
+          totalOrders={buyerData?.totalOrders || 0}
+          phase={trusted ? 'verified' : 'checking'}
+          status={waLoginStatus}
+          error={waError || otpError}
+          isSending={isSendingOtp}
+          isVerifying={isVerifyingOtp}
+          method={verifyMethod}
+          code={otpCode}
+          countdown={otpCountdown}
+          canSkip
+          onContinue={() => handleVerificationSuccess(false, trusted ? 'trusted_buyer_verified' : null)}
+          onStart={handleWhatsAppLogin}
+          onVerify={handleVerifyOtp}
+          onResend={handleSendWhatsAppOtp}
+          onCodeChange={(v) => { setOtpCode(v); setOtpError(''); }}
+          onFallbackToOtp={handleSendWhatsAppOtp}
+          onBack={() => { setOtpStep('form'); setOtpCode(''); setOtpError(''); }}
+          onSkip={() => handleVerificationSuccess(true)}
+          onUseDifferentNumber={handleBackToPhone}
+        />
+      );
+    } else if (checkoutStep === 'address') {
+      const useSaved = savedAddresses.length > 0 && addressMode === 'saved';
+      pane = (
+        <AddressStep
+          lang={lang}
+          isRTL={isRTL}
+          addresses={savedAddresses}
+          selectedId={addressMode === 'new' ? 'new' : effectiveAddressId}
+          mode={savedAddresses.length > 0 ? addressMode : 'new'}
+          editingAddressId={editingAddressId}
+          onSelect={handleAddressSelect}
+          onAddNew={() => { setAddressMode('new'); setSelectedAddressId('new'); }}
+          onUseSaved={() => setAddressMode('saved')}
+          onEditAddress={(id) => {
+            const target = savedAddresses.find((a) => a.id === id);
+            if (target) handleEditAddress({ preventDefault() {}, stopPropagation() {} }, target);
+          }}
+          onDeleteAddress={(id) => handleDeleteAddress({ stopPropagation() {} }, id)}
+          renderEditForm={() => renderAddressEditForm()}
+          newAddressNode={<>{addressFields.map(renderField)}</>}
+          continueDisabled={useSaved && !effectiveAddressId}
+          onContinue={() => {
+            if (!validate()) return;
+            setCheckoutStep('review');
+          }}
+        />
+      );
+    } else {
+      pane = (
+        <ReviewStep
+          lang={lang}
+          items={cart.items}
+          currencySymbol={currencySymbol}
+          breakdown={smartBreakdown}
+          total={displayTotal}
+          deliverTo={deliverTo}
+          onEditAddress={() => setCheckoutStep('address')}
+          shippingRates={smartRates}
+          selectedShippingRateId={selectedShippingRate?.id}
+          onSelectShipping={(r) => setSelectedShippingRate(r.raw)}
+          discountNode={discountField ? renderField(discountField) : null}
+          upsellsNode={renderOneTickUpsells()}
+          showSummary
+          ctasNode={
+            <>
+              {submitError && (
+                <div className="jaldi-sc-alert" role="alert">
+                  <SmartIcon.Info size={13} /> {submitError}
+                </div>
+              )}
+              {variantMixOosError && (
+                <div className="jaldi-sc-alert" role="alert">
+                  <SmartIcon.Info size={13} /> {t(lang, 'removeOosFromBundle')}
+                </div>
+              )}
+
+              {!(config.settings?.enableCartPermalink && config.settings?.hideCompleteOrderButton) && (
+                <button
+                  type="submit"
+                  disabled={isSubmitting || variantMixOosError}
+                  className="jaldi-sc-cta jaldi-sc-hit"
+                >
+                  {isSubmitting ? (
+                    <><span className="jaldi-sc-spinner" aria-hidden="true" />{t(lang, 'processing')}</>
+                  ) : (
+                    <><SmartIcon.Lock size={14} /> {codLabel}</>
+                  )}
+                </button>
+              )}
+
+              {config.settings?.enableCartPermalink && (
+                <button
+                  type="button"
+                  onClick={handlePayWithCard}
+                  disabled={isRedirectingToCheckout || isSubmitting || variantMixOosError}
+                  className="jaldi-sc-cta jaldi-sc-cta-alt jaldi-sc-hit"
+                >
+                  {isRedirectingToCheckout ? (
+                    <><span className="jaldi-sc-spinner" aria-hidden="true" />{t(lang, 'redirecting')}</>
+                  ) : (
+                    <><SmartIcon.CreditCard size={16} /> {t(lang, 'payWithCard')}</>
+                  )}
+                </button>
+              )}
+
+              {config.settings?.payfastEnabled && (
+                <button
+                  type="button"
+                  onClick={handlePayWithPayFast}
+                  disabled={isPayfastProcessing || isSubmitting || isRedirectingToCheckout || variantMixOosError}
+                  className="jaldi-sc-cta jaldi-sc-cta-alt jaldi-sc-hit"
+                >
+                  <SmartIcon.CreditCard size={16} /> {config.settings?.payfastButtonText || 'PayFast'}
+                </button>
+              )}
+
+              {whatsappFields.map(renderField)}
+            </>
+          }
+        />
+      );
+    }
+
+    const smartRoot = {
+      ...deriveTheme(config.formConfig?.submitButtonBgColor || config.settings?.buttonBgColor),
+      display: 'flex',
+      width: '100%',
+      direction: isRTL ? 'rtl' : 'ltr',
+    };
+
+    return (
+      <div style={smartRoot}>
+        <ModalShell
+          step={smartSuccess ? 0 : stepNumber}
+          totalSteps={smartSuccess ? 0 : smartSteps.length}
+          stepLabels={smartLabels}
+          onBack={!smartSuccess && stepNumber > 1 ? () => setCheckoutStep(smartSteps[stepNumber - 2]) : null}
+          onClose={onClose}
+          title={config.formConfig.formTitle}
+          titleAlign={config.formConfig.formTitleAlign || 'center'}
+          lang={lang}
+          isRTL={isRTL}
+          mode={mode}
+          summary={smartSuccess ? null : (
+            <SummaryRail
+              lang={lang}
+              items={cart.items}
+              currencySymbol={currencySymbol}
+              breakdown={smartBreakdown}
+              total={displayTotal}
+              address={checkoutStep === 'review' ? deliverTo : null}
+              shipping={checkoutStep === 'review' ? railShipping : null}
+            />
+          )}
+        >
+          <form onSubmit={handleSubmit} className="jaldi-form jaldi-sc-form-wrap">
+            {pane}
+          </form>
+        </ModalShell>
+
+        {showPayFastModal && (
+          <PayFastModal
+            appPath={appPath}
+            shop={config.shopDomain}
+            orderPayload={buildPayfastOrderPayload()}
+            phone={formData.phone || ''}
+            config={config}
+            onSuccess={handlePayfastSuccess}
+            onClose={() => { setShowPayFastModal(false); setIsPayfastProcessing(false); }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={formStyle}>
       {/* Fixed Header */}
@@ -2449,316 +3056,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         display: 'flex',
         flexDirection: 'column',
       }}>
-        {/* Step 1: Phone Entry */}
-        {isSmartCheckout && checkoutStep === 'phone' && (
-          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-            {/* Order Summary Card — Collapsible */}
-            {cart.items.length > 0 && (
-              <div style={{
-                border: '1px solid #E5E7EB',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                backgroundColor: '#fff',
-                marginBottom: '20px',
-              }}>
-                {/* Summary Header — always visible */}
-                <button
-                  type="button"
-                  onClick={() => setStep1SummaryOpen(prev => !prev)}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '14px 16px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                    backgroundColor: '#f9fafb',
-                    borderBottom: step1SummaryOpen ? '1px solid #E5E7EB' : 'none',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                    </svg>
-                    <span style={{ fontSize: '15px', fontWeight: '600', color: '#111' }}>
-                      Order Summary
-                    </span>
-                    <span style={{ fontSize: '13px', color: '#6B7280' }}>
-                      ({cart.items.reduce((sum, i) => sum + i.quantity, 0)} {cart.items.reduce((sum, i) => sum + i.quantity, 0) === 1 ? t(lang, 'item') : t(lang, 'items')})
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: '700', color: '#111' }}>
-                      {currencySymbol}{displayTotal.toFixed(2)}
-                    </span>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="#6B7280"
-                      style={{ transform: step1SummaryOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      <path d="M2.5 4.5L6 8L9.5 4.5" stroke="#6B7280" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Summary Body — collapsible */}
-                {step1SummaryOpen && (
-                  <div style={{ padding: '12px 16px 16px 16px' }}>
-                    {/* Product Cards */}
-                    {cart.items.map((item, idx) => (
-                      <div key={idx} style={{
-                        display: 'flex',
-                        gap: '12px',
-                        marginBottom: '12px',
-                        paddingBottom: idx === cart.items.length - 1 ? '0' : '12px',
-                        borderBottom: idx === cart.items.length - 1 ? 'none' : '1px solid #f3f4f6',
-                      }}>
-                        {item.image && (
-                          <div style={{
-                            width: '52px',
-                            height: '52px',
-                            flexShrink: 0,
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            backgroundColor: '#F3F4F6',
-                            border: '1px solid #E5E7EB',
-                          }}>
-                            <img src={item.image} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '13px', fontWeight: '500', color: '#111', lineHeight: '1.3', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.title}
-                          </div>
-                          {item.variant && (
-                            <div style={{ fontSize: '12px', color: '#6B7280' }}>{item.variant}</div>
-                          )}
-                          <div style={{ fontSize: '12px', color: '#6B7280' }}>{t(lang, 'qty')}: {item.quantity}</div>
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: '600', color: '#111', whiteSpace: 'nowrap', alignSelf: 'center' }}>
-                          {item.hasBundleDiscount && item.originalPrice ? (
-                            <>
-                              <div style={{ fontSize: '11px', fontWeight: '400', color: '#9CA3AF', textDecoration: 'line-through' }}>
-                                {currencySymbol}{(item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice).toFixed(2)}
-                              </div>
-                              <div style={{ color: '#10b981' }}>
-                                {currencySymbol}{(item.displayPrice != null ? item.displayPrice : item.price).toFixed(2)}
-                              </div>
-                            </>
-                          ) : (
-                            <>{currencySymbol}{((item.displayPrice != null ? item.displayPrice : item.price) * item.quantity).toFixed(2)}</>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Price Breakdown */}
-                    <div style={{
-                      padding: '10px 12px',
-                      backgroundColor: '#F3F4F6',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                        <span>{t(lang, 'subtotal')}</span>
-                        <span style={{ fontWeight: '600' }}>{currencySymbol}{displaySubtotal.toFixed(2)}</span>
-                      </div>
-                      {bundleDiscount > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                          <span>{t(lang, 'discount')}</span>
-                          <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayBundleDiscount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {upsellDiscount > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                          <span>{t(lang, 'upsellDiscount')}</span>
-                          <span style={{ color: '#10B981', fontWeight: '600' }}>-{currencySymbol}{displayUpsellDiscount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#374151' }}>
-                        <span>{t(lang, 'shipping')}</span>
-                        <span style={{ color: '#6B7280', fontStyle: 'italic' }}>{t(lang, 'calculatedNext')}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 2px', marginTop: '4px', borderTop: '1px solid #D1D5DB', fontWeight: '700', color: '#111' }}>
-                        <span>{t(lang, 'total')}</span>
-                        <span>{currencySymbol}{displayTotal.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Phone Entry Section */}
-            <div>
-              {/* Heading */}
-              <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#000', margin: '0 0 16px 0' }}>
-                {t(lang, 'loginToContinue')}
-              </h3>
-
-              {/* Phone Input — Shopflo style: [flag ▾ +code | number] single border */}
-              <div style={{ marginBottom: '16px' }}>
-                <div
-                  className="jaldi-phone-wrapper"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    height: '48px',
-                    borderRadius: `${config.formConfig.borderRadius}px`,
-                    border: errors.phone ? '2px solid #EF4444' : '1.5px solid #d1d5db',
-                    backgroundColor: '#fff',
-                    overflow: 'hidden',
-                    transition: 'border-color 0.15s, box-shadow 0.15s',
-                  }}
-                >
-                  {/* Left side: flag + code (clickable if multi-country) */}
-                  <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, position: 'relative' }}>
-                    {config.shop?.enableMultiCountry && supportedCountries.length > 1 ? (
-                      <>
-                        <select
-                          value={countryCode}
-                          onChange={(e) => {
-                            setSelectedCountry(e.target.value);
-                            const newCountry = COUNTRIES[e.target.value];
-                            if (newCountry) {
-                              setFormData(prev => ({ ...prev, phone: newCountry.phoneCode }));
-                            }
-                          }}
-                          style={{
-                            position: 'absolute',
-                            inset: 0,
-                            opacity: 0,
-                            cursor: 'pointer',
-                            fontSize: '16px',
-                          }}
-                        >
-                          {supportedCountries.map(c => (
-                            <option key={c.code} value={c.code}>{c.name} ({c.phoneCode})</option>
-                          ))}
-                        </select>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '0 8px 0 14px', pointerEvents: 'none' }}>
-                          <span style={{ fontSize: '15px', color: '#374151', fontWeight: '500' }}>{country.code}</span>
-                          <svg width="10" height="10" viewBox="0 0 10 10">
-                            <path d="M2.5 4L5 6.5L7.5 4" stroke="#9CA3AF" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ padding: '0 8px 0 14px' }}>
-                        <span style={{ fontSize: '15px', color: '#374151', fontWeight: '500' }}>{country.code}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Subtle separator */}
-                  <div style={{ width: '1px', height: '20px', backgroundColor: '#E5E7EB', flexShrink: 0 }} />
-
-                  {/* Phone number input */}
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={(e) => {
-                      handleChange('phone', e.target.value);
-                      if (errors.phone) setErrors({});
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleContinueToStep2();
-                      }
-                    }}
-                    onFocus={() => {
-                      const wrapper = document.querySelector('.jaldi-phone-wrapper');
-                      if (wrapper && !errors.phone) {
-                        wrapper.style.borderColor = '#2563EB';
-                        wrapper.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                      }
-                    }}
-                    onBlur={() => {
-                      const wrapper = document.querySelector('.jaldi-phone-wrapper');
-                      if (wrapper && !errors.phone) {
-                        wrapper.style.borderColor = '#d1d5db';
-                        wrapper.style.boxShadow = 'none';
-                      }
-                    }}
-                    placeholder="3001234567"
-                    maxLength={15}
-                    autoFocus
-                    style={{
-                      flex: 1,
-                      height: '100%',
-                      padding: '0 14px 0 10px',
-                      border: 'none',
-                      outline: 'none',
-                      fontSize: '14px',
-                      fontFamily: 'inherit',
-                      color: '#111',
-                      backgroundColor: 'transparent',
-                    }}
-                  />
-                </div>
-                {errors.phone && (
-                  <div style={{ color: '#EF4444', fontSize: '12px', marginTop: '4px' }}>
-                    {errors.phone}
-                  </div>
-                )}
-              </div>
-
-              {/* Continue Button */}
-              <button
-                type="button"
-                onClick={handleContinueToStep2}
-                disabled={isTransitioningStep}
-                style={{
-                  width: '100%',
-                  padding: '16px',
-                  backgroundColor: config.formConfig.submitButtonBgColor || '#000',
-                  color: config.formConfig.submitButtonTextColor || '#fff',
-                  border: 'none',
-                  borderRadius: `${config.formConfig.borderRadius}px`,
-                  fontSize: '15px',
-                  fontFamily: 'inherit',
-                  fontWeight: '600',
-                  cursor: isTransitioningStep ? 'not-allowed' : 'pointer',
-                  opacity: isTransitioningStep ? 0.7 : 1,
-                  transition: 'opacity 0.2s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                }}
-              >
-                {isTransitioningStep ? (
-                  <>
-                    <div className="jaldi-loading" style={{ width: '18px', height: '18px' }}></div>
-                    <span>{t(lang, 'lookingUp')}</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{t(lang, 'continue')}</span>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M5.25 3.5L8.75 7L5.25 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </>
-                )}
-              </button>
-
-              {/* Trust Footer */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                marginTop: '16px',
-                color: '#9CA3AF',
-                fontSize: '12px',
-              }}>
-                <span>🔒 {t(lang, 'securedBy')}</span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Step 2: Order Details */}
         {checkoutStep === 'details' && (
@@ -2800,57 +3097,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
         <form onSubmit={handleSubmit} style={{ padding: '20px 24px 24px 24px' }}>
 
-        {/* Phone summary — read-only phone with "Change" link (smart checkout only) */}
-        {isSmartCheckout && (<div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 14px',
-          marginBottom: '16px',
-          backgroundColor: '#f9fafb',
-          border: '1px solid #e5e7eb',
-          borderRadius: `${config.formConfig.borderRadius}px`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="#6B7280">
-              <path d="M3.654 1.328a.678.678 0 0 0-1.015-.063L1.605 2.3c-.483.484-.661 1.169-.45 1.77a17.568 17.568 0 0 0 4.168 6.608 17.569 17.569 0 0 0 6.608 4.168c.601.211 1.286.033 1.77-.45l1.034-1.034a.678.678 0 0 0-.063-1.015l-2.307-1.794a.678.678 0 0 0-.58-.122l-2.19.547a1.745 1.745 0 0 1-1.657-.459L5.482 8.062a1.745 1.745 0 0 1-.46-1.657l.548-2.19a.678.678 0 0 0-.122-.58L3.654 1.328zM1.884.511a1.745 1.745 0 0 1 2.612.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.678.678 0 0 0 .178.643l2.457 2.457a.678.678 0 0 0 .644.178l2.189-.547a1.745 1.745 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.634 18.634 0 0 1-7.01-4.42 18.634 18.634 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877L1.885.511z"/>
-            </svg>
-            <span style={{ fontSize: '14px', fontWeight: '500', color: '#111' }}>{formData.phone}</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleBackToPhone}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#070059',
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              padding: '2px 4px',
-            }}
-          >
-            {t(lang, 'change')}
-          </button>
-        </div>)}
 
-        {/* Welcome back banner — merged for recognized/trusted buyers */}
-        {isSmartCheckout && buyerData && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 14px',
-            marginBottom: '16px',
-            backgroundColor: buyerData.trustLevel === 'trusted' ? '#f0fdf4' : '#f0f9ff',
-            border: `1.5px solid ${buyerData.trustLevel === 'trusted' ? '#86efac' : '#93c5fd'}`,
-            borderRadius: `${config.formConfig.borderRadius}px`,
-          }}>
-            <span style={{ fontSize: '13px', color: buyerData.trustLevel === 'trusted' ? '#15803d' : '#1d4ed8', fontWeight: '500' }}>
-              &#10003; {t(lang, 'welcomeBack')}{buyerData.firstName ? `, ${buyerData.firstName}` : ''}! {t(lang, 'reviewInfo')}
-            </span>
-          </div>
-        )}
 
         {visibleSections.map((section) => {
           switch (section.type) {
@@ -3206,12 +3453,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                           alignItems: 'center',
                           borderRadius: '4px',
                           border: '1px solid #D1D5DB',
-                          backgroundColor: isSmartCheckout ? '#F3F4F6' : '#FFFFFF',
+                          backgroundColor: '#FFFFFF',
                           overflow: 'hidden',
                         }}>
                           <select
                             value={countryCode}
-                            disabled={isSmartCheckout}
                             onChange={(e) => {
                               setSelectedCountry(e.target.value);
                               const newCountry = COUNTRIES[e.target.value];
@@ -3229,9 +3475,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               fontSize: '14px',
                               fontFamily: 'inherit',
                               backgroundColor: 'transparent',
-                              cursor: isSmartCheckout ? 'default' : 'pointer',
+                              cursor: 'pointer',
                               outline: 'none',
-                              opacity: isSmartCheckout ? 0.7 : 1,
                             }}
                           >
                             {supportedCountries.map(c => (
@@ -3241,7 +3486,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             ))}
                           </select>
                         </div>
-                        {!isSmartCheckout && detectedCountry && !selectedCountry && (
+                        {detectedCountry && !selectedCountry && (
                           <small style={{
                             display: 'block',
                             marginTop: '4px',
@@ -3255,348 +3500,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                     </div>
                   )}
 
-                  {/* Address picker — shown for trusted buyers with 1+ saved addresses (smart checkout only) */}
-                  {isSmartCheckout && buyerData?.trustLevel === 'trusted' && buyerData?.addresses?.length >= 1 && (
-                    <div style={{ marginBottom: '12px' }}>
-                      {/* Header row */}
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: '8px',
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          fontSize: '13px',
-                          fontWeight: '600',
-                          color: config.formConfig.textColor,
-                        }}>
-                          {/* Delivery truck icon */}
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="1" y="3" width="15" height="13" rx="1"></rect>
-                            <path d="M16 8h4l3 5v3h-7V8z"></path>
-                            <circle cx="5.5" cy="18.5" r="2.5"></circle>
-                            <circle cx="18.5" cy="18.5" r="2.5"></circle>
-                          </svg>
-                          {t(lang, 'deliverTo')}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleAddressSelect('new')}
-                          style={{
-                            background: '#8eeff9',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '4px 10px',
-                            fontSize: '12px',
-                            fontWeight: '500',
-                            color: '#070059',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
-                        >
-                          <span style={{ fontSize: '14px', lineHeight: 1 }}>+</span>
-                          {t(lang, 'addNewAddress')}
-                        </button>
-                      </div>
 
-                      {/* Address cards */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {buyerData.addresses.map(a => {
-                          const isSelected = selectedAddressId === a.id || (!selectedAddressId && a.isDefault);
-                          const isEditing = editingAddressId === a.id;
-
-                          return (
-                            <div
-                              key={a.id}
-                              onClick={() => !isEditing && handleAddressSelect(a.id)}
-                              style={{
-                                border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? '#000000' : 'rgba(0,0,0,0.15)'}`,
-                                borderRadius: `${config.formConfig.borderRadius}px`,
-                                backgroundColor: isSelected ? 'rgba(0,0,0,0.02)' : 'transparent',
-                                cursor: isEditing ? 'default' : 'pointer',
-                                transition: 'border-color 0.15s',
-                                overflow: 'hidden',
-                              }}
-                            >
-                              {isEditing ? (
-                                /* Edit mode — inline fields */
-                                <div style={{ padding: '12px' }} onClick={e => e.stopPropagation()}>
-                                  {/* Label field */}
-                                  <input
-                                    type="text"
-                                    placeholder="Label (e.g. Address 1, Work)"
-                                    value={editFormData.label || ''}
-                                    onChange={e => setEditFormData(prev => ({ ...prev, label: e.target.value }))}
-                                    style={{
-                                      width: '100%',
-                                      padding: '7px 10px',
-                                      border: '1px solid rgba(0,0,0,0.2)',
-                                      borderRadius: '4px',
-                                      fontSize: '13px',
-                                      marginBottom: '6px',
-                                      boxSizing: 'border-box',
-                                      color: config.formConfig.textColor,
-                                      backgroundColor: 'transparent',
-                                    }}
-                                  />
-                                  {/* Name row */}
-                                  <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                                    <input
-                                      type="text"
-                                      placeholder="First name"
-                                      value={editFormData.firstName || ''}
-                                      onChange={e => setEditFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                                      style={{
-                                        flex: 1,
-                                        padding: '7px 10px',
-                                        border: '1px solid rgba(0,0,0,0.2)',
-                                        borderRadius: '4px',
-                                        fontSize: '13px',
-                                        boxSizing: 'border-box',
-                                        color: config.formConfig.textColor,
-                                        backgroundColor: 'transparent',
-                                      }}
-                                    />
-                                    <input
-                                      type="text"
-                                      placeholder="Last name"
-                                      value={editFormData.lastName || ''}
-                                      onChange={e => setEditFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                                      style={{
-                                        flex: 1,
-                                        padding: '7px 10px',
-                                        border: '1px solid rgba(0,0,0,0.2)',
-                                        borderRadius: '4px',
-                                        fontSize: '13px',
-                                        boxSizing: 'border-box',
-                                        color: config.formConfig.textColor,
-                                        backgroundColor: 'transparent',
-                                      }}
-                                    />
-                                  </div>
-                                  {/* Email field */}
-                                  <input
-                                    type="email"
-                                    placeholder="Email"
-                                    value={editFormData.email || ''}
-                                    onChange={e => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
-                                    style={{
-                                      width: '100%',
-                                      padding: '7px 10px',
-                                      border: '1px solid rgba(0,0,0,0.2)',
-                                      borderRadius: '4px',
-                                      fontSize: '13px',
-                                      marginBottom: '6px',
-                                      boxSizing: 'border-box',
-                                      color: config.formConfig.textColor,
-                                      backgroundColor: 'transparent',
-                                    }}
-                                  />
-                                  {/* Address field */}
-                                  <input
-                                    type="text"
-                                    placeholder="Street address"
-                                    value={editFormData.address || ''}
-                                    onChange={e => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
-                                    style={{
-                                      width: '100%',
-                                      padding: '7px 10px',
-                                      border: '1px solid rgba(0,0,0,0.2)',
-                                      borderRadius: '4px',
-                                      fontSize: '13px',
-                                      marginBottom: '6px',
-                                      boxSizing: 'border-box',
-                                      color: config.formConfig.textColor,
-                                      backgroundColor: 'transparent',
-                                    }}
-                                  />
-                                  {/* City + Province row */}
-                                  <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                                    <input
-                                      type="text"
-                                      placeholder="City"
-                                      value={editFormData.city || ''}
-                                      onChange={e => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
-                                      style={{
-                                        flex: 1,
-                                        padding: '7px 10px',
-                                        border: '1px solid rgba(0,0,0,0.2)',
-                                        borderRadius: '4px',
-                                        fontSize: '13px',
-                                        boxSizing: 'border-box',
-                                        color: config.formConfig.textColor,
-                                        backgroundColor: 'transparent',
-                                      }}
-                                    />
-                                    <input
-                                      type="text"
-                                      placeholder="Province"
-                                      value={editFormData.province || ''}
-                                      onChange={e => setEditFormData(prev => ({ ...prev, province: e.target.value }))}
-                                      style={{
-                                        flex: 1,
-                                        padding: '7px 10px',
-                                        border: '1px solid rgba(0,0,0,0.2)',
-                                        borderRadius: '4px',
-                                        fontSize: '13px',
-                                        boxSizing: 'border-box',
-                                        color: config.formConfig.textColor,
-                                        backgroundColor: 'transparent',
-                                      }}
-                                    />
-                                  </div>
-                                  {/* Postal code */}
-                                  <input
-                                    type="text"
-                                    placeholder="Postal code"
-                                    value={editFormData.postalCode || ''}
-                                    onChange={e => setEditFormData(prev => ({ ...prev, postalCode: e.target.value }))}
-                                    style={{
-                                      width: '100%',
-                                      padding: '7px 10px',
-                                      border: '1px solid rgba(0,0,0,0.2)',
-                                      borderRadius: '4px',
-                                      fontSize: '13px',
-                                      marginBottom: '6px',
-                                      boxSizing: 'border-box',
-                                      color: config.formConfig.textColor,
-                                      backgroundColor: 'transparent',
-                                    }}
-                                  />
-                                  {/* Action buttons */}
-                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                                    <button
-                                      type="button"
-                                      onClick={handleCancelEdit}
-                                      style={{
-                                        padding: '6px 14px',
-                                        border: '1px solid rgba(0,0,0,0.2)',
-                                        borderRadius: '4px',
-                                        background: 'none',
-                                        fontSize: '12px',
-                                        cursor: 'pointer',
-                                        color: config.formConfig.textColor,
-                                      }}
-                                    >
-                                      {t(lang, 'cancel')}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={e => handleSaveAddress(e, a.id)}
-                                      disabled={isSavingAddress}
-                                      style={{
-                                        padding: '6px 14px',
-                                        border: 'none',
-                                        borderRadius: '4px',
-                                        background: '#000',
-                                        color: '#fff',
-                                        fontSize: '12px',
-                                        fontWeight: '600',
-                                        cursor: isSavingAddress ? 'not-allowed' : 'pointer',
-                                        opacity: isSavingAddress ? 0.7 : 1,
-                                      }}
-                                    >
-                                      {isSavingAddress ? t(lang, 'saving') : t(lang, 'save')}
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                /* Display mode */
-                                <div style={{
-                                  display: 'flex',
-                                  alignItems: 'flex-start',
-                                  justifyContent: 'space-between',
-                                  padding: '10px 12px',
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '8px', flexShrink: 0 }}>
-                                    <input
-                                      type="radio"
-                                      name="savedAddress"
-                                      checked={isSelected}
-                                      onChange={() => handleAddressSelect(a.id)}
-                                      style={{ width: '16px', height: '16px', accentColor: '#000', margin: 0, cursor: 'pointer' }}
-                                    />
-                                  </div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                                      <span style={{ fontSize: '13px', fontWeight: '600', color: config.formConfig.textColor }}>
-                                        {a.label}
-                                      </span>
-                                    </div>
-                                    {buyerData.firstName && (
-                                      <div style={{ fontSize: '13px', color: config.formConfig.textColor, marginBottom: '1px' }}>
-                                        {[buyerData.firstName, buyerData.lastName].filter(Boolean).join(' ')}
-                                      </div>
-                                    )}
-                                    <div style={{ fontSize: '12px', color: config.formConfig.textColor, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {a.address}
-                                    </div>
-                                    {(a.city || a.province || a.postalCode) && (
-                                      <div style={{ fontSize: '12px', color: config.formConfig.textColor, opacity: 0.55 }}>
-                                        {[a.city, a.province, a.postalCode].filter(Boolean).join(', ')}
-                                      </div>
-                                    )}
-                                    <div style={{ fontSize: '12px', color: config.formConfig.textColor, opacity: 0.55, marginTop: '2px' }}>
-                                      {[formData.phone, buyerData.email].filter(Boolean).join(', ')}
-                                    </div>
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                    <button
-                                      type="button"
-                                      onClick={e => handleEditAddress(e, a)}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        padding: '2px',
-                                        cursor: 'pointer',
-                                        color: config.formConfig.textColor,
-                                        opacity: 0.5,
-                                      }}
-                                    >
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                      </svg>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={e => handleDeleteAddress(e, a.id)}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        padding: '2px',
-                                        cursor: 'pointer',
-                                        color: '#EF4444',
-                                        opacity: 0.6,
-                                      }}
-                                    >
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Hide individual address fields when a saved address is selected (not 'new') */}
-                  {(isSmartCheckout && selectedAddressId !== 'new' && buyerData?.trustLevel === 'trusted' && buyerData?.addresses?.length >= 1)
-                    ? visibleFields.filter(f => !['phone', 'first-name', 'last-name', 'full-name', 'email', 'address', 'address2', 'city', 'province', 'postal-code'].includes(f.id) && f.type !== 'whatsapp').map(renderField)
-                    : isSmartCheckout
-                      ? visibleFields.filter(f => f.id !== 'phone' && f.type !== 'whatsapp').map(renderField)
-                      : visibleFields.filter(f => f.type !== 'whatsapp').map(renderField)
-                  }
+                  {visibleFields.filter(f => f.type !== 'whatsapp').map(renderField)}
                 </div>
               );
 
@@ -3606,101 +3511,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         })}
 
         {/* One-Tick Upsells */}
-        {oneTickUpsells.length > 0 && oneTickUpsells.map((upsell) => {
-          const isSelected = selectedUpsells[upsell.id] || false;
-
-          // Replace placeholders in checkbox text (use converted price if available)
-          const oneTickPrice = hasDisplayPrice && displayExchangeRate
-            ? parseFloat((upsell.upsellPrice * displayExchangeRate).toFixed(2))
-            : upsell.upsellPrice;
-          const oneTickCurrency = hasDisplayPrice ? currencySymbol : resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
-          const checkboxText = upsell.checkboxText
-            .replace('{title}', `<strong>${upsell.upsellTitle || ''}</strong>`)
-            .replace('{price}', `<strong>${oneTickCurrency} ${oneTickPrice?.toFixed(2) || '0.00'}</strong>`);
-
-          return (
-            <div
-              key={upsell.id}
-              style={{
-                marginBottom: '16px',
-                padding: '16px',
-                backgroundColor: upsell.backgroundColor || '#d9ebf6',
-                border: `${upsell.borderWidth || 2}px ${upsell.borderStyle || 'solid'} ${upsell.borderColor || '#0074bf'}`,
-                borderRadius: `${upsell.borderRadius || 8}px`,
-              }}
-            >
-              <label style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
-                cursor: 'pointer',
-              }}>
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={(e) => {
-                    setSelectedUpsells(prev => ({
-                      ...prev,
-                      [upsell.id]: e.target.checked
-                    }));
-
-                    // Track AddToCart event when upsell is selected
-                    if (e.target.checked) {
-                      const currency = resolvePixelCurrency({ shopCurrencyCode: config.shop?.currencyCode, country: config.shop?.country });
-                      const upsellItem = {
-                        id: upsell.product?.id || `upsell-${upsell.id}`,
-                        variantId: upsell.product?.variantId,
-                        price: upsell.upsellPrice,
-                      };
-                      trackAddToCart(upsellItem, currency);
-                    }
-                  }}
-                  style={{
-                    width: '18px',
-                    height: '18px',
-                    marginTop: '2px',
-                    cursor: 'pointer',
-                  }}
-                />
-                {upsell.imageUrl && (
-                  <img
-                    src={upsell.imageUrl}
-                    alt=""
-                    style={{
-                      width: '48px',
-                      height: '48px',
-                      objectFit: 'cover',
-                      borderRadius: '6px',
-                      border: '1px solid rgba(0,0,0,0.1)',
-                      flexShrink: 0,
-                    }}
-                  />
-                )}
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: '16px',
-                      fontWeight: '400',
-                      color: upsell.textColor || '#000000',
-                      marginBottom: upsell.descriptionText ? '4px' : '0',
-                    }}
-                    dangerouslySetInnerHTML={{ __html: checkboxText }}
-                  />
-                  {upsell.descriptionText && (
-                    <div
-                      style={{
-                        fontSize: '14px',
-                        color: upsell.descriptionColor || '#595959',
-                      }}
-                    >
-                      {upsell.descriptionText}
-                    </div>
-                  )}
-                </div>
-              </label>
-            </div>
-          );
-        })}
+        {renderOneTickUpsells()}
 
         {submitError && (
           <div style={{
@@ -3974,20 +3785,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           );
         })}
 
-        {/* Trust Footer — Step 2 (smart checkout only) */}
-        {isSmartCheckout && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            marginTop: '16px',
-            color: '#9CA3AF',
-            fontSize: '12px',
-          }}>
-            <span>🔒 {t(lang, 'securedBy')}</span>
-          </div>
-        )}
       </form>
           </>
         )}
@@ -4297,7 +4094,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           {/* Bypass for users without WhatsApp */}
           <button
             type="button"
-            onClick={() => executePendingAction(true)}
+            onClick={() => handleVerificationSuccess(true)}
             style={{
               background: 'none',
               border: 'none',

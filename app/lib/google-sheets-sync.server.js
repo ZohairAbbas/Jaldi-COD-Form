@@ -48,9 +48,13 @@ export async function runGoogleSheetsSync() {
         summary.processed += written;
       }
 
+      // lastSuccessAt is only ever written here, on the success path. That is
+      // what makes it usable as a health signal — unlike lastSyncedAt, which
+      // the failure path below also updates.
+      const now = new Date();
       await prisma.googleSheetsIntegration.update({
         where: { id: integration.id },
-        data: { lastSyncedAt: new Date(), lastSyncError: null },
+        data: { lastSyncedAt: now, lastSuccessAt: now, lastSyncError: null },
       });
     } catch (error) {
       const details =

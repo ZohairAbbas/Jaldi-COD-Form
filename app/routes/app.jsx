@@ -6,9 +6,11 @@ import ErrorPage from "../components/ErrorPage";
 import { getOrCreateShop, getMonthlyOrderCount } from "../lib/db.server";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 import { getSubscription } from "../lib/mantle.server";
+import { getSheetsAlertForShop } from "../lib/google-sheets.server";
 import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import MixpanelProvider from "../components/MixpanelProvider";
 import BillingBanner from "../components/BillingBanner";
+import IntegrationAlertBanner from "../components/IntegrationAlertBanner";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -27,6 +29,13 @@ export const loader = async ({ request }) => {
 
   const subscription = await getSubscription(shop.id);
 
+  // Integrations the merchant must act on themselves. Null unless something is
+  // genuinely broken, so the common case renders nothing. One indexed lookup.
+  const sheetsAlert = await getSheetsAlertForShop(shop.id).catch((e) => {
+    console.error("[Preventify] sheets health check failed:", e);
+    return null;
+  });
+
   // Compute plan usage for billing banner
   const monthlyOrderCount = await getMonthlyOrderCount(shop.id);
   const planName = getEffectivePlanName(subscription);
@@ -44,6 +53,7 @@ export const loader = async ({ request }) => {
       hasSettings: !!shop.settings,
     },
     subscription,
+    sheetsAlert,
     planUsage: {
       planName,
       monthlyOrderCount,
@@ -62,7 +72,7 @@ export const loader = async ({ request }) => {
 };
 
 export default function App() {
-  const { apiKey, shop, subscription, planUsage, ENV, user, isAdmin } = useLoaderData();
+  const { apiKey, shop, subscription, planUsage, ENV, user, isAdmin, sheetsAlert } = useLoaderData();
   const navigation = useNavigation();
   const isNavigatingToBilling = navigation.state === 'loading' && navigation.location?.pathname === '/app/billing';
 
@@ -87,6 +97,7 @@ export default function App() {
         </s-app-nav>
         <div style={{ padding: '16px' }}>
           <BillingBanner subscription={subscription} planUsage={planUsage} isNavigatingToBilling={isNavigatingToBilling} />
+          <IntegrationAlertBanner sheetsAlert={sheetsAlert} />
           <Outlet />
         </div>
       </MixpanelProvider>

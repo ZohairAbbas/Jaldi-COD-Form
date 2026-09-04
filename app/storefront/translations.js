@@ -114,6 +114,78 @@ export const translations = {
     qty: "Qty",
     backToVerificationOptions: "Back to verification options",
     removeOosFromBundle: "Please remove out of stock item(s) from your bundle selection",
+
+    // ── Smart Checkout (revamped UI) ──────────────────────────────────────
+    // Shell
+    back: "Back",
+    close: "Close",
+    smartCheckout: "Smart Checkout",
+    securedByPrefix: "Secured by",
+    stepPhone: "Phone",
+    stepVerify: "Verify",
+    stepAddress: "Address",
+    stepReview: "Review",
+
+    // Step 1 — phone
+    continueWithMobile: "Continue with mobile",
+    phoneStepSubtitle: "Check out in seconds. We'll save your details for next time.",
+    mobileNumber: "Mobile number",
+    phoneStepHintWhatsapp: "We'll send a code on WhatsApp to confirm it's you.",
+    phoneStepHintPlain: "We'll use this to confirm your order and arrange delivery.",
+
+    // Step 2 — verify
+    lookingYouUp: "Looking you up…",
+    checkingYourNumber: "Checking your number with Preventify…",
+    recognizedNoCode: "We recognized your number — no code needed. Your saved details are ready to go.",
+    trustedBuyerVerified: "Trusted Buyer · Verified",
+    ordersLabel: "orders",
+    continueToDelivery: "Continue to delivery",
+    notYou: "Not you?",
+    useDifferentNumber: "Use different number",
+    verifyOnWhatsapp: "Verify on WhatsApp",
+    waitingForWhatsapp: "Waiting for WhatsApp…",
+    verifiedYoureIn: "Verified — you're in",
+    whatsappVerifyBlurb: "We'll open WhatsApp and confirm it's really you — no codes to type.",
+    whatsappWaitingBlurb: "Tap \"Verify Number\" inside WhatsApp. We'll bring you right back.",
+    verifyingAs: "Verifying as",
+    openWhatsappToVerify: "Open WhatsApp to verify",
+    sentViaWhatsapp: "Sent via WhatsApp",
+    sentViaSms: "Sent via SMS",
+    enterSixDigitCode: "Enter the 6-digit code",
+    weSentCodeTo: "We sent a verification code to",
+    codeDidntMatch: "That code didn't match. Try again or resend.",
+    resendCode: "Resend code",
+
+    // Step 3 — address
+    whereShouldWeDeliver: "Where should we deliver?",
+    savedFromLastOrders: "We saved these from your last orders.",
+    continueToReview: "Continue to review",
+    verified: "Verified",
+    useSavedAddress: "Use saved address",
+    deleteAddress: "Delete address",
+
+    // Step 4 — review
+    reviewYourOrder: "Review your order",
+    deliverToLabel: "Deliver to",
+    edit: "Edit",
+    haveDiscountCode: "Have a discount code?",
+    enterCode: "Enter code",
+    totalToPayOnDelivery: "Total to pay on delivery",
+    placeOrder: "Place order",
+
+    // Success
+    orderPlaced: "Order placed!",
+    orderPlacedBlurb: "We've sent your confirmation. Pay when your order arrives.",
+    orderReference: "Order reference",
+    timelineOrderPlaced: "Order placed",
+    timelineJustNow: "Just now",
+    timelineMerchantConfirms: "Merchant confirms",
+    timelineWithinHour: "within 1 hour",
+    timelineOutForDelivery: "Out for delivery",
+    timelinePayOnDelivery: "Pay on delivery",
+    timelineCashToCourier: "Cash to courier",
+    continueShopping: "Continue shopping",
+    autoRedirectIn: "auto-redirect in",
   },
 
   ar: {
@@ -231,6 +303,78 @@ export const translations = {
     qty: "الكمية",
     backToVerificationOptions: "العودة إلى خيارات التحقق",
     removeOosFromBundle: "يرجى إزالة العنصر (العناصر) غير المتوفرة من اختيار الحزمة",
+
+    // ── Smart Checkout (revamped UI) ──────────────────────────────────────
+    // Shell
+    back: "رجوع",
+    close: "إغلاق",
+    smartCheckout: "الدفع الذكي",
+    securedByPrefix: "محمي بواسطة",
+    stepPhone: "الهاتف",
+    stepVerify: "التحقق",
+    stepAddress: "العنوان",
+    stepReview: "المراجعة",
+
+    // Step 1 — phone
+    continueWithMobile: "تابع برقم الجوال",
+    phoneStepSubtitle: "أكمل طلبك في ثوانٍ. سنحفظ بياناتك للمرة القادمة.",
+    mobileNumber: "رقم الجوال",
+    phoneStepHintWhatsapp: "سنرسل رمزاً عبر واتساب للتأكد من هويتك.",
+    phoneStepHintPlain: "سنستخدم هذا الرقم لتأكيد طلبك وترتيب التوصيل.",
+
+    // Step 2 — verify
+    lookingYouUp: "جارٍ البحث عنك…",
+    checkingYourNumber: "جارٍ التحقق من رقمك مع Preventify…",
+    recognizedNoCode: "تعرفنا على رقمك — لا حاجة لرمز. بياناتك المحفوظة جاهزة.",
+    trustedBuyerVerified: "مشترٍ موثوق · تم التحقق",
+    ordersLabel: "طلبات",
+    continueToDelivery: "المتابعة إلى التوصيل",
+    notYou: "لست أنت؟",
+    useDifferentNumber: "استخدم رقماً آخر",
+    verifyOnWhatsapp: "التحقق عبر واتساب",
+    waitingForWhatsapp: "في انتظار واتساب…",
+    verifiedYoureIn: "تم التحقق — أهلاً بك",
+    whatsappVerifyBlurb: "سنفتح واتساب للتأكد من هويتك — دون كتابة أي رمز.",
+    whatsappWaitingBlurb: "اضغط \"تحقق من الرقم\" داخل واتساب وسنعيدك إلى هنا.",
+    verifyingAs: "التحقق باسم",
+    openWhatsappToVerify: "افتح واتساب للتحقق",
+    sentViaWhatsapp: "أُرسل عبر واتساب",
+    sentViaSms: "أُرسل عبر رسالة نصية",
+    enterSixDigitCode: "أدخل الرمز المكون من 6 أرقام",
+    weSentCodeTo: "أرسلنا رمز التحقق إلى",
+    codeDidntMatch: "الرمز غير مطابق. حاول مرة أخرى أو أعد الإرسال.",
+    resendCode: "إعادة إرسال الرمز",
+
+    // Step 3 — address
+    whereShouldWeDeliver: "أين نوصّل طلبك؟",
+    savedFromLastOrders: "حفظنا هذه العناوين من طلباتك السابقة.",
+    continueToReview: "المتابعة إلى المراجعة",
+    verified: "تم التحقق",
+    useSavedAddress: "استخدم عنواناً محفوظاً",
+    deleteAddress: "حذف العنوان",
+
+    // Step 4 — review
+    reviewYourOrder: "راجع طلبك",
+    deliverToLabel: "التوصيل إلى",
+    edit: "تعديل",
+    haveDiscountCode: "لديك رمز خصم؟",
+    enterCode: "أدخل الرمز",
+    totalToPayOnDelivery: "الإجمالي المستحق عند الاستلام",
+    placeOrder: "تأكيد الطلب",
+
+    // Success
+    orderPlaced: "تم تأكيد الطلب!",
+    orderPlacedBlurb: "أرسلنا لك التأكيد. ادفع عند وصول طلبك.",
+    orderReference: "رقم الطلب",
+    timelineOrderPlaced: "تم تأكيد الطلب",
+    timelineJustNow: "الآن",
+    timelineMerchantConfirms: "تأكيد التاجر",
+    timelineWithinHour: "خلال ساعة",
+    timelineOutForDelivery: "خرج للتوصيل",
+    timelinePayOnDelivery: "الدفع عند الاستلام",
+    timelineCashToCourier: "نقداً للمندوب",
+    continueShopping: "متابعة التسوق",
+    autoRedirectIn: "إعادة التوجيه خلال",
   },
 };
 

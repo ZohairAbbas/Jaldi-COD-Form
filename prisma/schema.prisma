@@ -90,7 +90,12 @@ model GoogleSheetsIntegration {
   lastSyncedOrderAt       DateTime?
   lastSyncedAbandonedAt   DateTime?
   lastSyncError           String?
+  // Last sync ATTEMPT — written on success and failure alike, so it cannot be
+  // used to tell whether the integration is actually working.
   lastSyncedAt            DateTime?
+  // Last sync that actually SUCCEEDED. Null means it has never worked since
+  // this field was added. This is what "healthy" is judged on.
+  lastSuccessAt           DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
   shop                    Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)

@@ -6,7 +6,7 @@ import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getPixelsByShop, getBlockedUsers } from "../lib/db.server";
 import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE, getCurrencyCode, getCountryData } from "../lib/constants";
 import prisma from "../db.server";
-import { FIELD_CATALOG, COLUMN_PRESETS } from "../lib/google-sheets.server";
+import { FIELD_CATALOG, COLUMN_PRESETS, deriveSheetsHealth } from "../lib/google-sheets.server";
 import GoogleSheetsIntegration from "../components/Settings/GoogleSheetsIntegration";
 
 export const loader = async ({ request }) => {
@@ -21,10 +21,13 @@ export const loader = async ({ request }) => {
   const googleSheets = gsRow
     ? (() => {
         const connected = Boolean(gsRow.refreshToken);
+        // Health is derived before the tokens are stripped, since it depends on
+        // refreshToken being present.
+        const health = deriveSheetsHealth(gsRow);
         const safe = { ...gsRow };
         delete safe.accessToken;
         delete safe.refreshToken;
-        return { ...safe, connected };
+        return { ...safe, connected, health };
       })()
     : null;
 

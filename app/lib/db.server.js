@@ -869,6 +869,51 @@ export async function toggleDownsellEnabled(id) {
 }
 
 /**
+ * Move a downsell one position up or down within its shop.
+ *
+ * Rather than swapping two priority values, this rewrites the whole list as
+ * 1..n. Deletes leave gaps in the sequence and a swap would preserve them, so
+ * renumbering keeps priorities contiguous and self-heals any duplicates that
+ * predate this function.
+ *
+ * Returns false when the downsell is already at the requested end, so the
+ * caller can skip the storefront resync.
+ */
+export async function reorderDownsell(id, direction) {
+  const target = await prisma.downsell.findUnique({
+    where: { id },
+    select: { shopId: true },
+  });
+  if (!target) throw new Error("Downsell not found");
+
+  // Read in the same order the list renders. The id tiebreak keeps the order
+  // deterministic if two rows ever share a priority.
+  const list = await prisma.downsell.findMany({
+    where: { shopId: target.shopId },
+    orderBy: [{ priority: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+
+  const from = list.findIndex(d => d.id === id);
+  const to = direction === "up" ? from - 1 : from + 1;
+  if (from === -1 || to < 0 || to >= list.length) return false;
+
+  const [moved] = list.splice(from, 1);
+  list.splice(to, 0, moved);
+
+  await prisma.$transaction(
+    list.map((d, index) =>
+      prisma.downsell.update({
+        where: { id: d.id },
+        data: { priority: index + 1 },
+      })
+    )
+  );
+
+  return true;
+}
+
+/**
  * Increment downsell stats (impressions, accepts, declines)
  */
 export async function incrementDownsellStat(downsellId, stat) {

@@ -13,10 +13,8 @@ export default function SalesBoosterLanding() {
 
   // Refs for s-button elements
   const configureButtonRef = useRef(null);
-  const watchDemoButtonRef = useRef(null);
   const configureTickButtonRef = useRef(null);
   const configureDownsellButtonRef = useRef(null);
-  const watchDownsellDemoButtonRef = useRef(null);
   const configureBundleButtonRef = useRef(null);
 
   const handleConfigureUpsells = useCallback(() => {
@@ -35,39 +33,21 @@ export default function SalesBoosterLanding() {
     navigate("/app/sales-booster/bundle");
   }, [navigate]);
 
-  const handleWatchDemo = useCallback(() => {
-    // TODO: Add demo video URL or modal
-    window.open("https://www.youtube.com/watch?v=demo", "_blank");
-  }, []);
-
-  const handleWatchDownsellDemo = useCallback(() => {
-    // TODO: Add demo video URL or modal
-    window.open("https://www.youtube.com/watch?v=demo", "_blank");
-  }, []);
-
   // Attach event listeners to buttons
   useEffect(() => {
     const configureBtn = configureButtonRef.current;
-    const demoBtn = watchDemoButtonRef.current;
     const configureTickBtn = configureTickButtonRef.current;
     const configureDownsellBtn = configureDownsellButtonRef.current;
-    const downsellDemoBtn = watchDownsellDemoButtonRef.current;
     const configureBundleBtn = configureBundleButtonRef.current;
 
     if (configureBtn) {
       configureBtn.addEventListener("click", handleConfigureUpsells);
-    }
-    if (demoBtn) {
-      demoBtn.addEventListener("click", handleWatchDemo);
     }
     if (configureTickBtn) {
       configureTickBtn.addEventListener("click", handleConfigureTickUpsells);
     }
     if (configureDownsellBtn) {
       configureDownsellBtn.addEventListener("click", handleConfigureDownsells);
-    }
-    if (downsellDemoBtn) {
-      downsellDemoBtn.addEventListener("click", handleWatchDownsellDemo);
     }
     if (configureBundleBtn) {
       configureBundleBtn.addEventListener("click", handleConfigureBundles);
@@ -77,23 +57,17 @@ export default function SalesBoosterLanding() {
       if (configureBtn) {
         configureBtn.removeEventListener("click", handleConfigureUpsells);
       }
-      if (demoBtn) {
-        demoBtn.removeEventListener("click", handleWatchDemo);
-      }
       if (configureTickBtn) {
         configureTickBtn.removeEventListener("click", handleConfigureTickUpsells);
       }
       if (configureDownsellBtn) {
         configureDownsellBtn.removeEventListener("click", handleConfigureDownsells);
       }
-      if (downsellDemoBtn) {
-        downsellDemoBtn.removeEventListener("click", handleWatchDownsellDemo);
-      }
       if (configureBundleBtn) {
         configureBundleBtn.removeEventListener("click", handleConfigureBundles);
       }
     };
-  }, [handleConfigureUpsells, handleWatchDemo, handleConfigureTickUpsells, handleConfigureDownsells, handleWatchDownsellDemo, handleConfigureBundles]);
+  }, [handleConfigureUpsells, handleConfigureTickUpsells, handleConfigureDownsells, handleConfigureBundles]);
 
   return (
     <s-page heading="Upsells & Downsells">

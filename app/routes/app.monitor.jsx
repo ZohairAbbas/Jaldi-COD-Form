@@ -3,6 +3,7 @@ import { useLoaderData, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { getCronHealth } from "../lib/cron-health.server";
 
 // Returns midnight of the current day in the configured timezone, as a UTC Date
 function startOfDayInTZ(tz) {
@@ -491,7 +492,15 @@ export const loader = async ({ request }) => {
     return countB - countA;
   });
 
+  // Background job health — operator-facing, so it shows every job including
+  // the ones a merchant could do nothing about.
+  const cronHealth = await getCronHealth().catch((e) => {
+    console.error("[monitor] cron health check failed:", e);
+    return null;
+  });
+
   return {
+    cronHealth,
     summary: { totalShops, ordersToday, ordersThisMonth, revenueThisMonth, activeStores },
     chartData,
     rows,
@@ -568,6 +577,82 @@ function Section({ title, subtitle, defaultOpen = false, children }) {
         </span>
       </button>
       {open && <div style={{ padding: "20px" }}>{children}</div>}
+    </div>
+  );
+}
+
+/**
+ * Background job health, operator view.
+ *
+ * Shows every scheduled job, including the ones a merchant could do nothing
+ * about. Reports the two failure modes separately — a job can be running
+ * perfectly on schedule while accomplishing nothing, which is precisely how
+ * three jobs stayed broken for months.
+ */
+function CronHealthPanel({ health }) {
+  if (!health) return null;
+
+  const jobs = Object.values(health.jobs);
+  const unhealthy = jobs.filter((j) => !j.healthy);
+  const ok = health.healthy;
+
+  const fmtAge = (m) => {
+    if (m === null || m === undefined) return "never run";
+    if (m < 60) return `${m}m ago`;
+    if (m < 1440) return `${Math.round(m / 60)}h ago`;
+    return `${Math.round(m / 1440)}d ago`;
+  };
+
+  return (
+    <div style={{
+      backgroundColor: "white", borderRadius: "12px",
+      border: `1px solid ${ok ? "#e5e7eb" : "#fecaca"}`,
+      borderLeft: `4px solid ${ok ? "#10b981" : "#dc2626"}`,
+      padding: "20px 24px", marginBottom: "16px",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
+        <div style={{ fontSize: "15px", fontWeight: 600, color: "#111827" }}>
+          Background jobs
+        </div>
+        <div style={{ fontSize: "13px", fontWeight: 600, color: ok ? "#065f46" : "#991b1b" }}>
+          {ok ? "All healthy" : `${unhealthy.length} needing attention`}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
+        {jobs.map((j) => {
+          const tone = j.healthy ? "#10b981" : j.failing ? "#dc2626" : "#d97706";
+          const note = j.failing
+            ? `errored on last ${j.consecutiveErrorRuns} runs`
+            : j.overdue
+              ? `overdue — expected every ${j.maxAgeMinutes}m`
+              : j.lastErrors > 0
+                ? `${j.lastErrors} error(s) last run`
+                : `${j.lastProcessed.toLocaleString()} processed`;
+
+          return (
+            <div key={j.jobName} style={{
+              border: "1px solid #f3f4f6", borderRadius: "8px", padding: "12px 14px",
+              backgroundColor: j.healthy ? "#ffffff" : "#fffbf5",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: tone, flexShrink: 0 }} />
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>{j.label}</span>
+              </div>
+              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "6px" }}>
+                {fmtAge(j.ageMinutes)} · {note}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {health.problems.length > 0 && (
+        <ul style={{ margin: "14px 0 0", paddingLeft: "18px", fontSize: "13px", color: "#991b1b" }}>
+          {health.problems.map((p) => <li key={p}>{p}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
@@ -672,7 +757,7 @@ function StickyScrollTable({ children }) {
 }
 
 export default function MonitorPage() {
-  const { summary, chartData, rows, period: initialPeriod, customFrom: initialFrom, customTo: initialTo, conversionMetrics, heatmapRows, totalFeatures, showAll } = useLoaderData();
+  const { cronHealth, summary, chartData, rows, period: initialPeriod, customFrom: initialFrom, customTo: initialTo, conversionMetrics, heatmapRows, totalFeatures, showAll } = useLoaderData();
   const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod);
   const [customFrom, setCustomFrom] = useState(initialFrom || "");
   const [customTo, setCustomTo] = useState(initialTo || "");
@@ -907,6 +992,10 @@ export default function MonitorPage() {
           )}
         </div>
       </div>
+
+      {/* Background job health. Sits above the metrics deliberately: a broken
+          job makes every number below it untrustworthy. */}
+      <CronHealthPanel health={cronHealth} />
 
       {/* Stat cards row 1 — fixed summary */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "16px" }}>

@@ -3,7 +3,7 @@ import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getOrCreateShop, getDownsells, deleteDownsell, toggleDownsellEnabled } from "../lib/db.server";
+import { getOrCreateShop, getDownsells, deleteDownsell, toggleDownsellEnabled, reorderDownsell } from "../lib/db.server";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
 
 export const loader = async ({ request }) => {
@@ -40,6 +40,18 @@ export const action = async ({ request }) => {
     await toggleDownsellEnabled(downsellId);
     await sync();
     return Response.json({ success: true });
+  }
+
+  if (actionType === "reorder" && downsellId) {
+    const direction = formData.get("direction");
+    if (direction !== "up" && direction !== "down") {
+      return Response.json({ error: "Invalid direction" }, { status: 400 });
+    }
+
+    // Already at the end of the list — nothing changed, so skip the resync.
+    const moved = await reorderDownsell(downsellId, direction);
+    if (moved) await sync();
+    return Response.json({ success: true, moved });
   }
 
   return Response.json({ error: "Invalid action" }, { status: 400 });
@@ -131,7 +143,10 @@ export default function DownsellsList() {
   };
 
   const handleMovePriority = (id, direction) => {
-    // TODO: Implement priority reordering
+    fetcher.submit(
+      { action: "reorder", downsellId: id, direction },
+      { method: "POST" }
+    );
   };
 
   return (
@@ -214,6 +229,12 @@ export default function DownsellsList() {
                   ? ((downsell.accepts / downsell.impressions) * 100).toFixed(1)
                   : "0.0";
 
+                // Position in the full list, not the filtered one — otherwise a
+                // search would make a middle downsell look like the first or last.
+                const orderIndex = downsells.findIndex(d => d.id === downsell.id);
+                const isFirst = orderIndex === 0;
+                const isLast = orderIndex === downsells.length - 1;
+
                 return (
                   <div
                     key={downsell.id}
@@ -288,13 +309,15 @@ export default function DownsellsList() {
                         <button
                           type="button"
                           onClick={() => handleMovePriority(downsell.id, "up")}
-                          title="Move Up"
+                          disabled={isFirst}
+                          title={isFirst ? "Already first" : "Move Up"}
                           style={{
                             padding: "8px",
                             border: "1px solid #d1d5db",
                             borderRadius: "6px",
                             backgroundColor: "#ffffff",
-                            cursor: "pointer",
+                            cursor: isFirst ? "not-allowed" : "pointer",
+                            opacity: isFirst ? 0.4 : 1,
                           }}
                         >
                           ↑
@@ -302,13 +325,15 @@ export default function DownsellsList() {
                         <button
                           type="button"
                           onClick={() => handleMovePriority(downsell.id, "down")}
-                          title="Move Down"
+                          disabled={isLast}
+                          title={isLast ? "Already last" : "Move Down"}
                           style={{
                             padding: "8px",
                             border: "1px solid #d1d5db",
                             borderRadius: "6px",
                             backgroundColor: "#ffffff",
-                            cursor: "pointer",
+                            cursor: isLast ? "not-allowed" : "pointer",
+                            opacity: isLast ? 0.4 : 1,
                           }}
                         >
                           ↓

@@ -132,3 +132,1287 @@
 .jaldi-button-bounce {
   animation: jaldi-bounce 1s ease-in-out infinite;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SMART CHECKOUT — design tokens
+   Ported from the design project's tokens.css.
+
+   Scoped to the form containers, NOT :root — a :root block would leak
+   --ink / --surface / --radius / --line into the merchant's own theme and
+   collide with whatever variables their storefront already defines.
+
+   --brand, --brand-ink, --brand-soft and --brand-softer are overwritten at
+   runtime from the merchant's configured button colour (deriveTheme in
+   smart/theme.js). The values here are the shipping defaults.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#jaldi-cod-form-popup,
+#jaldi-cod-form-embedded {
+  /* Brand — runtime-overridden per merchant */
+  --brand: #0E9FAD;
+  --brand-ink: #084E54;
+  --brand-soft: #E5F7F8;
+  --brand-softer: #F4FBFB;
+
+  /* Ink / text */
+  --ink: #0B1220;
+  --ink-2: #1F2A37;
+  --muted: #5A6573;
+  --ter: #94A0AE;
+
+  /* Surfaces & lines */
+  --surface: #FFFFFF;
+  --bg: #F4F4F2;
+  --line: #E7EAEE;
+  --line-2: #EFF1F4;
+
+  /* Status */
+  --success: #16A34A;
+  --success-soft: #E8F7EC;
+  --success-ink: #14532D;
+  --danger: #DC2626;
+  --danger-soft: #FEF2F2;
+  --wa: #25D366;
+  --wa-ink: #128C7E;
+  --wa-soft: #E7F8EE;
+
+  /* Confetti accents (success screen only) */
+  --accent-amber: #F59E0B;
+  --accent-emerald: #10B981;
+  --accent-pink: #EC4899;
+  --accent-indigo: #6366F1;
+
+  /* Radii */
+  --radius-lg: 20px;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+
+  /* Type — the design specifies Plus Jakarta Sans, but we inherit the
+     merchant's theme font so the form stays native to each store. Only the
+     mono face (OTP digits, order references, discount codes) is prescribed. */
+  --font-sans: inherit;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --fs-h1: 26px;
+  --fs-h2: 22px;
+  --fs-total: 18px;
+  --fs-lg: 16px;
+  --fs-btn: 15px;
+  --fs-body: 14px;
+  --fs-body-sm: 13.5px;
+  --fs-sm: 13px;
+  --fs-xs: 12.5px;
+  --fs-2xs: 11.5px;
+  --fs-3xs: 11px;
+  --fs-4xs: 10.5px;
+
+  --fw-medium: 500;
+  --fw-semi: 600;
+  --fw-bold: 700;
+  --fw-heavy: 800;
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.4;
+  --lh-body: 1.5;
+
+  --tracking-heading: -0.4px;
+  --tracking-caps: 0.4px;
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 6px;
+  --sp-3: 8px;
+  --sp-4: 10px;
+  --sp-5: 12px;
+  --sp-6: 14px;
+  --sp-7: 16px;
+  --sp-8: 20px;
+  --sp-9: 24px;
+
+  --pad-screen: 16px;
+  --pad-btn: 16px;
+  --pad-input: 13px 14px;
+  --pad-card: 12px 14px;
+
+  /* Elevation */
+  --shadow-modal: 0 30px 60px -20px rgba(8, 14, 24, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-menu: 0 12px 32px -10px rgba(0, 0, 0, 0.18);
+  --shadow-cta: 0 12px 28px -10px var(--brand);
+  --focus-ring: 0 0 0 4px var(--brand-soft);
+
+  /* Layout constants (desktop). Fixed px, never vh — vh clipped the Continue
+     button on short browser windows. See the design HANDOFF.md. */
+  --w-summary-rail: 340px;
+  --h-modal-max: 760px;
+  --h-form-scroll: 600px;
+  --hit-min: 44px;
+}
+
+/* Scroll areas — hide the scrollbar without losing scrollability */
+.jaldi-sc-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.jaldi-sc-scroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+
+/* Touch targets: the design mandates >= 44px on mobile */
+@media (max-width: 640px) {
+  .jaldi-sc-hit { min-height: var(--hit-min); }
+}
+
+/* ── Smart Checkout keyframes ──────────────────────────────────────────── */
+@keyframes jaldi-sc-slide-up {
+  from { transform: translateY(100%); opacity: 0.7; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes jaldi-sc-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes jaldi-sc-scale-in {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes jaldi-sc-draw-check {
+  0%   { stroke-dashoffset: 40; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes jaldi-sc-ring-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50%      { transform: scale(1.15); opacity: 0; }
+}
+@keyframes jaldi-sc-confetti {
+  0%   { transform: translate(0, 0) rotate(0); opacity: 1; }
+  100% { transform: translate(var(--cx), var(--cy)) rotate(var(--cr)); opacity: 0; }
+}
+@keyframes jaldi-sc-dot-pulse {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40%           { transform: scale(1); opacity: 1; }
+}
+
+/* Respect reduced-motion: keep the decorative loops still, but leave the
+   functional fades in place so steps don't appear to jump. */
+@media (prefers-reduced-motion: reduce) {
+  #jaldi-cod-form-popup *,
+  #jaldi-cod-form-embedded * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SMART CHECKOUT — shell layout
+
+   Mobile and desktop come from the same markup, switched here rather than in
+   JS, so the modal never flashes the wrong layout on first paint.
+   Breakpoint: 1024px.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.jaldi-sc-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* The height cap lives on the shell, not the frame: the frame is
+     content-sized, and a percentage max-height against an auto-height parent
+     resolves to none, which would let the body grow instead of scrolling. */
+  height: auto;
+  max-height: 90vh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  animation: jaldi-sc-slide-up 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.jaldi-sc-shell.is-embedded {
+  height: auto;
+  animation: none;
+  border-top: 1px solid var(--line-2);
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+.jaldi-sc-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-6) var(--sp-7) var(--sp-5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.jaldi-sc-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+}
+
+.jaldi-sc-header-slot {
+  width: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.jaldi-sc-header-slot-end { justify-content: flex-end; }
+
+.jaldi-sc-icon-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--line-2);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 160ms;
+}
+
+.jaldi-sc-icon-btn:hover { background: var(--line); }
+
+.jaldi-sc-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jaldi-sc-title {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-caps);
+  color: var(--ink);
+  line-height: var(--lh-tight);
+}
+
+/* "Smart Checkout" lock badge — desktop only, per the design's header */
+.jaldi-sc-title-badge {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-semi);
+  color: var(--ter);
+}
+
+/* ── Step rail ─────────────────────────────────────────────────────────── */
+.jaldi-sc-rail-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.jaldi-sc-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+}
+
+.jaldi-sc-step-pip {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--line-2);
+  color: var(--ter);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-bold);
+  transition: background 240ms, color 240ms, box-shadow 240ms;
+}
+
+.jaldi-sc-step-pip.is-done,
+.jaldi-sc-step-pip.is-active {
+  background: var(--brand);
+  color: #fff;
+}
+
+.jaldi-sc-step-pip.is-active { box-shadow: var(--focus-ring); }
+
+.jaldi-sc-step-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* Mobile shows only the active step's label; desktop shows them all. */
+.jaldi-sc-step-label:not(.is-active) { display: none; }
+
+.jaldi-sc-step-bar {
+  flex: 1;
+  height: 2px;
+  min-width: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  transition: background 240ms;
+}
+
+.jaldi-sc-step-bar.is-done { background: var(--brand); }
+
+/* ── Body ──────────────────────────────────────────────────────────────── */
+.jaldi-sc-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--bg);
+}
+
+.jaldi-sc-form-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── Trust footer ──────────────────────────────────────────────────────── */
+.jaldi-sc-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-7);
+  background: var(--surface);
+  border-top: 1px solid var(--line-2);
+  color: var(--ter);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-medium);
+}
+
+.jaldi-sc-footer strong {
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+  letter-spacing: 0.2px;
+}
+
+/* ── Desktop ───────────────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .jaldi-sc-shell {
+    width: var(--w-modal-standard, 520px);
+    height: auto;
+    max-height: var(--h-modal-max);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
+  }
+
+  /* Two-column: form + summary rail. Fixed 980px per the design. */
+  .jaldi-sc-shell.has-rail { width: 980px; }
+
+  .jaldi-sc-shell.is-embedded {
+    width: 100%;
+    max-height: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .jaldi-sc-header {
+    padding: 18px 28px 14px;
+    gap: var(--sp-6);
+  }
+
+  .jaldi-sc-header-slot { width: 34px; }
+  .jaldi-sc-icon-btn { width: 34px; height: 34px; }
+
+  .jaldi-sc-title { font-size: var(--fs-btn); }
+  .jaldi-sc-title-badge { display: flex; }
+
+  /* All step labels visible, rail stretches across the header */
+  .jaldi-sc-step-label:not(.is-active) {
+    display: inline;
+    color: var(--ter);
+    font-weight: var(--fw-semi);
+  }
+  .jaldi-sc-step-label.is-done { color: var(--ink-2); }
+  .jaldi-sc-step-pip { width: 26px; height: 26px; font-size: var(--fs-xs); }
+  .jaldi-sc-step { gap: var(--sp-3); }
+  .jaldi-sc-step-bar { margin: 0 var(--sp-2); }
+
+  .jaldi-sc-form-col { max-height: var(--h-form-scroll); }
+  .jaldi-sc-shell.is-embedded .jaldi-sc-form-col { max-height: none; }
+
+  .jaldi-sc-footer { padding: var(--sp-5) 28px; }
+}
+
+/* Popup frame: let the shell decide its own width instead of the generic
+   560px cap, so two-column mode can reach 980px. */
+.jaldi-sc-modal-frame {
+  width: auto;
+  max-width: 100%;
+  margin: auto;
+  position: relative;
+  /* No radius/overflow of its own — the shell rounds and clips itself, and a
+     smaller radius here would square off the shell's corners. */
+  background: transparent;
+}
+
+@media (max-width: 1023px) {
+  .jaldi-sc-modal-frame { width: 100%; max-width: 560px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SMART CHECKOUT — step panes & shared controls
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.jaldi-sc-step-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: 22px 18px 18px;
+  min-height: 100%;
+  animation: jaldi-sc-fade-in 280ms;
+}
+
+.jaldi-sc-spacer { flex: 1; min-height: var(--sp-3); }
+
+/* ── Type ──────────────────────────────────────────────────────────────── */
+.jaldi-sc-h2 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-heading);
+  line-height: var(--lh-tight);
+  color: var(--ink);
+}
+
+.jaldi-sc-sub {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-body-sm);
+  color: var(--muted);
+  line-height: var(--lh-body);
+}
+
+.jaldi-sc-label {
+  display: block;
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-bold);
+  color: var(--muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.jaldi-sc-hint,
+.jaldi-sc-field-error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+}
+
+.jaldi-sc-hint { color: var(--ter); }
+.jaldi-sc-field-error { color: var(--danger); font-weight: var(--fw-semi); }
+
+/* ── Phone field ───────────────────────────────────────────────────────── */
+.jaldi-sc-phone-field {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+
+.jaldi-sc-phone-field:focus-within {
+  border-color: var(--brand);
+  box-shadow: var(--focus-ring);
+}
+
+.jaldi-sc-phone-field.has-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-soft);
+}
+
+.jaldi-sc-phone-sep {
+  width: 1px;
+  align-self: center;
+  height: 20px;
+  background: var(--line-2);
+  flex-shrink: 0;
+}
+
+.jaldi-sc-phone-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-6) var(--sp-5);
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  /* 16px keeps iOS Safari from zooming the page on focus */
+  font-size: 16px;
+  font-weight: var(--fw-semi);
+}
+
+/* ── Country picker ────────────────────────────────────────────────────── */
+.jaldi-sc-country-wrap { position: relative; flex-shrink: 0; display: flex; }
+
+.jaldi-sc-country {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-5) 0 var(--sp-6);
+  background: var(--brand-softer);
+  border: none;
+  border-inline-end: 1px solid var(--line-2);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.jaldi-sc-country-static { cursor: default; }
+
+.jaldi-sc-iso {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 9px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.jaldi-sc-dial {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semi);
+  direction: ltr;
+}
+
+.jaldi-sc-country-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-menu);
+}
+
+.jaldi-sc-country-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: start;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semi);
+  color: var(--ink);
+}
+
+.jaldi-sc-country-opt:hover { background: var(--brand-softer); }
+.jaldi-sc-country-opt.is-selected { background: var(--brand-soft); }
+.jaldi-sc-country-name { flex: 1; min-width: 0; }
+.jaldi-sc-country-opt .jaldi-sc-dial { color: var(--muted); }
+
+/* ── Primary CTA ───────────────────────────────────────────────────────── */
+.jaldi-sc-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--pad-btn);
+  border: none;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: var(--fs-btn);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  box-shadow: var(--shadow-cta);
+  transition: background 200ms, box-shadow 200ms, opacity 200ms;
+}
+
+.jaldi-sc-cta:disabled {
+  background: var(--line);
+  color: var(--ter);
+  cursor: default;
+  box-shadow: none;
+}
+
+.jaldi-sc-cta-wa {
+  background: var(--wa);
+  box-shadow: 0 12px 28px -10px var(--wa);
+}
+
+/* Secondary / tertiary actions */
+.jaldi-sc-btn-ghost {
+  padding: var(--sp-1) var(--sp-2);
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semi);
+  cursor: pointer;
+}
+
+.jaldi-sc-btn-ghost em { font-style: normal; color: var(--brand); }
+
+.jaldi-sc-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: jaldi-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+  .jaldi-sc-step-pane { padding: var(--sp-9) var(--sp-9) var(--sp-8); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SMART CHECKOUT — cards, badges, verification
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.jaldi-sc-center { align-items: center; text-align: center; }
+.jaldi-sc-center-block { text-align: center; }
+.jaldi-sc-narrow { max-width: 290px; margin-inline: auto; }
+
+.jaldi-sc-card {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  padding: var(--pad-card);
+}
+
+.jaldi-sc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+}
+
+.jaldi-sc-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.jaldi-sc-eyebrow {
+  font-size: var(--fs-4xs);
+  font-weight: var(--fw-bold);
+  color: var(--muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.jaldi-sc-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semi);
+  color: var(--ink);
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.jaldi-sc-mono-inline { font-size: inherit; }
+
+.jaldi-sc-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--brand);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}
+
+.jaldi-sc-link:disabled { color: var(--ter); cursor: default; }
+
+.jaldi-sc-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semi);
+}
+
+/* ── Badges ────────────────────────────────────────────────────────────── */
+.jaldi-sc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 10px 5px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.2px;
+  transition: opacity 300ms;
+}
+
+.jaldi-sc-badge.is-hidden { opacity: 0; }
+.jaldi-sc-badge-success { background: var(--success-soft); color: var(--success-ink); }
+.jaldi-sc-badge-wa { background: var(--wa-soft); color: var(--wa-ink); margin-bottom: var(--sp-4); }
+.jaldi-sc-badge-muted { background: var(--line-2); color: var(--ink-2); margin-bottom: var(--sp-4); }
+
+/* ── Trusted-buyer hero ────────────────────────────────────────────────── */
+.jaldi-sc-hero {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: var(--sp-8) 0 var(--sp-1);
+}
+
+.jaldi-sc-hero-disc {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 400ms;
+}
+
+.jaldi-sc-hero-disc.is-verified {
+  background: var(--brand);
+  animation: jaldi-sc-scale-in 500ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+.jaldi-sc-hero-ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 3px solid var(--brand);
+  animation: jaldi-sc-ring-pulse 1.4s ease-out infinite;
+}
+
+.jaldi-sc-hero-ring.is-delayed { animation-delay: 0.7s; }
+.jaldi-sc-hero-ring.is-wa { border-color: var(--wa); inset: -6px; }
+
+.jaldi-sc-hero-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--brand);
+  border-top-color: transparent;
+  animation: jaldi-spin 0.8s linear infinite;
+}
+
+.jaldi-sc-checkpath { animation: jaldi-sc-draw-check 380ms ease-out 100ms backwards; }
+
+.jaldi-sc-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.jaldi-sc-confetti span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 10px;
+  border-radius: 2px;
+  animation: jaldi-sc-confetti 1100ms ease-out both;
+}
+
+/* ── Buyer stats ───────────────────────────────────────────────────────── */
+.jaldi-sc-stats {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: var(--sp-6);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  animation: jaldi-sc-fade-in 400ms 200ms backwards;
+}
+
+.jaldi-sc-stat { display: flex; flex-direction: column; gap: 2px; }
+
+.jaldi-sc-stat-v {
+  font-size: var(--fs-total);
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.3px;
+  color: var(--ink);
+}
+
+.jaldi-sc-stat-l {
+  font-size: var(--fs-4xs);
+  font-weight: var(--fw-semi);
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* ── WhatsApp login ────────────────────────────────────────────────────── */
+.jaldi-sc-wa-disc {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: var(--sp-3) auto var(--sp-6);
+  border-radius: 50%;
+  background: var(--wa-soft);
+  color: var(--wa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jaldi-sc-wa-disc.is-verified { background: var(--success-soft); color: var(--success); }
+.jaldi-sc-wa-ink { color: var(--wa); display: flex; flex-shrink: 0; }
+
+.jaldi-sc-dots { display: inline-flex; gap: var(--sp-1); }
+
+.jaldi-sc-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  animation: jaldi-sc-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.jaldi-sc-dots i:nth-child(2) { animation-delay: 160ms; }
+.jaldi-sc-dots i:nth-child(3) { animation-delay: 320ms; }
+
+/* ── OTP cells ─────────────────────────────────────────────────────────── */
+.jaldi-sc-otp {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--sp-3);
+  direction: ltr;
+}
+
+.jaldi-sc-otp-cell {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 44px;
+  padding: 0;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  text-align: center;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: var(--fw-semi);
+  color: var(--ink);
+  transition: border-color 160ms, box-shadow 160ms;
+}
+
+.jaldi-sc-otp-cell.is-filled,
+.jaldi-sc-otp-cell:focus {
+  border-color: var(--brand);
+  box-shadow: var(--focus-ring);
+}
+
+.jaldi-sc-otp-cell.has-error {
+  border-color: var(--danger);
+  box-shadow: none;
+}
+
+.jaldi-sc-resend { justify-content: space-between; padding: 11px 14px; }
+.jaldi-sc-resend-text { font-size: var(--fs-xs); color: var(--muted); font-weight: var(--fw-medium); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SMART CHECKOUT — address, review, rail, success
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.jaldi-sc-stack { display: flex; flex-direction: column; gap: var(--sp-3); }
+.jaldi-sc-divider { display: block; height: 1px; background: var(--line-2); margin: var(--sp-1) 0; }
+
+.jaldi-sc-icon-tile {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jaldi-sc-brand-ink { color: var(--brand); display: flex; flex-shrink: 0; }
+
+/* ── Address cards ─────────────────────────────────────────────────────── */
+.jaldi-sc-addr {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 200ms, box-shadow 200ms;
+}
+
+.jaldi-sc-addr.is-selected {
+  border: 1.5px solid var(--brand);
+  box-shadow: var(--focus-ring);
+}
+
+.jaldi-sc-addr-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  cursor: pointer;
+}
+
+.jaldi-sc-radio {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  transition: border 160ms;
+}
+
+.jaldi-sc-addr.is-selected .jaldi-sc-radio,
+.jaldi-sc-rate.is-selected .jaldi-sc-radio { border: 6px solid var(--brand); }
+
+.jaldi-sc-addr-body { flex: 1; min-width: 0; }
+.jaldi-sc-addr-tags { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-1); }
+
+.jaldi-sc-tag {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.jaldi-sc-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--success);
+  font-size: var(--fs-4xs);
+  font-weight: var(--fw-bold);
+}
+
+.jaldi-sc-addr-lines {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.jaldi-sc-addr-edit {
+  background: none;
+  border: none;
+  padding: var(--sp-1);
+  color: var(--ter);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.jaldi-sc-addr-edit:hover { color: var(--brand); }
+.jaldi-sc-addr-edit-form { padding: 0 var(--sp-6) var(--sp-6); border-top: 1px solid var(--line-2); padding-top: var(--sp-6); }
+
+.jaldi-sc-add-address {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  border: 1.5px dashed var(--brand);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--brand);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}
+
+.jaldi-sc-back-link { align-self: flex-start; }
+
+/* ── Review: summary ───────────────────────────────────────────────────── */
+.jaldi-sc-summary {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.jaldi-sc-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.jaldi-sc-summary-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+}
+
+.jaldi-sc-summary-total { font-size: var(--fs-btn); font-weight: var(--fw-heavy); white-space: nowrap; }
+.jaldi-sc-summary-items { padding: var(--sp-5) var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); }
+
+.jaldi-sc-line { display: flex; align-items: center; gap: var(--sp-5); }
+
+.jaldi-sc-thumb {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: var(--line-2);
+  object-fit: cover;
+}
+
+.jaldi-sc-thumb-lg { width: 64px; height: 64px; }
+.jaldi-sc-thumb-empty { display: block; }
+
+.jaldi-sc-line-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.jaldi-sc-line-title {
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.jaldi-sc-line-meta { font-size: var(--fs-2xs); color: var(--muted); }
+
+.jaldi-sc-line-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.jaldi-sc-was { font-size: var(--fs-3xs); font-weight: 400; color: var(--ter); text-decoration: line-through; }
+.jaldi-sc-now { color: var(--success); }
+.jaldi-sc-rail-price { font-size: var(--fs-body-sm); font-weight: var(--fw-bold); color: var(--ink); margin-top: var(--sp-1); }
+
+.jaldi-sc-deliver-line { font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--ink); line-height: 1.4; }
+
+/* ── Review: shipping rates ────────────────────────────────────────────── */
+.jaldi-sc-rate {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  width: 100%;
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: start;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: border-color 160ms, box-shadow 160ms;
+}
+
+.jaldi-sc-rate.is-selected { border: 1.5px solid var(--brand); box-shadow: var(--focus-ring); }
+.jaldi-sc-rate .jaldi-sc-radio { width: 18px; height: 18px; margin-top: 0; }
+.jaldi-sc-rate.is-selected .jaldi-sc-radio { border-width: 5px; }
+.jaldi-sc-rate-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.jaldi-sc-rate-label { font-size: var(--fs-body-sm); font-weight: var(--fw-bold); color: var(--ink); }
+.jaldi-sc-rate-eta { font-size: var(--fs-2xs); color: var(--muted); }
+.jaldi-sc-rate-price { font-size: var(--fs-sm); font-weight: var(--fw-bold); color: var(--ink); white-space: nowrap; }
+.jaldi-sc-rate-price.is-free { color: var(--success); }
+
+/* ── Review: totals ────────────────────────────────────────────────────── */
+.jaldi-sc-breakdown { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.jaldi-sc-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.jaldi-sc-breakdown-v { font-weight: var(--fw-semi); color: var(--ink-2); white-space: nowrap; }
+.jaldi-sc-breakdown-v.is-free,
+.jaldi-sc-breakdown-v.is-discount { color: var(--success); }
+
+.jaldi-sc-grand {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-heavy);
+}
+
+.jaldi-sc-grand-l { font-size: var(--fs-xs); font-weight: var(--fw-bold); color: var(--ink-2); }
+.jaldi-sc-grand-v { font-size: var(--fs-total); letter-spacing: -0.3px; white-space: nowrap; }
+.jaldi-sc-grand-v-lg { font-size: 20px; }
+
+.jaldi-sc-ctas { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.jaldi-sc-terms {
+  font-size: var(--fs-3xs);
+  color: var(--ter);
+  text-align: center;
+  line-height: var(--lh-body);
+}
+
+/* ── Summary rail ──────────────────────────────────────────────────────── */
+.jaldi-sc-rail { display: none; }
+
+@media (min-width: 1024px) {
+  .jaldi-sc-shell.has-rail .jaldi-sc-rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-7);
+    width: var(--w-summary-rail);
+    flex-shrink: 0;
+    padding: var(--sp-9);
+    border-inline-start: 1px solid var(--line-2);
+    background: var(--brand-softer);
+    overflow-y: auto;
+  }
+}
+
+.jaldi-sc-rail-item { display: flex; gap: var(--sp-5); padding: var(--sp-6); }
+.jaldi-sc-rail-meta { padding: var(--pad-card); }
+.jaldi-sc-rail-breakdown { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-1); }
+
+/* ── Success ───────────────────────────────────────────────────────────── */
+.jaldi-sc-h1 {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.jaldi-sc-success-disc {
+  width: 96px;
+  height: 96px;
+  margin-top: var(--sp-3);
+  border-radius: 50%;
+  background: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: jaldi-sc-scale-in 500ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+.jaldi-sc-confetti-success { top: 80px; left: 0; right: 0; height: 200px; bottom: auto; }
+.jaldi-sc-confetti-success span { top: 50px; width: 7px; height: 11px; }
+
+.jaldi-sc-success-card { width: 100%; display: flex; flex-direction: column; gap: var(--sp-5); text-align: start; }
+.jaldi-sc-order-ref { display: flex; flex-direction: column; gap: 2px; }
+.jaldi-sc-order-no { font-size: var(--fs-lg); }
+
+.jaldi-sc-timeline { display: flex; flex-direction: column; gap: var(--sp-3); }
+.jaldi-sc-timeline.has-divider { border-top: 1px solid var(--line-2); padding-top: var(--sp-4); }
+
+.jaldi-sc-tl-row { display: flex; align-items: center; gap: var(--sp-4); }
+
+.jaldi-sc-tl-dot {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--line-2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jaldi-sc-tl-dot.is-done { background: var(--success); }
+.jaldi-sc-tl-label { flex: 1; font-size: var(--fs-xs); font-weight: var(--fw-medium); color: var(--muted); }
+.jaldi-sc-tl-label.is-done { font-weight: var(--fw-bold); color: var(--ink); }
+.jaldi-sc-tl-when { font-size: var(--fs-3xs); color: var(--ter); font-weight: var(--fw-medium); }
+.jaldi-sc-redirect-note { font-size: var(--fs-xs); color: var(--ter); }
+
+/* Shipping rate: disabled + free-shipping nudge states */
+.jaldi-sc-rate.is-disabled { opacity: 0.55; cursor: default; }
+.jaldi-sc-rate-nudge { font-size: var(--fs-2xs); color: var(--muted); margin-top: 2px; }
+.jaldi-sc-rate-nudge.is-unlocked { color: var(--success); font-weight: var(--fw-semi); }
+
+/* Smart Checkout: form wrapper + secondary CTA + inline address edit */
+.jaldi-sc-form-wrap { min-height: 100%; display: flex; flex-direction: column; }
+.jaldi-sc-form-wrap > .jaldi-sc-step-pane { flex: 1; }
+
+.jaldi-sc-cta-alt {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.jaldi-sc-cta-alt:disabled { background: var(--line-2); color: var(--ter); }
+.jaldi-sc-cta-sm { width: auto; padding: var(--sp-4) var(--sp-8); font-size: var(--fs-sm); }
+
+.jaldi-sc-edit-grid { display: flex; flex-direction: column; gap: var(--sp-5); }
+.jaldi-sc-edit-row { display: flex; gap: var(--sp-4); }
+.jaldi-sc-edit-field { display: flex; flex-direction: column; }
+
+.jaldi-sc-edit-input {
+  width: 100%;
+  padding: var(--pad-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: var(--fw-medium);
+  outline: none;
+}
+
+.jaldi-sc-edit-input:focus { border-color: var(--brand); box-shadow: var(--focus-ring); }
+.jaldi-sc-edit-actions { display: flex; align-items: center; gap: var(--sp-5); }
+
+/* Two-column desktop: the rail carries the summary, so the inline review-step
+   card would be a duplicate. Hidden in CSS rather than by a JS viewport check. */
+@media (min-width: 1024px) {
+  .jaldi-sc-shell.has-rail .jaldi-sc-summary { display: none; }
+}
+
+.jaldi-sc-addr-actions { display: flex; align-items: center; gap: var(--sp-1); flex-shrink: 0; }

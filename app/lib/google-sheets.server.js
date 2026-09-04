@@ -194,6 +194,85 @@ export async function getAuthorizedClientForShop(shopId) {
 }
 
 // ============================================================
+// Integration health
+// ============================================================
+
+/**
+ * Health states for a merchant's Google Sheets integration.
+ *
+ * The distinction that matters is between RECENT_ERROR and NEEDS_RECONNECT.
+ * The sync runs every two minutes, so a transient Google blip produces an
+ * error that resolves on its own. Alarming a merchant about that trains them
+ * to ignore the warning, so only a sustained failure escalates.
+ */
+export const SHEETS_HEALTH = {
+  NOT_CONNECTED: "not_connected",
+  HEALTHY: "healthy",
+  RECENT_ERROR: "recent_error",
+  NEEDS_RECONNECT: "needs_reconnect",
+};
+
+/** A failure older than this is treated as needing merchant action. */
+export const SHEETS_SUSTAINED_FAILURE_HOURS = 24;
+
+/**
+ * Derive integration health from a GoogleSheetsIntegration row.
+ *
+ * Pure, so it can run against a row the caller already has rather than
+ * forcing a second query. Pass the row (or null) exactly as stored.
+ *
+ * Note this deliberately does NOT consult lastSyncedAt: that field is written
+ * on both the success and failure paths, so it stays fresh throughout a total
+ * outage. Only lastSuccessAt says whether the thing actually works.
+ */
+export function deriveSheetsHealth(integration, now = new Date()) {
+  if (!integration || !integration.refreshToken) return SHEETS_HEALTH.NOT_CONNECTED;
+  if (!integration.enabled) return SHEETS_HEALTH.NOT_CONNECTED;
+  if (!integration.lastSyncError) return SHEETS_HEALTH.HEALTHY;
+
+  const cutoff = now.getTime() - SHEETS_SUSTAINED_FAILURE_HOURS * 60 * 60 * 1000;
+
+  // No success on record at all: fall back to how long the integration has
+  // existed, so a row predating lastSuccessAt is not branded broken instantly.
+  const lastGood = integration.lastSuccessAt
+    ? new Date(integration.lastSuccessAt).getTime()
+    : integration.createdAt
+      ? new Date(integration.createdAt).getTime()
+      : null;
+
+  if (lastGood === null) return SHEETS_HEALTH.RECENT_ERROR;
+
+  return lastGood < cutoff ? SHEETS_HEALTH.NEEDS_RECONNECT : SHEETS_HEALTH.RECENT_ERROR;
+}
+
+/**
+ * Banner-shaped summary for the admin layout. Returns null when there is
+ * nothing a merchant could usefully act on, so the caller can skip rendering.
+ */
+export async function getSheetsAlertForShop(shopId) {
+  const integration = await prisma.googleSheetsIntegration.findUnique({
+    where: { shopId },
+    select: {
+      enabled: true,
+      refreshToken: true,
+      lastSyncError: true,
+      lastSuccessAt: true,
+      createdAt: true,
+      googleEmail: true,
+    },
+  });
+
+  const health = deriveSheetsHealth(integration);
+  if (health !== SHEETS_HEALTH.NEEDS_RECONNECT) return null;
+
+  return {
+    health,
+    googleEmail: integration.googleEmail || null,
+    lastSuccessAt: integration.lastSuccessAt || null,
+  };
+}
+
+// ============================================================
 // Drive / Sheets helpers
 // ============================================================
 

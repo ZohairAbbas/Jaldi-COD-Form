@@ -26,6 +26,13 @@ export default function GoogleSheetsIntegration({
 
   const connected = Boolean(integration?.connected);
 
+  // "needs_reconnect" is the server's judgement that this has been failing long
+  // enough to be the merchant's problem to fix, rather than a passing blip.
+  const needsReconnect = integration?.health === "needs_reconnect";
+  const lastGoodLabel = integration?.lastSuccessAt
+    ? `since ${formatRelative(integration.lastSuccessAt)}`
+    : "recently";
+
   // Local editable config mirrors the integration row.
   const [config, setConfig] = useState(() => deriveConfig(initialIntegration));
 
@@ -227,17 +234,41 @@ export default function GoogleSheetsIntegration({
           Connected as <strong>{integration.googleEmail || "your Google account"}</strong>
         </s-text>
 
-        {/* Sync status banner — reflects the last SAVED state, not unsaved edits. */}
+        {/* Sync status banner — reflects the last SAVED state, not unsaved edits.
+            The raw error string is deliberately not shown on its own: a merchant
+            reading "invalid_grant" learns nothing and cannot act on it. */}
         <div style={statusBanner(integration)}>
-          {integration.lastSyncError
-            ? `⚠️ Last sync failed: ${integration.lastSyncError}`
-            : integration.enabled
-            ? `✅ Syncing is active${
-                integration.lastSyncedAt
-                  ? ` — last synced ${formatRelative(integration.lastSyncedAt)}`
-                  : " — waiting for the first sync"
-              }`
-            : "⚠️ Import is disabled — turn on “Enable automatic import” and Save to start syncing orders to your sheet."}
+          {needsReconnect ? (
+            <s-stack direction="block" gap="tight">
+              <div>
+                ⚠️ Your Google account needs to be reconnected — orders have not been
+                imported {lastGoodLabel}.
+              </div>
+              <div style={{ fontWeight: 400 }}>
+                Google’s access permission expires periodically, or can be revoked from
+                your Google account. Reconnecting restores importing; your sheet and
+                column setup are kept.
+              </div>
+              <div>
+                <button onClick={handleConnect} style={primaryBtn} disabled={loading}>
+                  Reconnect Google account
+                </button>
+              </div>
+            </s-stack>
+          ) : integration.lastSyncError ? (
+            <div>
+              ⚠️ The last import did not complete. It will retry automatically — if this
+              persists, reconnect your Google account below.
+            </div>
+          ) : integration.enabled ? (
+            `✅ Syncing is active${
+              integration.lastSuccessAt
+                ? ` — last imported ${formatRelative(integration.lastSuccessAt)}`
+                : " — waiting for the first sync"
+            }`
+          ) : (
+            "⚠️ Import is disabled — turn on “Enable automatic import” and Save to start syncing orders to your sheet."
+          )}
         </div>
 
         {/* 1. Spreadsheet + tab selection */}

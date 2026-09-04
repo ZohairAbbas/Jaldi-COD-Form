@@ -155,6 +155,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [postPurchaseUpsellConfig, setPostPurchaseUpsellConfig] = useState(null);
   const [orderResult, setOrderResult] = useState(null); // Store order result for post-purchase flow
   const [thankYouHtml, setThankYouHtml] = useState(null); // In-form thank-you message (redirectMode 'none')
+  // Smart Checkout shows a success SCREEN inside the form for redirectMode
+  // 'none', instead of swapping the modal out for the thank-you overlay.
+  const [smartSuccess, setSmartSuccess] = useState(null);
 
   // Downsell state
   const [showDownsellModal, setShowDownsellModal] = useState(false);
@@ -1781,8 +1784,17 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     if (action.type === 'redirect') {
       window.location.href = action.url;
     } else if (action.type === 'message') {
-      setIsModalOpen(false);
-      setThankYouHtml(action.html || '');
+      if (config?.settings?.enableSmartCheckout) {
+        // Keep the modal open — CODForm swaps in its success step.
+        setSmartSuccess({
+          messageHtml: action.html || '',
+          orderNumber: result?.shopifyOrderNumber,
+          total: result?.total != null ? result.total : orderData?.total || 0,
+        });
+      } else {
+        setIsModalOpen(false);
+        setThankYouHtml(action.html || '');
+      }
     } else {
       setIsModalOpen(false);
     }
@@ -2562,6 +2574,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   // Handle form close - check for downsell first
   const handleFormClose = () => {
+    // After a completed order the form is showing the success screen. Closing
+    // it must not trigger the abandonment downsell — that offer is for buyers
+    // who are leaving without ordering.
+    if (smartSuccess) {
+      setSmartSuccess(null);
+      setIsModalOpen(false);
+      return;
+    }
+
     const eligibleDownsell = getEligibleDownsell();
 
     if (eligibleDownsell && !recoveryDiscount) {
@@ -2748,7 +2769,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
+        className={config.settings?.enableSmartCheckout ? 'jaldi-sc-modal-frame' : undefined}
+        style={config.settings?.enableSmartCheckout ? undefined : {
           backgroundColor: 'white',
           borderRadius: '8px',
           maxWidth: '560px',
@@ -2763,6 +2785,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           <div style={{
             padding: '60px 40px',
             textAlign: 'center',
+            // Explicit surface: the smart-checkout frame is transparent, so the
+            // placeholder would otherwise sit directly on the dark overlay.
+            backgroundColor: 'white',
+            borderRadius: '8px',
           }}>
             <p>Loading...</p>
           </div>
@@ -2773,6 +2799,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             onSubmit={handleSubmit}
             onClose={handleFormClose}
             onRemoveItem={handleRemoveItem}
+            smartSuccess={smartSuccess}
             mode="popup"
             upsellProduct={upsellProduct}
             showProductSelection={config.settings.allowCartItems && fullCart.items.length > 0 && currentProduct}

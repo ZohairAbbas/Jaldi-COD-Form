@@ -3,6 +3,7 @@ import { createDraftOrderForAbandonedCart } from "../lib/abandoned-cart.server";
 import { syncShopFulfillments } from "../lib/fulfillment-sync.server";
 import { syncCourierifyData } from "../lib/courierify-sync.server";
 import { runGoogleSheetsSync } from "../lib/google-sheets-sync.server";
+import { CRON_STATUS, getCronHealth } from "../lib/cron-health.server";
 
 
 const ABANDONED_THRESHOLD_MINUTES = 10;
@@ -29,7 +30,7 @@ export const action = async ({ request, params }) => {
     case "cron-google-sheets-sync":
       return handleGoogleSheetsSync(request);
     case "cron-health":
-      return handleCronHealth(request);
+      return handleCronHealth();
     default:
       return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -42,21 +43,38 @@ function verifyCronSecret(request) {
   return secret === CRON_SECRET;
 }
 
-// Log cron job execution
+/**
+ * Log cron job execution.
+ *
+ * Status is derived here rather than at each call site: a run reported as
+ * COMPLETED that carries a non-zero error count is recorded as PARTIAL. Doing
+ * this centrally means every job — including any added later — reports
+ * truthfully without its author having to remember to check.
+ */
 async function logCronJob(jobName, status, details = {}) {
+  const errors = details.errors || 0;
+  const effectiveStatus =
+    status === CRON_STATUS.COMPLETED && errors > 0 ? CRON_STATUS.PARTIAL : status;
+
   try {
     await db.cronLog.create({
       data: {
         jobName,
-        status,
+        status: effectiveStatus,
         message: details.message || null,
         processed: details.processed || 0,
-        errors: details.errors || 0,
+        errors,
         duration: details.duration || null,
       },
     });
   } catch (error) {
     console.error("Failed to log cron job:", error);
+  }
+
+  if (effectiveStatus === CRON_STATUS.PARTIAL) {
+    console.error(
+      `[cron] ${jobName} finished with ${errors} error(s): ${details.message || "no message"}`
+    );
   }
 }
 
@@ -84,7 +102,11 @@ async function handleGoogleSheetsSync(request) {
     });
 
     return Response.json({
-      success: true,
+      // Reported per-shop errors mean this run did not fully succeed, even
+      // though it reached the end. The cron worker logs this body, so saying
+      // "true" here is what kept a 30-day outage out of the worker's log.
+      success: results.errors === 0,
+      errors: results.errors,
       message: `Synced ${results.processed} rows across ${results.shops} shops`,
       results,
       duration: `${duration}ms`,
@@ -200,7 +222,8 @@ async function handleCronAbandonedCarts(request) {
     });
 
     return Response.json({
-      success: true,
+      success: results.errors === 0,
+      errors: results.errors,
       message: `Processed ${results.processed} abandoned carts`,
       results,
       duration: `${duration}ms`,
@@ -391,7 +414,8 @@ async function handleCreateDraftOrders(request) {
     });
 
     return Response.json({
-      success: true,
+      success: results.failed === 0,
+      errors: results.failed,
       message: `Created ${results.success} draft orders, skipped ${results.skipped} (no valid contact)`,
       results,
       duration: `${duration}ms`,
@@ -574,7 +598,8 @@ async function handleFulfillmentSync(request) {
     });
 
     return Response.json({
-      success: true,
+      success: results.totalErrors === 0,
+      errors: results.totalErrors,
       message: `Synced ${results.totalUpdated} orders across ${results.shopsProcessed} shops`,
       results,
       duration: `${duration}ms`,
@@ -619,7 +644,13 @@ async function handleCourierifySync(request) {
       duration,
     });
 
-    return Response.json({ success: true, ...result, duration: `${duration}ms` });
+    // Spread first so the derived fields below always win.
+    return Response.json({
+      ...result,
+      success: (result.errors ?? 0) === 0,
+      errors: result.errors ?? 0,
+      duration: `${duration}ms`,
+    });
   } catch (error) {
     console.error("[courierify-sync] Unhandled error:", error);
 
@@ -636,61 +667,17 @@ async function handleCourierifySync(request) {
   }
 }
 
-// Health check endpoint
-async function handleCronHealth(request) {
+/**
+ * Health check endpoint.
+ *
+ * Job health lives in lib/cron-health.server so the admin Monitor page and this
+ * endpoint cannot drift apart. Returns 503 when degraded so an uptime monitor
+ * can page on it directly.
+ */
+async function handleCronHealth() {
   try {
-    const recentLogs = await db.cronLog.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
-
-    const lastAbandonedJob = recentLogs.find(
-      (l) => l.jobName === "abandoned-carts-detection" && l.status === "completed"
-    );
-    const lastDraftJob = recentLogs.find(
-      (l) => l.jobName === "draft-orders-creation" && l.status === "completed"
-    );
-    const lastFulfillmentJob = recentLogs.find(
-      (l) => l.jobName === "fulfillment-sync" && l.status === "completed"
-    );
-
-    // Check if jobs are running on schedule
-    const now = new Date();
-    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
-    const sixtyMinutesAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
-
-    const abandonedJobHealthy = lastAbandonedJob &&
-      new Date(lastAbandonedJob.createdAt) > tenMinutesAgo;
-    const draftJobHealthy = lastDraftJob &&
-      new Date(lastDraftJob.createdAt) > sixtyMinutesAgo;
-    const fulfillmentJobHealthy = lastFulfillmentJob &&
-      new Date(lastFulfillmentJob.createdAt) > fourHoursAgo;
-
-    return Response.json({
-      status: abandonedJobHealthy && draftJobHealthy && fulfillmentJobHealthy ? "healthy" : "degraded",
-      jobs: {
-        abandonedCartsDetection: {
-          lastRun: lastAbandonedJob?.createdAt || null,
-          lastStatus: lastAbandonedJob?.status || "never_run",
-          lastProcessed: lastAbandonedJob?.processed || 0,
-          healthy: abandonedJobHealthy || false,
-        },
-        draftOrdersCreation: {
-          lastRun: lastDraftJob?.createdAt || null,
-          lastStatus: lastDraftJob?.status || "never_run",
-          lastProcessed: lastDraftJob?.processed || 0,
-          healthy: draftJobHealthy || false,
-        },
-        fulfillmentSync: {
-          lastRun: lastFulfillmentJob?.createdAt || null,
-          lastStatus: lastFulfillmentJob?.status || "never_run",
-          lastProcessed: lastFulfillmentJob?.processed || 0,
-          healthy: fulfillmentJobHealthy || false,
-        },
-      },
-      recentLogs: recentLogs.slice(0, 10),
-    });
+    const health = await getCronHealth();
+    return Response.json(health, { status: health.healthy ? 200 : 503 });
   } catch (error) {
     return Response.json({
       status: "error",
@@ -704,7 +691,7 @@ export const loader = async ({ params }) => {
   const path = params["*"];
 
   if (path === "cron-health") {
-    return handleCronHealth({ method: "GET" });
+    return handleCronHealth();
   }
 
   return Response.json({
