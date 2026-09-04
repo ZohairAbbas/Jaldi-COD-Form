@@ -33,6 +33,26 @@ const STATUS_MAP = {
 
 const TERMINAL_OUTCOMES = ["delivered", "returned", "cancelled"];
 
+/**
+ * Normalize a stored shopifyOrderId to a Shopify global ID.
+ *
+ * Order.shopifyOrderId is not written uniformly. Orders created through the
+ * app store `gid://shopify/Order/N` (order.server.js), while orders captured
+ * from the orders/create webhook store the REST payload's bare numeric id
+ * (webhooks.orders.create.jsx). The nodes(ids:) query below requires global
+ * IDs, and Shopify rejects the ENTIRE query if any single id is malformed —
+ * so one bare id used to fail its whole batch of 50 orders.
+ *
+ * Returns null for anything unrecognized, so a malformed row is skipped
+ * rather than being allowed to poison the batch around it.
+ */
+function toOrderGid(shopifyOrderId) {
+  if (!shopifyOrderId) return null;
+  if (shopifyOrderId.startsWith("gid://")) return shopifyOrderId;
+  if (/^\d+$/.test(shopifyOrderId)) return `gid://shopify/Order/${shopifyOrderId}`;
+  return null;
+}
+
 // Priority for worst-status when order has multiple fulfillments (lower = worse)
 const OUTCOME_PRIORITY = {
   returned: 0,
@@ -109,7 +129,27 @@ export async function syncShopFulfillments(shopId, shopDomain, accessToken) {
 
   for (let i = 0; i < orders.length; i += BATCH_SIZE) {
     const batch = orders.slice(i, i + BATCH_SIZE);
-    const orderGids = batch.map(o => o.shopifyOrderId);
+
+    // Map normalized GID → order, so the response can be matched back without
+    // re-scanning the batch and without depending on how the id was stored.
+    const ordersByGid = new Map();
+    const malformed = [];
+    for (const o of batch) {
+      const gid = toOrderGid(o.shopifyOrderId);
+      if (gid) ordersByGid.set(gid, o);
+      else malformed.push(o.id);
+    }
+
+    if (malformed.length > 0) {
+      console.error(
+        `[fulfillment-sync] Skipping ${malformed.length} order(s) with unparseable shopifyOrderId for ${shopDomain}:`,
+        malformed
+      );
+      totalErrors += malformed.length;
+    }
+
+    const orderGids = [...ordersByGid.keys()];
+    if (orderGids.length === 0) continue;
 
     try {
       const query = `
@@ -151,20 +191,31 @@ export async function syncShopFulfillments(shopId, shopDomain, accessToken) {
       const errorsArray = Array.isArray(result.errors) ? result.errors : [];
       const errorsString = typeof result.errors === "string" ? result.errors.toLowerCase() : "";
 
-      // Mark unavailable/paused/deleted shops as invalid so they get skipped permanently
-      if (errorsString.includes("unavailable shop") || errorsString.includes("shop not found")) {
+      // Mark unavailable/paused/deleted shops as invalid so they get skipped
+      // permanently. Shopify returns a bare "Not Found" string for a domain that
+      // no longer resolves, which this used to miss — three dead shops were
+      // retried every 3 hours for months. "not found" also covers the older
+      // "shop not found" wording.
+      if (errorsString.includes("unavailable shop") || errorsString.includes("not found")) {
         console.error(`[fulfillment-sync] Shop unavailable for ${shopDomain}: "${result.errors}" — marking tokenInvalid`);
         return { processed: 0, updated: 0, errors: 0, invalidToken: true };
       }
 
-      // Shopify sometimes returns 200 with an auth error in the body
-      const authError = errorsArray.find(e =>
-        e.message?.toLowerCase().includes("invalid api key") ||
-        e.message?.toLowerCase().includes("access token") ||
-        e.message?.toLowerCase().includes("unrecognized login")
-      );
-      if (authError) {
-        console.error(`[fulfillment-sync] Auth error for ${shopDomain}: ${authError.message} — marking tokenInvalid`);
+      // Shopify sometimes returns 200 with an auth error in the body, and that
+      // body is either an array of error objects or a bare string. Only the
+      // array form was checked here, so string-form auth errors — the literal
+      // "[API] Invalid API key or access token (unrecognized login or wrong
+      // password)" — fell through to the generic handler below and were retried
+      // every 3 hours instead of marking the shop invalid.
+      const AUTH_PHRASES = ["invalid api key", "access token", "unrecognized login"];
+      const authMessage =
+        errorsArray.find(e =>
+          AUTH_PHRASES.some(p => e.message?.toLowerCase().includes(p))
+        )?.message ||
+        (AUTH_PHRASES.some(p => errorsString.includes(p)) ? String(result.errors) : null);
+
+      if (authMessage) {
+        console.error(`[fulfillment-sync] Auth error for ${shopDomain}: ${authMessage} — marking tokenInvalid`);
         return { processed: 0, updated: 0, errors: 0, invalidToken: true };
       }
 
@@ -186,7 +237,7 @@ export async function syncShopFulfillments(shopId, shopDomain, accessToken) {
       for (const node of nodes) {
         if (!node || !node.id) continue;
 
-        const order = batch.find(o => o.shopifyOrderId === node.id);
+        const order = ordersByGid.get(node.id);
         if (!order) continue;
 
         const resolved = resolveDeliveryOutcome(
