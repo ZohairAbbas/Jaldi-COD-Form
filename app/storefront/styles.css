@@ -146,8 +146,12 @@
    smart/theme.js). The values here are the shipping defaults.
    ═══════════════════════════════════════════════════════════════════════ */
 
-#jaldi-cod-form-popup,
-#jaldi-cod-form-embedded {
+/* Attached to the Smart Checkout root element itself, not to an ancestor id.
+   The popup is portalled to <body>, so no wrapper id is a reliable ancestor —
+   and the #jaldi-cod-form-* ids these rules originally used are matched by
+   nothing in the app (the real mount points are #preventify-popup /
+   #preventify-embedded / #preventify-drawer-popup). */
+.jaldi-sc-root {
   /* Brand — runtime-overridden per merchant */
   --brand: #0E9FAD;
   --brand-ink: #084E54;
@@ -243,10 +247,31 @@
 
   /* Layout constants (desktop). Fixed px, never vh — vh clipped the Continue
      button on short browser windows. See the design HANDOFF.md. */
+  --w-modal-compact: 440px;
+  --w-modal-standard: 520px;
+  --w-modal-wide: 600px;
+  --w-modal-twocol: 980px;
   --w-summary-rail: 340px;
   --h-modal-max: 760px;
   --h-form-scroll: 600px;
   --hit-min: 44px;
+}
+
+/* Box model: the legacy #jaldi-cod-form-* reset never matched anything, so
+   Smart Checkout carries its own. Without it every padded token box overflows. */
+.jaldi-sc-root,
+.jaldi-sc-root *,
+.jaldi-sc-root *::before,
+.jaldi-sc-root *::after {
+  box-sizing: border-box;
+}
+
+.jaldi-sc-root p,
+.jaldi-sc-root h1,
+.jaldi-sc-root h2,
+.jaldi-sc-root ul,
+.jaldi-sc-root ol {
+  margin: 0;
 }
 
 /* Scroll areas — hide the scrollbar without losing scrollability */
@@ -292,8 +317,7 @@
 /* Respect reduced-motion: keep the decorative loops still, but leave the
    functional fades in place so steps don't appear to jump. */
 @media (prefers-reduced-motion: reduce) {
-  #jaldi-cod-form-popup *,
-  #jaldi-cod-form-embedded * {
+  .jaldi-sc-root * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -506,7 +530,7 @@
   }
 
   /* Two-column: form + summary rail. Fixed 980px per the design. */
-  .jaldi-sc-shell.has-rail { width: 980px; }
+  .jaldi-sc-shell.has-rail { width: var(--w-modal-twocol); }
 
   .jaldi-sc-shell.is-embedded {
     width: 100%;

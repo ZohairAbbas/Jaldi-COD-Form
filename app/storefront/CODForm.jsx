@@ -2725,7 +2725,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       upsellDiscount > 0 && { label: t(lang, 'upsellDiscount'), value: -displayUpsellDiscount, kind: 'discount', display: `−${currencySymbol}${displayUpsellDiscount.toFixed(2)}` },
       recoveryDiscountAmount > 0 && { label: t(lang, 'recoveryDiscount'), value: -displayRecoveryDiscountAmount, kind: 'discount', display: `−${currencySymbol}${displayRecoveryDiscountAmount.toFixed(2)}` },
       userDiscountAmount > 0 && { label: t(lang, 'discount'), value: -displayUserDiscountAmount, kind: 'discount', display: `−${currencySymbol}${displayUserDiscountAmount.toFixed(2)}` },
-      { label: t(lang, 'shipping'), value: displayShippingCost, kind: displayShippingCost === 0 ? 'free' : undefined },
+      // Shipping rates can depend on the address, so don't quote a price (or
+      // promise "Free") before the buyer reaches the review step — the design
+      // reveals shipping progressively for the same reason.
+      checkoutStep === 'review'
+        ? { label: t(lang, 'shipping'), value: displayShippingCost, kind: displayShippingCost === 0 ? 'free' : undefined }
+        : { label: t(lang, 'shipping'), value: 0, display: t(lang, 'calculatedNext') },
     ].filter(Boolean);
 
     // Rate rows carry the free-shipping nudge's disabled/message state so that
@@ -2957,7 +2962,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     };
 
     return (
-      <div style={smartRoot}>
+      <div className="jaldi-sc-root" style={smartRoot}>
         <ModalShell
           step={smartSuccess ? 0 : stepNumber}
           totalSteps={smartSuccess ? 0 : smartSteps.length}
@@ -2975,7 +2980,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
               items={cart.items}
               currencySymbol={currencySymbol}
               breakdown={smartBreakdown}
-              total={displayTotal}
+              total={checkoutStep === 'review' ? displayTotal : displayTotal - displayShippingCost}
               address={checkoutStep === 'review' ? deliverTo : null}
               shipping={checkoutStep === 'review' ? railShipping : null}
             />
