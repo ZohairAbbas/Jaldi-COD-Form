@@ -236,6 +236,81 @@ const COLOR_PALETTES = [
 ];
 
 // ============================================
+// HEX COLOR FIELD
+// ============================================
+// Swatch picker + free-text hex box so a store owner can paste their exact
+// brand colour instead of hunting for it in the OS colour picker.
+function normalizeHex(raw) {
+  let v = String(raw || "").trim();
+  if (!v) return null;
+  if (!v.startsWith("#")) v = `#${v}`;
+  if (/^#[0-9a-fA-F]{3}$/.test(v)) {
+    v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
+  }
+  return /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : null;
+}
+
+function HexColorField({ value, onChange }) {
+  const current = normalizeHex(value) || "#000000";
+  const [draft, setDraft] = useState(current);
+  const [invalid, setInvalid] = useState(false);
+
+  // Keep the text box in sync when the value changes elsewhere (palette click).
+  useEffect(() => {
+    setDraft(current);
+    setInvalid(false);
+  }, [current]);
+
+  const commit = (raw) => {
+    const hex = normalizeHex(raw);
+    if (hex) {
+      setDraft(hex);
+      setInvalid(false);
+      onChange(hex);
+    } else {
+      // Invalid entry: flag it and fall back to the last good value.
+      setInvalid(true);
+      setDraft(current);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <input
+        type="color"
+        value={current}
+        onChange={(e) => onChange(e.target.value.toLowerCase())}
+        style={{ width: "32px", height: "32px", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", padding: "0" }}
+      />
+      <input
+        type="text"
+        value={draft}
+        spellCheck={false}
+        maxLength={7}
+        placeholder="#000000"
+        aria-label="Hex colour"
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setInvalid(false);
+        }}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(e.currentTarget.value);
+          }
+        }}
+        style={{
+          width: "80px", padding: "4px 6px", borderRadius: "4px",
+          border: `1px solid ${invalid ? "#DC2626" : "#d1d5db"}`,
+          fontSize: "13px", fontFamily: "monospace", textTransform: "lowercase",
+        }}
+      />
+    </div>
+  );
+}
+
+// ============================================
 // GRADIENT PALETTES
 // ============================================
 // Gradients apply to ALL tier cards via `bgGradient`. `bgColor` is kept as a
@@ -463,16 +538,25 @@ export default function BundleEditor() {
   };
 
   const updateStylingColor = (group, field, value) => {
-    setBundle((prev) => ({
-      ...prev,
-      styling: {
-        ...prev.styling,
-        colors: {
-          ...prev.styling.colors,
-          [group]: { ...prev.styling.colors[group], [field]: value },
+    setBundle((prev) => {
+      const nextGroup = { ...prev.styling.colors?.[group], [field]: value };
+      // A gradient palette renders `bgGradient` in place of `bgColor`, so a
+      // hand-picked tier background would otherwise be invisible. Drop the
+      // gradient once the owner sets their own background colour.
+      if (field === "bgColor") delete nextGroup.bgGradient;
+      return {
+        ...prev,
+        styling: {
+          ...prev.styling,
+          // Any manual edit means this is no longer a stock palette.
+          colorPalette: "custom",
+          colors: {
+            ...prev.styling.colors,
+            [group]: nextGroup,
+          },
         },
-      },
-    }));
+      };
+    });
   };
 
   const applyColorPalette = (palette) => {
@@ -1177,7 +1261,20 @@ export default function BundleEditor() {
                               }}
                             />
                           ))}
+                          {/* Custom: send the owner to the per-element hex controls */}
+                          <button
+                            type="button"
+                            onClick={() => setCustomizeSubTab("customize")}
+                            title="Custom colors"
+                            style={{
+                              width: "40px", height: "40px", borderRadius: "8px",
+                              background: "conic-gradient(#ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)",
+                              border: styling.colorPalette === "custom" ? "3px solid #000" : "2px solid #e5e7eb",
+                              cursor: "pointer", transition: "border 0.2s",
+                            }}
+                          />
                         </div>
+                        <s-text tone="subdued">Pick a preset, or choose Custom to set your own hex values per element.</s-text>
                       </div>
 
                       {/* Gradient Palettes */}
@@ -1222,11 +1319,9 @@ export default function BundleEditor() {
                               <div key={f} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                 <label style={{ fontSize: "12px", color: "#6b7280" }}>{l}</label>
                                 {type === "color" ? (
-                                  <input
-                                    type="color"
+                                  <HexColorField
                                     value={colors[group]?.[f] || "#000000"}
-                                    onChange={(e) => updateStylingColor(group, f, e.target.value)}
-                                    style={{ width: "32px", height: "32px", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", padding: "0" }}
+                                    onChange={(hex) => updateStylingColor(group, f, hex)}
                                   />
                                 ) : (
                                   <input
