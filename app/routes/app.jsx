@@ -11,6 +11,12 @@ import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName 
 import MixpanelProvider from "../components/MixpanelProvider";
 import BillingBanner from "../components/BillingBanner";
 import IntegrationAlertBanner from "../components/IntegrationAlertBanner";
+import adminStyles from "../styles/admin.css?url";
+
+// Shared responsive layout primitives for every /app/* route. Loaded via links
+// rather than a side-effect import so the stylesheet lands in the document head
+// on the server render, with no flash of the desktop layout on mobile.
+export const links = () => [{ rel: "stylesheet", href: adminStyles }];
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -95,7 +101,7 @@ export default function App() {
           <s-link href="/app/billing">Billing</s-link>
           {isAdmin && <s-link href="/app/monitor">Monitor</s-link>}
         </s-app-nav>
-        <div style={{ padding: '16px' }}>
+        <div className="pv-admin" style={{ padding: '16px' }}>
           <BillingBanner subscription={subscription} planUsage={planUsage} isNavigatingToBilling={isNavigatingToBilling} />
           <IntegrationAlertBanner sheetsAlert={sheetsAlert} />
           <Outlet />

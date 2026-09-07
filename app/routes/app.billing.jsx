@@ -375,11 +375,7 @@ export default function BillingPage() {
           <div style={{ marginBottom: '16px' }}>
             <span style={{ fontSize: '16px', fontWeight: 600 }}>Available Plans</span>
           </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(plans.length, 3)}, 1fr)`,
-            gap: '16px',
-          }}>
+          <div className="pv-grid" style={{ '--pv-grid-min': '260px' }}>
             {plans.map((plan) => {
               const isCurrent = isCurrentPlan(plan);
               const features = getPlanDisplayFeatures(plan);

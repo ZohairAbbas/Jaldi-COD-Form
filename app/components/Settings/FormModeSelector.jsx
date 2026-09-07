@@ -11,12 +11,10 @@ export default function FormModeSelector({ settings, onUpdate }) {
       </s-paragraph>
 
       {/* Card-style buttons in a row */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: '16px',
-        marginTop: '8px',
-      }}>
+      <div
+        className="pv-grid"
+        style={{ '--pv-grid-min': '220px', marginTop: '8px' }}
+      >
         {/* Popup Mode Card */}
         <div
           onClick={() => handleModeChange("popup")}

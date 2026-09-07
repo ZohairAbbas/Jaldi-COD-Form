@@ -1,0 +1,340 @@
+/*
+ * Preventify admin — shared responsive layout primitives.
+ *
+ * The admin is hand-rolled markup with inline styles (no Polaris components),
+ * and inline styles cannot carry media queries or container-relative sizing.
+ * Anything that needs to change shape as the viewport narrows lives here as a
+ * class instead.
+ *
+ * Scope is deliberately narrow: only layout containers that actually break on a
+ * phone. Cosmetic inline styles (colour, type, padding) are left where they are.
+ */
+
+/* ==========================================================================
+   Card grids
+   --------------------------------------------------------------------------
+   Rows of equally-weighted cards (stat tiles, metric panels). These were fixed
+   `repeat(N, 1fr)` templates, which keep N columns at every width and squeeze
+   each card to a fraction of a phone screen.
+   auto-fit + minmax reflows them by available space instead, so no breakpoint
+   list needs maintaining as cards are added. Each site declares the narrowest
+   width its card stays readable at via --pv-grid-min.
+   The inner min() guards the case where the container itself is narrower than
+   that floor — without it the track would overflow rather than shrink.
+   ========================================================================== */
+
+.pv-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(var(--pv-grid-min, 240px), 100%), 1fr)
+  );
+  gap: var(--pv-grid-gap, 16px);
+}
+
+/* A segmented strip of stat cells divided by hairlines. Drawing those as a
+   border-right on each cell only works while the cells stay on one row — once
+   the grid wraps, the rightmost cell of each row carries a stray edge line and
+   nothing separates the rows. Painting the container and letting a 1px gap show
+   through gives dividers that stay correct at any column count. */
+.pv-stat-strip {
+  background-color: #e3e3e3;
+}
+
+.pv-stat-strip > * {
+  background-color: #ffffff;
+}
+
+/* Horizontally scrollable segmented control — period pickers on Analytics and
+   Monitor, tab bars on Form Designer and Settings. The button rows run from
+   ~350px to ~560px, all wider than a phone viewport, so the control scrolls
+   rather than pushing the page sideways. Chrome differs per page, so colour,
+   radius, border and spacing come in as variables. */
+.pv-segmented {
+  display: inline-flex;
+  gap: var(--pv-seg-gap, 4px);
+  padding: var(--pv-seg-pad, 4px);
+  background-color: var(--pv-seg-bg, #f3f4f6);
+  border: var(--pv-seg-border, 0);
+  border-radius: var(--pv-seg-radius, 8px);
+  max-width: 100%;
+  /* As a flex item it defaults to min-width:auto, which refuses to shrink below
+     the buttons' combined width — max-width alone would not bite. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pv-segmented::-webkit-scrollbar {
+  display: none;
+}
+
+.pv-segmented > button {
+  flex: 0 0 auto;
+}
+
+/* ==========================================================================
+   Editor pages (sales-booster $id)
+   --------------------------------------------------------------------------
+   These are a two-column "settings | live preview" split, with paired form
+   fields nested inside the settings column. The two collapse at different
+   widths: the split needs real estate for a side-by-side preview, while a
+   field pair only has to give up once the page itself is phone-width.
+   ========================================================================== */
+
+.pv-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.pv-field-pair {
+  display: grid;
+  grid-template-columns: var(--pv-pair-cols, 1fr 1fr);
+  gap: var(--pv-pair-gap, 16px);
+}
+
+/* Bundle's editor is the same split built with flex and a fixed-width sticky
+   aside. Left as-is the 360px aside never yields, so on a phone it takes the
+   whole viewport and starves the settings column beside it. */
+.pv-split-flex {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.pv-split-flex__aside {
+  width: 360px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 20px;
+}
+
+/* Form Designer's preview columns are sticky but not fixed-width, so they only
+   need unsticking once stacked. */
+.pv-preview-aside {
+  position: sticky;
+  top: 20px;
+  height: fit-content;
+}
+
+@media (max-width: 900px) {
+  /* Preview drops below the settings it mirrors, following source order. */
+  .pv-split {
+    grid-template-columns: 1fr;
+  }
+
+  /* align-items must go back to stretch with the direction change, or the two
+     columns keep their intrinsic width instead of filling the stacked row. */
+  .pv-split-flex {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Full width once stacked, and unstuck — a sticky preview pinned above a form
+     you are scrolling through eats the screen it is meant to illustrate. */
+  .pv-split-flex__aside {
+    width: 100%;
+    position: static;
+  }
+
+  .pv-preview-aside {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .pv-field-pair {
+    grid-template-columns: 1fr;
+  }
+
+  /* A flex row of `flex: 1` fields plus a trailing button — around 113px per
+     field at 375px. Stacking beats wrapping: in a column the children's inline
+     flex-grow is harmless and they stretch to full width on their own.
+     align-items is set inline as flex-start for the row layout, so the override
+     back to stretch has to outrank it. */
+  .pv-stack-narrow {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  /* A two-up toggle that stays two-up — the pair reads as one control and its
+     buttons share a divider, so collapsing it would cost more than it gains.
+     Its 24px side padding leaves almost no margin at 360px, though, so only the
+     padding gives way. Inline, hence !important. */
+  .pv-toggle-pair > button {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* The backdrop framing each live preview. Its colour and layout differ per
+     page and stay inline; only the spacing needs to give way here, where 24-32px
+     a side is most of a phone's width. Inline padding means !important again. */
+  .pv-preview-stage {
+    padding: 12px !important;
+    min-height: 0 !important;
+  }
+
+  /* Nearly every field in the admin sets font-size:14px inline, and iOS Safari
+     zooms the viewport whenever a focused input is under 16px — on forms this
+     dense that fires constantly. Scoped to the admin shell so it covers every
+     route at once. An !important author rule is the only thing that outranks a
+     normal inline declaration, which is precisely the case it exists for; the
+     alternative is editing several hundred inline styles by hand. */
+  .pv-admin input,
+  .pv-admin select,
+  .pv-admin textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ==========================================================================
+   Grid tables
+   --------------------------------------------------------------------------
+   The sales-booster _index pages render tables as CSS grids rather than
+   <table>. Each table sets its own column template via --pv-table-cols; the
+   mobile rules below override it uniformly, so a new table only needs to
+   declare that one variable.
+   ========================================================================== */
+
+.pv-table__head,
+.pv-table__row {
+  display: grid;
+  grid-template-columns: var(--pv-table-cols);
+  gap: 16px;
+  align-items: center;
+}
+
+.pv-table__head {
+  padding: 12px 16px;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+}
+
+.pv-table__row {
+  padding: 16px;
+}
+
+/* Stats strip under each row. Unwrapped flex here overflows as soon as the
+   viewport is narrower than the sum of its spans. */
+.pv-table__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 8px 16px 16px 16px;
+  background-color: #f9fafb;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Filter tabs — four tabs fit 375px, but a longer label set would clip. */
+.pv-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e5e7eb;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pv-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.pv-tabs > button {
+  flex: 0 0 auto;
+}
+
+/* Search row: input + button. */
+.pv-search-row {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  /* Column headers carry no meaning once rows stop being rows; each cell
+     labels itself via data-label instead. */
+  .pv-table__head {
+    display: none;
+  }
+
+  .pv-table__row {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+    align-items: start;
+    padding: 14px 16px;
+  }
+
+  /* Primary identifier leads the card, full width, regardless of its position
+     in the source order. */
+  .pv-table__cell--name {
+    grid-column: 1 / -1;
+    order: -1;
+    font-size: 15px;
+  }
+
+  .pv-table__cell--actions {
+    grid-column: 1 / -1;
+  }
+
+  /* Some labelled cells already carry `display: flex` inline (badge + toggle),
+     and inline styles win over this sheet. Laying every labelled cell out as a
+     wrapping flex container means one rule covers both cases: the ::before
+     claims a full row, and whatever the cell contains flows underneath. */
+  .pv-table__cell[data-label] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pv-table__cell[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 100%;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }
+
+  /* The name cell is its own label on mobile. */
+  .pv-table__cell--name[data-label]::before {
+    content: none;
+  }
+
+  /* Action buttons are ~30px tall at desktop padding — below the 44px minimum
+     touch target, and sat next to each other they are easy to mis-tap. */
+  .pv-table__cell--actions button {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* The status toggles are sized inline (44x24 and 36x20), so a stylesheet
+     cannot grow them — inline styles win. Widening the hit area with a
+     transparent ::after leaves the switch drawn at its designed size while
+     giving it a full 44px target. They already carry `position: relative`. */
+  .pv-toggle::after {
+    content: "";
+    position: absolute;
+    inset: -10px;
+  }
+
+  .pv-table__stats {
+    gap: 6px 16px;
+    padding: 10px 16px 14px 16px;
+  }
+
+  .pv-search-row {
+    flex-wrap: wrap;
+  }
+
+  .pv-search-row > input {
+    /* Anything under 16px makes iOS Safari zoom the viewport on focus. */
+    font-size: 16px;
+    min-width: 0;
+  }
+}

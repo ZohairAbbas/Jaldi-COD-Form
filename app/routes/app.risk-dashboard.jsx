@@ -141,7 +141,7 @@ function BuyerProfilePanel({ profile, onClose }) {
             {profile.rtoRateGlobal != null ? `${(profile.rtoRateGlobal * 100).toFixed(1)}% RTO rate` : "No data"}
           </span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "12px" }}>
+        <div className="pv-field-pair" style={{ "--pv-pair-gap": "8px", fontSize: "12px" }}>
           <div><span style={{ color: "#6b7177" }}>Total orders:</span> {profile.totalOrdersGlobal}</div>
           <div><span style={{ color: "#6b7177" }}>Delivered:</span> {profile.deliveredOrdersGlobal}</div>
           <div><span style={{ color: "#6b7177" }}>Returned:</span> {profile.rtoOrdersGlobal}</div>
@@ -157,7 +157,7 @@ function BuyerProfilePanel({ profile, onClose }) {
         marginBottom: "16px",
       }}>
         <div style={{ fontSize: "12px", color: "#6b7177", marginBottom: "8px" }}>Your Store Stats</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "12px" }}>
+        <div className="pv-field-pair" style={{ "--pv-pair-gap": "8px", fontSize: "12px" }}>
           <div><span style={{ color: "#6b7177" }}>Orders:</span> {profile.shopStats.totalOrders}</div>
           <div><span style={{ color: "#6b7177" }}>Delivered:</span> {profile.shopStats.deliveredOrders}</div>
           <div><span style={{ color: "#6b7177" }}>Returned:</span> {profile.shopStats.returnedOrders}</div>

@@ -144,7 +144,7 @@ export default function OneTickUpsells() {
       <s-section>
         <s-stack direction="block" gap="base">
           {/* Search */}
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div className="pv-search-row">
             <input
               type="text"
               placeholder="Search by name..."
@@ -168,17 +168,10 @@ export default function OneTickUpsells() {
           {/* Upsells Table */}
           <s-box borderWidth="base" borderRadius="base" style={{ overflow: "hidden" }}>
             {/* Table Header */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "80px 100px 1fr 150px",
-              gap: "16px",
-              padding: "12px 16px",
-              backgroundColor: "#f9fafb",
-              borderBottom: "1px solid #e5e7eb",
-              fontWeight: "600",
-              fontSize: "14px",
-              color: "#374151",
-            }}>
+            <div
+              className="pv-table__head"
+              style={{ "--pv-table-cols": "80px 100px 1fr 150px" }}
+            >
               <div>Priority</div>
               <div>Enabled</div>
               <div>Name</div>
@@ -211,22 +204,20 @@ export default function OneTickUpsells() {
                   >
                     {/* Main Row */}
                     <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "80px 100px 1fr 150px",
-                        gap: "16px",
-                        padding: "16px",
-                        alignItems: "center",
-                      }}
+                      className="pv-table__row"
+                      style={{ "--pv-table-cols": "80px 100px 1fr 150px" }}
                     >
                       {/* Priority */}
-                      <div style={{ fontWeight: "500" }}>{upsell.priority}</div>
+                      <div className="pv-table__cell" data-label="Priority" style={{ fontWeight: "500" }}>
+                        {upsell.priority}
+                      </div>
 
                       {/* Enabled Toggle */}
-                      <div>
+                      <div className="pv-table__cell" data-label="Enabled">
                         <button
                           type="button"
                           onClick={() => handleToggleEnabled(upsell.id)}
+                          className="pv-toggle"
                           style={{
                             width: "44px",
                             height: "24px",
@@ -255,10 +246,15 @@ export default function OneTickUpsells() {
                       </div>
 
                       {/* Name */}
-                      <div style={{ fontWeight: "500" }}>{upsell.name}</div>
+                      <div className="pv-table__cell pv-table__cell--name" style={{ fontWeight: "500" }}>
+                        {upsell.name}
+                      </div>
 
                       {/* Actions */}
-                      <div style={{ display: "flex", gap: "8px" }}>
+                      <div
+                        className="pv-table__cell pv-table__cell--actions"
+                        style={{ display: "flex", gap: "8px" }}
+                      >
                         <button
                           type="button"
                           onClick={() => handleEditUpsell(upsell.id)}
@@ -305,16 +301,7 @@ export default function OneTickUpsells() {
                     </div>
 
                     {/* Stats Row */}
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "24px",
-                        padding: "8px 16px 16px 16px",
-                        backgroundColor: "#f9fafb",
-                        fontSize: "13px",
-                        color: "#6b7280",
-                      }}
-                    >
+                    <div className="pv-table__stats">
                       <span>📊 <strong>LAST 30 DAYS:</strong></span>
                       {upsell.impressions === 0 && upsell.accepts === 0 && upsell.declines === 0 ? (
                         <span>No data available yet. Check again after the first impression or order with this upsell.</span>

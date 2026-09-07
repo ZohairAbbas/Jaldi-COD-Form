@@ -171,7 +171,7 @@ export default function DownsellsList() {
       <s-section>
         <s-stack direction="block" gap="base">
           {/* Search */}
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div className="pv-search-row">
             <input
               type="text"
               placeholder="Search by name..."
@@ -195,17 +195,10 @@ export default function DownsellsList() {
           {/* Downsells Table */}
           <s-box borderWidth="base" borderRadius="base" style={{ overflow: "hidden" }}>
             {/* Table Header */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "80px 100px 1fr 150px",
-              gap: "16px",
-              padding: "12px 16px",
-              backgroundColor: "#f9fafb",
-              borderBottom: "1px solid #e5e7eb",
-              fontWeight: "600",
-              fontSize: "14px",
-              color: "#374151",
-            }}>
+            <div
+              className="pv-table__head"
+              style={{ "--pv-table-cols": "80px 100px 1fr 150px" }}
+            >
               <div>Priority</div>
               <div>Enabled</div>
               <div>Name</div>
@@ -244,22 +237,20 @@ export default function DownsellsList() {
                   >
                     {/* Main Row */}
                     <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "80px 100px 1fr 150px",
-                        gap: "16px",
-                        padding: "16px",
-                        alignItems: "center",
-                      }}
+                      className="pv-table__row"
+                      style={{ "--pv-table-cols": "80px 100px 1fr 150px" }}
                     >
                       {/* Priority */}
-                      <div style={{ fontWeight: "500" }}>{downsell.priority}</div>
+                      <div className="pv-table__cell" data-label="Priority" style={{ fontWeight: "500" }}>
+                        {downsell.priority}
+                      </div>
 
                       {/* Enabled Toggle */}
-                      <div>
+                      <div className="pv-table__cell" data-label="Enabled">
                         <button
                           type="button"
                           onClick={() => handleToggleEnabled(downsell.id)}
+                          className="pv-toggle"
                           style={{
                             width: "44px",
                             height: "24px",
@@ -288,10 +279,15 @@ export default function DownsellsList() {
                       </div>
 
                       {/* Name */}
-                      <div style={{ fontWeight: "500" }}>{downsell.name}</div>
+                      <div className="pv-table__cell pv-table__cell--name" style={{ fontWeight: "500" }}>
+                        {downsell.name}
+                      </div>
 
                       {/* Actions */}
-                      <div style={{ display: "flex", gap: "8px" }}>
+                      <div
+                        className="pv-table__cell pv-table__cell--actions"
+                        style={{ display: "flex", gap: "8px" }}
+                      >
                         <button
                           type="button"
                           onClick={() => handleEditDownsell(downsell.id)}
@@ -356,16 +352,7 @@ export default function DownsellsList() {
                     </div>
 
                     {/* Stats Row */}
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "24px",
-                        padding: "8px 16px 16px 16px",
-                        backgroundColor: "#f9fafb",
-                        fontSize: "13px",
-                        color: "#6b7280",
-                      }}
-                    >
+                    <div className="pv-table__stats">
                       <span>📊 <strong>LAST 30 DAYS:</strong></span>
                       {downsell.impressions === 0 && downsell.accepts === 0 && downsell.declines === 0 ? (
                         <span>No data available yet. Check again after the first impression or order with this downsell.</span>

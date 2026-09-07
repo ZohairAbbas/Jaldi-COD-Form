@@ -167,7 +167,7 @@ export default function BundlesList() {
       <s-section>
         <s-stack direction="block" gap="base">
           {/* Filter Tabs */}
-          <div style={{ display: "flex", gap: "4px", borderBottom: "1px solid #e5e7eb", paddingBottom: "0" }}>
+          <div className="pv-tabs">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -190,7 +190,7 @@ export default function BundlesList() {
           </div>
 
           {/* Search */}
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div className="pv-search-row">
             <input
               type="text"
               placeholder="Search by name..."
@@ -209,17 +209,10 @@ export default function BundlesList() {
           {/* Table */}
           <s-box borderWidth="base" borderRadius="base" style={{ overflow: "hidden" }}>
             {/* Table Header */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 150px 120px 150px 150px",
-              gap: "16px",
-              padding: "12px 16px",
-              backgroundColor: "#f9fafb",
-              borderBottom: "1px solid #e5e7eb",
-              fontWeight: "600",
-              fontSize: "14px",
-              color: "#374151",
-            }}>
+            <div
+              className="pv-table__head"
+              style={{ "--pv-table-cols": "1fr 150px 120px 150px 150px" }}
+            >
               <div>Offer Name</div>
               <div>Last Edited</div>
               <div>Status</div>
@@ -253,28 +246,36 @@ export default function BundlesList() {
                     key={bundle.id}
                     style={{ borderBottom: "1px solid #e5e7eb" }}
                   >
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 150px 120px 150px 150px",
-                      gap: "16px",
-                      padding: "16px",
-                      alignItems: "center",
-                    }}>
+                    <div
+                      className="pv-table__row"
+                      style={{ "--pv-table-cols": "1fr 150px 120px 150px 150px" }}
+                    >
                       {/* Offer Name */}
-                      <div style={{ fontWeight: "500" }}>{bundle.name}</div>
+                      <div className="pv-table__cell pv-table__cell--name" style={{ fontWeight: "500" }}>
+                        {bundle.name}
+                      </div>
 
                       {/* Last Edited */}
-                      <div style={{ fontSize: "13px", color: "#6b7280" }}>
+                      <div
+                        className="pv-table__cell"
+                        data-label="Last Edited"
+                        style={{ fontSize: "13px", color: "#6b7280" }}
+                      >
                         {new Date(bundle.updatedAt).toLocaleDateString()}
                       </div>
 
                       {/* Status + Toggle */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <div
+                        className="pv-table__cell"
+                        data-label="Status"
+                        style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                      >
                         {getStatusBadge(bundle.status)}
                         {bundle.status !== "draft" && (
                           <button
                             type="button"
                             onClick={() => handleToggleStatus(bundle.id, bundle.status)}
+                            className="pv-toggle"
                             style={{
                               width: "36px",
                               height: "20px",
@@ -302,12 +303,19 @@ export default function BundlesList() {
                       </div>
 
                       {/* Offer Type */}
-                      <div style={{ fontSize: "13px", color: "#6b7280" }}>
+                      <div
+                        className="pv-table__cell"
+                        data-label="Offer Type"
+                        style={{ fontSize: "13px", color: "#6b7280" }}
+                      >
                         Quantity Breaks
                       </div>
 
                       {/* Actions */}
-                      <div style={{ display: "flex", gap: "6px" }}>
+                      <div
+                        className="pv-table__cell pv-table__cell--actions"
+                        style={{ display: "flex", gap: "6px" }}
+                      >
                         <button
                           type="button"
                           onClick={() => handleEditBundle(bundle.id)}
@@ -357,14 +365,7 @@ export default function BundlesList() {
                     </div>
 
                     {/* Stats Row */}
-                    <div style={{
-                      display: "flex",
-                      gap: "24px",
-                      padding: "8px 16px 16px 16px",
-                      backgroundColor: "#f9fafb",
-                      fontSize: "13px",
-                      color: "#6b7280",
-                    }}>
+                    <div className="pv-table__stats">
                       <span>📊 <strong>STATS:</strong></span>
                       {bundle.impressions === 0 && bundle.accepts === 0 ? (
                         <span>No data available yet.</span>

@@ -248,7 +248,7 @@ export default function OneTickUpsellEditor() {
         Cancel
       </s-button>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+      <div className="pv-split">
         {/* Left Column - Configuration */}
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* 1. Configure the upsell */}
@@ -304,7 +304,7 @@ export default function OneTickUpsellEditor() {
               <s-box padding="base" borderWidth="base" borderRadius="base">
                 <s-stack direction="block" gap="base">
                   {/* Upsell Title and Price */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px" }}>
+                  <div className="pv-field-pair" style={{ "--pv-pair-cols": "1fr auto", "--pv-pair-gap": "12px" }}>
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Upsell title</s-text>
                       <input
@@ -411,7 +411,7 @@ export default function OneTickUpsellEditor() {
                   </s-stack>
 
                   {/* Text and Description Colors */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Text color</s-text>
                       <input
@@ -524,7 +524,7 @@ export default function OneTickUpsellEditor() {
                   </s-stack>
 
                   {/* Border Style and Color */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Border style</s-text>
                       <select
@@ -595,6 +595,7 @@ export default function OneTickUpsellEditor() {
 
               {/* COD Form Preview */}
               <div
+                className="pv-preview-stage"
                 style={{
                   backgroundColor: "#f3f4f6",
                   borderRadius: "8px",

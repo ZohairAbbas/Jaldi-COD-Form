@@ -430,13 +430,7 @@ export default function AnalyticsPage() {
           </p>
         </div>
 
-        <div style={{
-          display: "inline-flex",
-          backgroundColor: "#f3f4f6",
-          borderRadius: "8px",
-          padding: "4px",
-          gap: "4px"
-        }}>
+        <div className="pv-segmented">
           {[
             { value: "7", label: "7 days" },
             { value: "30", label: "30 days" },
@@ -465,13 +459,12 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Main metrics grid - 2 columns */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(2, 1fr)",
-        gap: "24px",
-        marginBottom: "24px"
-      }}>
+      {/* Main metrics grid — reflows to one column when a card would drop below
+          the width its area chart stays readable at. */}
+      <div
+        className="pv-grid"
+        style={{ "--pv-grid-min": "320px", "--pv-grid-gap": "24px", marginBottom: "24px" }}
+      >
         <MetricCard
           title="Form Opens"
           value={stats.formOpens.toLocaleString()}
@@ -500,12 +493,8 @@ export default function AnalyticsPage() {
         </MetricCard>
       </div>
 
-      {/* Conversion Rate and AOV - 2 columns */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(2, 1fr)",
-        gap: "24px"
-      }}>
+      {/* Conversion Rate and AOV */}
+      <div className="pv-grid" style={{ "--pv-grid-min": "320px", "--pv-grid-gap": "24px" }}>
         <MetricCard
           title="Conversion Rate"
           value={`${stats.conversionRate}%`}
@@ -535,13 +524,12 @@ export default function AnalyticsPage() {
           </p>
         </div>
 
-        {/* OTP metrics - 3 columns row 1 */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "24px",
-          marginBottom: "24px"
-        }}>
+        {/* OTP metrics row 1 — value-only cards, so they stay legible narrower
+            than the chart cards above. */}
+        <div
+          className="pv-grid"
+          style={{ "--pv-grid-min": "200px", "--pv-grid-gap": "24px", marginBottom: "24px" }}
+        >
           <MetricCard
             title="OTPs Sent"
             value={otpStats.otpsSent.toLocaleString()}
@@ -559,13 +547,11 @@ export default function AnalyticsPage() {
           />
         </div>
 
-        {/* OTP metrics - 2 columns row 2 */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
-          gap: "24px",
-          marginBottom: "24px"
-        }}>
+        {/* OTP metrics row 2 */}
+        <div
+          className="pv-grid"
+          style={{ "--pv-grid-min": "200px", "--pv-grid-gap": "24px", marginBottom: "24px" }}
+        >
           <MetricCard
             title="Avg OTP Attempts"
             value={otpStats.avgOtpAttempts}

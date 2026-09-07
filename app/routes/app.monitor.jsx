@@ -620,7 +620,7 @@ function CronHealthPanel({ health }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
+      <div className="pv-grid" style={{ "--pv-grid-min": "200px", "--pv-grid-gap": "10px" }}>
         {jobs.map((j) => {
           const tone = j.healthy ? "#10b981" : j.failing ? "#dc2626" : "#d97706";
           const note = j.failing
@@ -930,8 +930,10 @@ export default function MonitorPage() {
         <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
           Platform-wide metrics across all stores. Visible to admin only.
         </p>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" }}>
-          <div style={{ display: "inline-flex", backgroundColor: "#f3f4f6", borderRadius: "8px", padding: "4px", gap: "4px" }}>
+        {/* minWidth:0 so this column can shrink below its content width and let
+            the segmented control below it scroll instead of overflowing. */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px", minWidth: 0, maxWidth: "100%" }}>
+          <div className="pv-segmented">
             {[
               { value: "24h", label: "Today" },
               { value: "week", label: "This week" },
@@ -998,7 +1000,7 @@ export default function MonitorPage() {
       <CronHealthPanel health={cronHealth} />
 
       {/* Stat cards row 1 — fixed summary */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "16px" }}>
+      <div className="pv-grid" style={{ "--pv-grid-min": "200px", marginBottom: "16px" }}>
         <StatCard label="Total Stores" value={summary.totalShops.toLocaleString()} />
         <StatCard label="Orders Today" value={summary.ordersToday.toLocaleString()} />
         <StatCard label="Orders This Month" value={summary.ordersThisMonth.toLocaleString()} />
@@ -1011,7 +1013,7 @@ export default function MonitorPage() {
       </div>
 
       {/* Stat cards row 2 — period-dependent */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "24px" }}>
+      <div className="pv-grid" style={{ "--pv-grid-min": "220px", marginBottom: "24px" }}>
         <StatCard
           label="Conversion Rate"
           value={`${conversionMetrics.conversionRate}%`}
@@ -1051,7 +1053,7 @@ export default function MonitorPage() {
 
       {/* Payment & Conversion section */}
       <Section title="Payment & Conversion" subtitle={`${periodLabel} · session funnel and payment method breakdown`} defaultOpen={true}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+        <div className="pv-grid" style={{ "--pv-grid-min": "280px", "--pv-grid-gap": "20px" }}>
           {/* Payment split */}
           <div style={{ backgroundColor: "#f9fafb", borderRadius: "8px", padding: "16px" }}>
             <div style={{ fontSize: "13px", fontWeight: "600", color: "#111827", marginBottom: "16px" }}>Payment Method Split</div>
@@ -1076,7 +1078,7 @@ export default function MonitorPage() {
 
       {/* OTP & Recovery section */}
       <Section title="OTP & Cart Recovery" subtitle="Verification rates and abandoned cart recovery">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+        <div className="pv-grid" style={{ "--pv-grid-min": "280px", "--pv-grid-gap": "20px" }}>
           <div style={{ backgroundColor: "#f9fafb", borderRadius: "8px", padding: "16px" }}>
             <div style={{ fontSize: "13px", fontWeight: "600", color: "#111827", marginBottom: "16px" }}>OTP Verification — {periodLabel}</div>
             {otpStats.total === 0 ? (
@@ -1108,7 +1110,7 @@ export default function MonitorPage() {
 
       {/* Sales Booster Stats section */}
       <Section title="Sales Boosters" subtitle="Bundle, upsell, and downsell performance across all stores">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px" }}>
+        <div className="pv-grid" style={{ "--pv-grid-min": "240px", "--pv-grid-gap": "20px" }}>
           {/* Bundles */}
           <div style={{ backgroundColor: "#f9fafb", borderRadius: "8px", padding: "16px" }}>
             <div style={{ fontSize: "13px", fontWeight: "600", color: "#111827", marginBottom: "4px" }}>Bundles</div>

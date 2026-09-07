@@ -222,7 +222,7 @@ export default function DownsellEditor() {
         {isNew ? "Create Downsell" : "Save Changes"}
       </s-button>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+      <div className="pv-split">
         {/* Left Column - Configuration */}
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* Section 1: Configure the downsell */}
@@ -299,7 +299,7 @@ export default function DownsellEditor() {
                     <s-text variant="heading-sm">Offer this discount to your customers:</s-text>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Discount type:</s-text>
                       <select
@@ -383,7 +383,7 @@ export default function DownsellEditor() {
                     />
                   </s-stack>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Title color</s-text>
                       <input
@@ -445,7 +445,7 @@ export default function DownsellEditor() {
                     />
                   </s-stack>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Subtitle color</s-text>
                       <input
@@ -509,7 +509,7 @@ export default function DownsellEditor() {
                     />
                   </s-stack>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Text color</s-text>
                       <input
@@ -539,7 +539,7 @@ export default function DownsellEditor() {
                     </s-stack>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Gradient start</s-text>
                       <input
@@ -640,7 +640,7 @@ export default function DownsellEditor() {
                     </s-text>
                   </s-stack>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Button animation</s-text>
                       <select
@@ -681,7 +681,7 @@ export default function DownsellEditor() {
                     </s-stack>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Background color</s-text>
                       <input
@@ -716,7 +716,7 @@ export default function DownsellEditor() {
                     </s-stack>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Font size</s-text>
                       <input
@@ -741,7 +741,7 @@ export default function DownsellEditor() {
                     </s-stack>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Border width</s-text>
                       <input
@@ -807,7 +807,7 @@ export default function DownsellEditor() {
                     />
                   </s-stack>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Background color</s-text>
                       <input
@@ -842,7 +842,7 @@ export default function DownsellEditor() {
                     </s-stack>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Font size</s-text>
                       <input
@@ -867,7 +867,7 @@ export default function DownsellEditor() {
                     </s-stack>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div className="pv-field-pair">
                     <s-stack direction="block" gap="tight">
                       <s-text variant="body-sm">Border width</s-text>
                       <input
@@ -922,6 +922,7 @@ export default function DownsellEditor() {
 
               {/* Dark modal background */}
               <div
+                className="pv-preview-stage"
                 style={{
                   backgroundColor: "#374151",
                   borderRadius: "12px",

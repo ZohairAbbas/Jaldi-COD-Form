@@ -633,7 +633,7 @@ export default function BundleEditor() {
         ← Back
       </s-button>
 
-      <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
+      <div className="pv-split-flex">
         {/* Left Column: Config */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Section 1: Product & Basic Setup */}
@@ -1360,12 +1360,7 @@ export default function BundleEditor() {
         </div>
 
         {/* Right Column: Live Preview */}
-        <div style={{
-          width: "360px",
-          flexShrink: 0,
-          position: "sticky",
-          top: "20px",
-        }}>
+        <div className="pv-split-flex__aside">
           <s-box padding="loose" borderRadius="base">
             <s-text variant="heading-sm">Live Preview</s-text>
             <div style={{ marginTop: "12px" }}>

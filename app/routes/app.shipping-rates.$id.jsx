@@ -332,6 +332,7 @@ export default function ShippingRateEditor() {
               {rate.conditions.map((condition, index) => (
                 <div
                   key={index}
+                  className="pv-stack-narrow"
                   style={{
                     display: "flex",
                     gap: "12px",

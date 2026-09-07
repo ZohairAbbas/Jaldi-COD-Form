@@ -182,14 +182,15 @@ export default function FormDesigner() {
           marginBottom: "24px",
           padding: "16px 0",
         }}>
-          <div style={{
-            display: "inline-flex",
-            gap: "8px",
-            backgroundColor: "#F6F6F7",
-            padding: "4px",
-            borderRadius: "12px",
-            border: "1px solid #E1E3E5",
-          }}>
+          <div
+            className="pv-segmented"
+            style={{
+              "--pv-seg-gap": "8px",
+              "--pv-seg-bg": "#F6F6F7",
+              "--pv-seg-radius": "12px",
+              "--pv-seg-border": "1px solid #E1E3E5",
+            }}
+          >
             <button
               onClick={() => setActiveTab("form-designer")}
               style={{
@@ -274,7 +275,7 @@ export default function FormDesigner() {
 
         {/* Form Designer Tab Content */}
         {activeTab === "form-designer" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+          <div className="pv-split">
             {/* Left Column - Configuration */}
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               <s-section>
@@ -288,7 +289,7 @@ export default function FormDesigner() {
                   <s-paragraph>
                     Choose the form language. Changing language will auto-translate all field labels and placeholders.
                   </s-paragraph>
-                  <div style={{ display: "flex", gap: "12px" }}>
+                  <div className="pv-stack-narrow" style={{ display: "flex", gap: "12px" }}>
                     {[
                       { code: "en", label: "English", flag: "🇬🇧" },
                       { code: "ar", label: "العربية (Arabic)", flag: "🇸🇦" },
@@ -340,7 +341,7 @@ export default function FormDesigner() {
             </div>
 
             {/* Right Column - Live Preview */}
-            <div style={{ position: "sticky", top: "20px", height: "fit-content" }}>
+            <div className="pv-preview-aside">
               <s-section>
                 <s-stack direction="block" gap="base">
                   <s-heading>Live Preview</s-heading>
@@ -364,7 +365,7 @@ export default function FormDesigner() {
 
         {/* Button Customization Tab Content */}
         {activeTab === "button-customization" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+          <div className="pv-split">
             {/* Left Column - Customization Options */}
             <div>
               <s-section>
@@ -373,7 +374,7 @@ export default function FormDesigner() {
             </div>
 
             {/* Right Column - Button Preview */}
-            <div style={{ position: "sticky", top: "20px", height: "fit-content" }}>
+            <div className="pv-preview-aside">
               <s-section>
                 <s-stack direction="block" gap="base">
                   <s-heading>Button Preview</s-heading>
@@ -488,7 +489,7 @@ export default function FormDesigner() {
 
         {/* Card Button Customization Tab Content */}
         {activeTab === "card-button-customization" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+          <div className="pv-split">
             {/* Left Column - Customization Options */}
             <div>
               <s-section>
@@ -497,7 +498,7 @@ export default function FormDesigner() {
             </div>
 
             {/* Right Column - Button Preview */}
-            <div style={{ position: "sticky", top: "20px", height: "fit-content" }}>
+            <div className="pv-preview-aside">
               <s-section>
                 <s-stack direction="block" gap="base">
                   <s-heading>Button Preview</s-heading>

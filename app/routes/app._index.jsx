@@ -420,16 +420,19 @@ export default function Index() {
           <span style={{ fontWeight: 500 }}>Last 7 days:</span>
         </div>
         <s-card>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderRadius: '8px', overflow: 'hidden' }}>
-            <div style={{ padding: '24px', textAlign: 'center', borderRight: '1px solid #e3e3e3' }}>
+          <div
+            className="pv-grid pv-stat-strip"
+            style={{ '--pv-grid-min': '160px', '--pv-grid-gap': '1px', borderRadius: '8px', overflow: 'hidden' }}
+          >
+            <div style={{ padding: '24px', textAlign: 'center' }}>
               <div style={{ fontSize: '24px', fontWeight: 600, marginBottom: '4px' }}>{stats.formOpens}</div>
               <div style={{ fontSize: '13px', color: '#6b7177' }}>Form opens</div>
             </div>
-            <div style={{ padding: '24px', textAlign: 'center', borderRight: '1px solid #e3e3e3' }}>
+            <div style={{ padding: '24px', textAlign: 'center' }}>
               <div style={{ fontSize: '24px', fontWeight: 600, marginBottom: '4px' }}>{stats.orderCount}</div>
               <div style={{ fontSize: '13px', color: '#6b7177' }}>Orders</div>
             </div>
-            <div style={{ padding: '24px', textAlign: 'center', borderRight: '1px solid #e3e3e3' }}>
+            <div style={{ padding: '24px', textAlign: 'center' }}>
               <div style={{ fontSize: '24px', fontWeight: 600, marginBottom: '4px' }}>
                 {shop.currency} {stats.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>

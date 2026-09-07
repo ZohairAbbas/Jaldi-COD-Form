@@ -260,7 +260,7 @@ export default function UpsellEditor() {
         Cancel
       </s-button>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+      <div className="pv-split">
         {/* Left Column - Configuration */}
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* Basic Settings */}
@@ -487,7 +487,7 @@ export default function UpsellEditor() {
                 />
               </s-stack>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div className="pv-field-pair">
                 <s-stack direction="block" gap="tight">
                   <s-text variant="body-sm">Accept Button Background</s-text>
                   <input
@@ -525,7 +525,7 @@ export default function UpsellEditor() {
                 />
               </s-stack>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div className="pv-field-pair">
                 <s-stack direction="block" gap="tight">
                   <s-text variant="body-sm">Decline Button Background</s-text>
                   <input
@@ -563,6 +563,7 @@ export default function UpsellEditor() {
                 </s-box>
               ) : (
                 <div
+                  className="pv-preview-stage"
                   style={{
                     backgroundColor: "rgba(0, 0, 0, 0.5)",
                     borderRadius: "8px",

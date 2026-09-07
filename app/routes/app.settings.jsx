@@ -8,6 +8,7 @@ import { COUNTRY_OPTIONS, DEFAULT_THANK_YOU_MESSAGE, getCurrencyCode, getCountry
 import prisma from "../db.server";
 import { FIELD_CATALOG, COLUMN_PRESETS, deriveSheetsHealth } from "../lib/google-sheets.server";
 import GoogleSheetsIntegration from "../components/Settings/GoogleSheetsIntegration";
+import OrdersExport from "../components/Settings/OrdersExport";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -356,14 +357,15 @@ export default function Settings() {
         marginBottom: "24px",
         padding: "16px 0",
       }}>
-        <div style={{
-          display: "inline-flex",
-          gap: "8px",
-          backgroundColor: "#F6F6F7",
-          padding: "4px",
-          borderRadius: "12px",
-          border: "1px solid #E1E3E5",
-        }}>
+        <div
+          className="pv-segmented"
+          style={{
+            "--pv-seg-gap": "8px",
+            "--pv-seg-bg": "#F6F6F7",
+            "--pv-seg-radius": "12px",
+            "--pv-seg-border": "1px solid #E1E3E5",
+          }}
+        >
           <button
             onClick={() => setActiveTab("general")}
             style={{
@@ -488,7 +490,7 @@ export default function Settings() {
               <line x1="9" y1="3" x2="9" y2="21" />
               <line x1="15" y1="3" x2="15" y2="21" />
             </svg>
-            Google Sheets
+            Export Orders
           </button>
         </div>
       </div>
@@ -1044,7 +1046,7 @@ export default function Settings() {
               {settings.cardDiscountEnabled && (
                 <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
                   <s-stack direction="block" gap="base">
-                    <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
+                    <div className="pv-stack-narrow" style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
                       <div style={{ flex: 1 }}>
                         <s-text variant="body-sm" style={{ marginBottom: "4px" }}>Discount Type</s-text>
                         <select
@@ -2186,7 +2188,7 @@ export default function Settings() {
                 </s-stack>
               </s-section>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div className="pv-field-pair">
                 <s-section>
                   <s-stack direction="block" gap="base">
                     <s-heading>Emails to block</s-heading>
@@ -2249,6 +2251,10 @@ export default function Settings() {
       )}
 
       {/* Google Sheets Tab */}
+      {activeTab === "google-sheets" && (
+        <OrdersExport columnSource={googleSheets?.columnMapping?.length ? "sheets" : "default"} />
+      )}
+
       {activeTab === "google-sheets" && (
         <GoogleSheetsIntegration
           initialIntegration={googleSheets}
