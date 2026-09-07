@@ -297,11 +297,14 @@ export default function ShippingRates() {
 
           {/* Rates Table */}
           {filteredRates.length > 0 ? (
-            <div style={{
-              border: "1px solid #E5E7EB",
-              borderRadius: "8px",
-              overflow: "visible",
-            }}>
+            <div
+              className="pv-table-scroll-mobile"
+              style={{
+                border: "1px solid #E5E7EB",
+                borderRadius: "8px",
+                "--pv-table-min": "760px",
+              }}
+            >
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ backgroundColor: "#F9FAFB" }}>

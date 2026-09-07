@@ -303,9 +303,20 @@ export default function Index() {
       {/* Theme App Embed Status Bar */}
       <s-section>
         <s-card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Both sides refused to shrink (a flex item defaults to
+              min-width:auto), so past a certain width the status badge and the
+              button collided instead of the row reflowing. Wrapping plus a
+              shrinkable left group fixes it at every width. */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+            padding: '12px 16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 auto' }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
                 <path d="M4 4H8V8H4V4Z" fill="currentColor"/>
                 <path d="M4 12H8V16H4V12Z" fill="currentColor"/>
                 <path d="M12 4H16V8H12V4Z" fill="currentColor"/>
@@ -316,7 +327,7 @@ export default function Index() {
                 {themeAppEmbedStatus.enabled ? "ON" : "OFF"}
               </s-badge>
             </div>
-            <a href={themeEditorUrl} target="_blank" rel="noopener noreferrer">
+            <a href={themeEditorUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
               <s-button>Open Theme</s-button>
             </a>
           </div>

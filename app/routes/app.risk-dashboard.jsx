@@ -357,6 +357,7 @@ export default function RiskDashboard() {
       {/* Orders Table */}
       <s-section>
         <s-card>
+        <div className="pv-table-scroll" style={{ "--pv-table-min": "720px" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
           <thead>
             <tr style={{ backgroundColor: "#f6f6f7", borderBottom: "1px solid #e3e3e3" }}>
@@ -421,8 +422,10 @@ export default function RiskDashboard() {
             )}
           </tbody>
         </table>
+        </div>
 
-        {/* Pagination */}
+        {/* Pagination — outside the scroll container so it stays put while the
+            table scrolls sideways. */}
         {ordersData.totalPages > 1 && (
           <div style={{
             display: "flex",

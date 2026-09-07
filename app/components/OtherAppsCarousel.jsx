@@ -59,45 +59,30 @@ export function OtherAppsCarousel({
   const source = utmSource || currentHandle;
   const go = (d) => setIndex((p) => (p + d + total) % total);
 
-  const iconBtn = {
-    width: 32,
-    height: 32,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '1px solid #c9cccf',
-    background: 'white',
-    borderRadius: 6,
-    cursor: 'pointer',
-    padding: 0,
-  };
-
   return (
     <s-card>
       <div style={{ padding: 16 }}>
         <s-stack direction="block" gap="base">
-          <s-stack direction="inline" gap="base" align="space-between">
-            <s-stack direction="inline" gap="base" align="center">
+          <div className="pv-carousel__head">
+            <div className="pv-carousel__id">
               <img
+                className="pv-carousel__icon"
                 src={app.icon}
                 alt={`${app.name} app icon`}
                 width={48}
                 height={48}
-                style={{ borderRadius: 8, display: 'block', flexShrink: 0 }}
               />
-              <s-stack direction="block" gap="tight">
-                <s-stack direction="inline" gap="tight" align="center">
-                  <s-text variant="heading-sm">{app.name}</s-text>
-                  {app.badge && <s-badge tone="success">{app.badge}</s-badge>}
-                </s-stack>
-              </s-stack>
-            </s-stack>
-            <s-stack direction="inline" gap="tight" align="center">
+              <div className="pv-carousel__title">
+                <s-text variant="heading-sm">{app.name}</s-text>
+                {app.badge && <s-badge tone="success">{app.badge}</s-badge>}
+              </div>
+            </div>
+            <div className="pv-carousel__actions">
               {total > 1 && (
                 <>
                   <button
                     type="button"
-                    style={iconBtn}
+                    className="pv-carousel__nav"
                     aria-label="Previous app"
                     onClick={() => go(-1)}
                   >
@@ -107,7 +92,7 @@ export function OtherAppsCarousel({
                   </button>
                   <button
                     type="button"
-                    style={iconBtn}
+                    className="pv-carousel__nav"
                     aria-label="Next app"
                     onClick={() => go(1)}
                   >
@@ -118,26 +103,16 @@ export function OtherAppsCarousel({
                 </>
               )}
               <a
+                className="pv-carousel__cta"
                 href={`https://apps.shopify.com/${app.handle}?utm_source=${source}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={`Open ${app.name}`}
-                style={{
-                  backgroundColor: '#303030',
-                  color: 'white',
-                  border: 'none',
-                  padding: '8px 16px',
-                  borderRadius: 6,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  textDecoration: 'none',
-                  display: 'inline-block',
-                }}
               >
                 View App
               </a>
-            </s-stack>
-          </s-stack>
+            </div>
+          </div>
           <s-text tone="subdued">{app.description}</s-text>
         </s-stack>
       </div>
