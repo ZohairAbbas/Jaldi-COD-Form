@@ -26,6 +26,30 @@ export default async function handleRequest(
           const stream = createReadableStreamFromReadable(body);
 
           responseHeaders.set("Content-Type", "text/html");
+
+          // Opt out of in-flight HTML rewriting by intermediaries.
+          //
+          // Cloudflare injects an analytics beacon into this app's documents.
+          // Applying that to a *streamed* SSR response means its parser has to
+          // work across chunk boundaries, and a boundary landing mid-token
+          // leaves a fragment behind — surfacing as a lone "$" at the foot of
+          // every page, the leading character of the $RC/$RS/$RX Suspense
+          // scripts React emits while streaming.
+          //
+          // `no-transform` is the standard directive telling any cache or proxy
+          // in the path to deliver the payload unmodified. The real concern is
+          // not the stray glyph: the same mis-parse a few bytes earlier would
+          // truncate the React Router hydration payload that sits in the same
+          // region of the document and break hydration intermittently.
+          //
+          // Appended rather than assigned, and only once, so a Cache-Control set
+          // elsewhere survives.
+          const cacheControl = responseHeaders.get("Cache-Control");
+          if (!cacheControl) {
+            responseHeaders.set("Cache-Control", "no-transform");
+          } else if (!/(?:^|,)\s*no-transform\s*(?:,|$)/i.test(cacheControl)) {
+            responseHeaders.set("Cache-Control", `${cacheControl}, no-transform`);
+          }
           resolve(
             new Response(stream, {
               headers: responseHeaders,

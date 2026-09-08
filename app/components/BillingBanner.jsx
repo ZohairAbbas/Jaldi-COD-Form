@@ -7,21 +7,27 @@
 
 import { Link } from 'react-router';
 
+const daysUntil = (date) =>
+  Math.ceil((new Date(date) - new Date()) / (1000 * 60 * 60 * 24));
+
+const pluralDays = (n) => `${n} ${n === 1 ? 'day' : 'days'}`;
+
 export default function BillingBanner({ subscription, planUsage, isNavigatingToBilling }) {
   // Determine which banner would show (to get the correct status tone for loading state)
   const getBannerStatus = () => {
     if (planUsage?.usageStatus === 'exceeded') return 'critical';
     if (planUsage?.usageStatus === 'warning') return 'warning';
     if (!subscription) return null;
-    const { status, trialEndsAt, cancelAtPeriodEnd } = subscription;
+    const { status, trialEndsAt, cancelAtPeriodEnd, currentPeriodEnd } = subscription;
     if (status === 'active' && !cancelAtPeriodEnd) return null;
-    if (status === 'trialing' && trialEndsAt) {
-      const daysLeft = Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24));
-      if (daysLeft > 0) return 'info';
-    }
+    if (status === 'trialing' && trialEndsAt && daysUntil(trialEndsAt) > 0) return 'info';
     if (status === 'expired' || (status === 'trialing' && new Date() > new Date(trialEndsAt))) return 'critical';
     if (status === 'cancelled') return 'critical';
     if (status === 'past_due') return 'critical';
+    // Kept below the terminal states above: a subscription that is cancelling
+    // but still inside its paid period retains full access, so it warns rather
+    // than reading as critical.
+    if (cancelAtPeriodEnd && currentPeriodEnd && daysUntil(currentPeriodEnd) > 0) return 'warning';
     return null;
   };
 
@@ -86,9 +92,7 @@ export default function BillingBanner({ subscription, planUsage, isNavigatingToB
 
   // Trial active
   if (status === 'trialing' && trialEndsAt) {
-    const daysLeft = Math.ceil(
-      (new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24)
-    );
+    const daysLeft = daysUntil(trialEndsAt);
 
     if (daysLeft > 0) {
       return (
@@ -97,7 +101,7 @@ export default function BillingBanner({ subscription, planUsage, isNavigatingToB
           style={{ marginBottom: '16px' }}
         >
           <s-text>
-            Your free trial ends in <strong>{daysLeft} days</strong>.{' '}
+            Your free trial ends in <strong>{pluralDays(daysLeft)}</strong>.{' '}
             <Link to="/app/billing">
               <s-link>Choose a plan</s-link>
             </Link>{' '}
@@ -128,9 +132,25 @@ export default function BillingBanner({ subscription, planUsage, isNavigatingToB
 
   // Subscription cancelled but still active until period end
   if (cancelAtPeriodEnd && currentPeriodEnd) {
-    const daysLeft = Math.ceil(
-      (new Date(currentPeriodEnd) - new Date()) / (1000 * 60 * 60 * 24)
-    );
+    const daysLeft = daysUntil(currentPeriodEnd);
+
+    if (daysLeft > 0) {
+      return (
+        <s-banner
+          tone="warning"
+          style={{ marginBottom: '16px' }}
+        >
+          <s-text>
+            Your subscription is scheduled to end in <strong>{pluralDays(daysLeft)}</strong>.
+            You keep full access until then.{' '}
+            <Link to="/app/billing">
+              <s-link>Reactivate your plan</s-link>
+            </Link>{' '}
+            to stay subscribed.
+          </s-text>
+        </s-banner>
+      );
+    }
   }
 
   // Cancelled

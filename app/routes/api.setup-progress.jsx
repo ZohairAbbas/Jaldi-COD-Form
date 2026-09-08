@@ -12,17 +12,17 @@ export const action = async ({ request }) => {
   try {
     const shop = await getOrCreateShop(session.shop, session.accessToken);
     const body = await request.json();
-    const { action: updateAction, value } = body;
+    const { action: updateAction } = body;
 
-    // Get current setup progress or initialize with defaults
+    // Only dismissals are stored. The two step flags used to live here too, but
+    // completion is now derived from the shop's actual state on each dashboard
+    // load (see lib/setup-status.server.js) rather than self-reported, so
+    // writing them would just leave a stale value nothing reads.
     const currentProgress = shop.setupProgress || {
-      step1Completed: false,
-      step2Completed: false,
       welcomeDismissed: false,
       setupGuideDismissed: false,
     };
 
-    // Update the appropriate field
     let updatedProgress = { ...currentProgress };
 
     switch (updateAction) {
@@ -31,12 +31,6 @@ export const action = async ({ request }) => {
         break;
       case "dismissSetupGuide":
         updatedProgress.setupGuideDismissed = true;
-        break;
-      case "completeStep1":
-        updatedProgress.step1Completed = value;
-        break;
-      case "completeStep2":
-        updatedProgress.step2Completed = value;
         break;
       default:
         return Response.json({ error: "Invalid action" }, { status: 400 });

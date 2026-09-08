@@ -6,6 +6,7 @@ import db from "../db.server";
 import { getSubscription } from "../lib/mantle.server";
 import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import { getCurrencyCode } from "../lib/constants";
+import { deriveSetupSteps } from "../lib/setup-status.server";
 import { useState } from "react";
 import { OtherAppsCarousel } from "../components/OtherAppsCarousel";
 
@@ -18,9 +19,14 @@ export const loader = async ({ request }) => {
   // Get dashboard stats for last 7 days
   const stats = await getDashboardStats(shop.id);
 
-  // Check theme app embed status and get shop currency
+  // Check theme app embed status and get shop currency.
+  // `resolved` records whether we actually managed to read the theme. Without it
+  // a transient Shopify error is indistinguishable from "the merchant switched
+  // the embed off", and gets both persisted and shown as an incomplete setup
+  // step. Stays false until a lookup genuinely succeeds.
   let themeAppEmbedStatus = {
     enabled: false,
+    resolved: false,
     themeId: null,
     themeIdNumeric: null,
   };
@@ -88,15 +94,17 @@ export const loader = async ({ request }) => {
                   (block) => block.type?.includes(appEmbedUUID) || block.type?.includes("preventify")
                 );
 
-                if (appEmbedBlock) {
-                  themeAppEmbedStatus.enabled = appEmbedBlock.disabled === false;
-                }
+                // Read the theme successfully: a missing block is a real answer
+                // (the embed was never added), not a failed lookup.
+                themeAppEmbedStatus.resolved = true;
+                themeAppEmbedStatus.enabled = appEmbedBlock
+                  ? appEmbedBlock.disabled === false
+                  : false;
               }
             }
           }
         } catch (embedError) {
           console.error("Error checking app embed status:", embedError);
-          themeAppEmbedStatus.enabled = false;
         }
       }
     }
@@ -104,21 +112,39 @@ export const loader = async ({ request }) => {
     console.error("Error fetching theme app embed status:", error);
   }
 
-  // Persist embed status to DB (fire and forget — uses result already fetched above)
-  db.shop.update({
-    where: { id: shop.id },
-    data: {
-      themeEmbedEnabled: themeAppEmbedStatus.enabled,
-      themeEmbedCheckedAt: new Date(),
-    },
-  }).catch(err => console.error("Failed to persist themeEmbedEnabled:", err));
+  // Persist embed status to DB (fire and forget — uses result already fetched
+  // above). Only written when the lookup actually resolved, so a Shopify outage
+  // cannot overwrite a good value with a false one.
+  if (themeAppEmbedStatus.resolved) {
+    db.shop.update({
+      where: { id: shop.id },
+      data: {
+        themeEmbedEnabled: themeAppEmbedStatus.enabled,
+        themeEmbedCheckedAt: new Date(),
+      },
+    }).catch(err => console.error("Failed to persist themeEmbedEnabled:", err));
+  }
 
-  // Get setup progress or initialize with defaults
-  const setupProgress = shop.setupProgress || {
-    step1Completed: false,
-    step2Completed: false,
-    welcomeDismissed: false,
-    setupGuideDismissed: false,
+  // Fall back to the last known-good reading when this load could not check.
+  const embedEnabled = themeAppEmbedStatus.resolved
+    ? themeAppEmbedStatus.enabled
+    : shop.themeEmbedEnabled ?? null;
+
+  // The ON/OFF badge reads the same resolved value as the setup step, so the
+  // two can never disagree on screen after a failed lookup.
+  themeAppEmbedStatus.enabled = embedEnabled === true;
+
+  // Steps are observed, not self-reported. Only the two dismissal flags are
+  // still merchant state worth storing.
+  const stored = shop.setupProgress || {};
+  const setupProgress = {
+    ...deriveSetupSteps({
+      settings: shop.settings,
+      formConfig: shop.formConfig,
+      themeEmbedEnabled: embedEnabled,
+    }),
+    welcomeDismissed: stored.welcomeDismissed ?? false,
+    setupGuideDismissed: stored.setupGuideDismissed ?? false,
   };
 
   // Fetch subscription and monthly usage for plan card
@@ -182,17 +208,8 @@ export default function Index() {
     setExpandedStep(expandedStep === step ? null : step);
   };
 
-  const handleCompleteStep = (stepNum) => {
-    // Only allow marking as complete, not uncompleting
-    const isCompleted = stepNum === 1 ? setupProgress.step1Completed : setupProgress.step2Completed;
-
-    if (!isCompleted) {
-      fetcher.submit(
-        { action: `completeStep${stepNum}`, value: true },
-        { method: "POST", action: "/api/setup-progress", encType: "application/json" }
-      );
-    }
-  };
+  // Steps are derived from the shop's actual state on every load, so there is
+  // nothing for the merchant to tick — the circles are status, not controls.
 
   const handleDismissSetupGuide = () => {
     setSetupGuideDismissed(true);
@@ -501,10 +518,8 @@ export default function Index() {
                 }}
               >
                 <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCompleteStep(1);
-                  }}
+                  role="img"
+                  aria-label={setupProgress.step1Completed ? 'Completed' : 'Not completed'}
                   style={{
                     width: '20px',
                     height: '20px',
@@ -514,7 +529,6 @@ export default function Index() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer',
                     flexShrink: 0
                   }}
                 >
@@ -590,10 +604,8 @@ export default function Index() {
                 }}
               >
                 <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCompleteStep(2);
-                  }}
+                  role="img"
+                  aria-label={setupProgress.step2Completed ? 'Completed' : 'Not completed'}
                   style={{
                     width: '20px',
                     height: '20px',
@@ -603,7 +615,6 @@ export default function Index() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer',
                     flexShrink: 0
                   }}
                 >
