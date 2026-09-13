@@ -22,32 +22,67 @@ const CONFIG_NAMESPACE = "$app:bundle-discount";
 const CONFIG_KEY = "config";
 const DISCOUNT_TITLE = "Preventify Bundles (do not delete)";
 
+const parseJson = (value, fallback) => {
+  if (value == null) return fallback;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
 /**
- * Build the Discount Function config from a shop's published bundles.
- * Only the fields the function needs for matching + tier math are included.
+ * Build the Discount Function config from a shop's published offers.
+ * Only the fields the function needs for matching + discount math are included.
+ *
+ * Quantity breaks and combos share the Bundle table and are emitted as two
+ * separate arrays, because the function matches them differently: a tier looks
+ * at how many units of ONE product the cart holds, a combo at whether every one
+ * of its component products is present.
  */
 export function buildBundleFunctionConfig(shopData) {
-  const bundles = (shopData.bundles || []).map((bundle) => {
-    const productIds =
-      typeof bundle.productIds === "string"
-        ? JSON.parse(bundle.productIds)
-        : bundle.productIds || [];
-    const tiers =
-      typeof bundle.tiers === "string" ? JSON.parse(bundle.tiers) : bundle.tiers || [];
-    return {
-      applyOn: bundle.applyOn || "all",
-      productIds,
-      tiers: tiers.map((t) => ({
-        quantity: t.quantity,
-        discountType: t.discountType,
-        discountValue: t.discountValue,
-        bogoBuyX: t.bogoBuyX,
-        priceRounding: t.priceRounding,
-        priceRoundingValue: t.priceRoundingValue,
+  const all = shopData.bundles || [];
+
+  const combos = all
+    .filter((bundle) => bundle.bundleType === "combo")
+    .map((bundle) => ({
+      id: bundle.id,
+      name: bundle.name,
+      items: parseJson(bundle.comboItems, []).map((item) => ({
+        productId: item.productId,
+        quantity: Math.max(1, Number(item.quantity) || 1),
       })),
-    };
-  });
-  return { bundles };
+      discountType: bundle.comboDiscountType,
+      discountValue: bundle.comboDiscountValue,
+    }))
+    // A combo needs at least two components to mean anything.
+    .filter((combo) => combo.items.length >= 2);
+
+  const bundles = all
+    .filter((bundle) => (bundle.bundleType || "quantity") === "quantity")
+    .map((bundle) => {
+      const productIds =
+        typeof bundle.productIds === "string"
+          ? JSON.parse(bundle.productIds)
+          : bundle.productIds || [];
+      const tiers =
+        typeof bundle.tiers === "string" ? JSON.parse(bundle.tiers) : bundle.tiers || [];
+      return {
+        applyOn: bundle.applyOn || "all",
+        productIds,
+        tiers: tiers.map((t) => ({
+          quantity: t.quantity,
+          discountType: t.discountType,
+          discountValue: t.discountValue,
+          bogoBuyX: t.bogoBuyX,
+          priceRounding: t.priceRounding,
+          priceRoundingValue: t.priceRoundingValue,
+        })),
+      };
+    });
+
+  return { bundles, combos };
 }
 
 async function findBundleFunctionId(admin) {

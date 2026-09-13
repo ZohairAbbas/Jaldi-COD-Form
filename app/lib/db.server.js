@@ -1014,11 +1014,20 @@ export function getDefaultDownsell() {
 /**
  * Get all bundles for a shop
  */
-export async function getBundles(shopId) {
+export async function getBundles(shopId, bundleType = "quantity") {
+  // Every pre-combo row was backfilled to "quantity" by the column default, so
+  // a plain equality filter covers them.
   return await prisma.bundle.findMany({
-    where: { shopId },
+    where: { shopId, bundleType },
     orderBy: { priority: "asc" },
   });
+}
+
+/**
+ * Get all combo (multi-product) offers for a shop
+ */
+export async function getCombos(shopId) {
+  return await getBundles(shopId, "combo");
 }
 
 /**
@@ -1146,6 +1155,7 @@ export async function incrementBundleStat(bundleId, stat) {
 export function getDefaultBundle() {
   return {
     name: "My Bundle Offer",
+    bundleType: "quantity",
     enabled: false,
     status: "draft",
     headerText: "Buy More Save More",
@@ -1211,6 +1221,61 @@ export function getDefaultBundle() {
     ],
     styling: {
       layout: "vertical",
+      cornerRoundness: 12,
+      breathingSpace: 12,
+      colorPalette: "default",
+      showImage: true,
+      colors: {
+        headerText: { color: "#000000", fontSize: 16 },
+        tierTitle: { color: "#000000", fontSize: 14 },
+        badge: { bgColor: "#000000", textColor: "#ffffff", fontSize: 12 },
+        price: { color: "#000000", fontSize: 16 },
+        strikethroughPrice: { color: "#999999", fontSize: 14 },
+        mostPopularTag: { bgColor: "#ff0000", textColor: "#ffffff", fontSize: 11 },
+        selectedTier: { borderColor: "#000000", bgColor: "#f5f5f5" },
+        unselectedTier: { borderColor: "#e0e0e0", bgColor: "#ffffff" },
+      },
+    },
+  };
+}
+
+/**
+ * Blank combo (multi-product) offer for the "new" editor route.
+ *
+ * Shares the Bundle shape so the same create/update/duplicate/status helpers
+ * work for both offer types; only the combo* fields and bundleType differ.
+ */
+export function getDefaultCombo() {
+  return {
+    name: "My Combo Offer",
+    bundleType: "combo",
+    enabled: false,
+    status: "draft",
+    headerText: "Frequently Bought Together",
+    hideHeaderLines: false,
+    // Combos target the products chosen in comboTargetProductIds, so the
+    // quantity-break targeting fields stay empty.
+    applyOn: "specific",
+    productIds: [],
+    productTitles: [],
+    collectionIds: [],
+    collectionTitles: [],
+    allowVariantMix: false,
+    hideThemeVariants: false,
+    volumeDiscount: false,
+    showStockWarning: true,
+    tiers: [],
+    comboItems: [],
+    comboTargetProductIds: [],
+    comboDiscountType: "percentage",
+    comboDiscountValue: 10,
+    comboHighlightTag: "Combo",
+    showComboHighlightTag: true,
+    comboFooterText: "Buy all at:",
+    comboCtaText: "",
+    showComboCompareAt: true,
+    comboNativeAction: "stay",
+    styling: {
       cornerRoundness: 12,
       breathingSpace: 12,
       colorPalette: "default",

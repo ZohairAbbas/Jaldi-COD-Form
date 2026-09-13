@@ -19,6 +19,19 @@ export const STOREFRONT_CONFIG_NAMESPACE = "preventify";
 export const STOREFRONT_CONFIG_KEY = "storefront_config";
 export const STOREFRONT_CONFIG_TYPE = "json";
 
+// Prisma returns Json columns already parsed, but rows written by raw SQL (and
+// older migrations) can come back as strings. Never throw here: a malformed
+// column would otherwise take down the whole storefront config payload.
+function parseJson(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Build the STATIC storefront config payload for a shop.
  *
@@ -323,21 +336,47 @@ export async function buildStorefrontConfig(shopData) {
           testMode: p.testMode,
         })),
     },
-    // Bundle / Quantity Break configurations
-    bundles: (shopData.bundles || []).map(bundle => ({
-      id: bundle.id,
-      headerText: bundle.headerText,
-      hideHeaderLines: bundle.hideHeaderLines,
-      applyOn: bundle.applyOn,
-      productIds: typeof bundle.productIds === 'string' ? JSON.parse(bundle.productIds) : bundle.productIds,
-      collectionIds: typeof bundle.collectionIds === 'string' ? JSON.parse(bundle.collectionIds) : bundle.collectionIds,
-      allowVariantMix: bundle.allowVariantMix,
-      hideThemeVariants: bundle.hideThemeVariants,
-      volumeDiscount: bundle.volumeDiscount,
-      showStockWarning: bundle.showStockWarning,
-      tiers: typeof bundle.tiers === 'string' ? JSON.parse(bundle.tiers) : bundle.tiers,
-      styling: typeof bundle.styling === 'string' ? JSON.parse(bundle.styling) : bundle.styling,
-    })),
+    // Bundle / Quantity Break configurations. Combos live in the same table but
+    // ship as a separate array (below) so the quantity-break matching on the
+    // storefront never has to filter them out.
+    bundles: (shopData.bundles || [])
+      .filter(bundle => (bundle.bundleType || 'quantity') === 'quantity')
+      .map(bundle => ({
+        id: bundle.id,
+        headerText: bundle.headerText,
+        hideHeaderLines: bundle.hideHeaderLines,
+        applyOn: bundle.applyOn,
+        productIds: parseJson(bundle.productIds, []),
+        collectionIds: parseJson(bundle.collectionIds, []),
+        allowVariantMix: bundle.allowVariantMix,
+        hideThemeVariants: bundle.hideThemeVariants,
+        volumeDiscount: bundle.volumeDiscount,
+        showStockWarning: bundle.showStockWarning,
+        tiers: parseJson(bundle.tiers, []),
+        styling: parseJson(bundle.styling, {}),
+      })),
+    // Combo (multi-product) offers — v1 is COD-only, so these render alongside
+    // the COD form and are hidden wherever it is.
+    combos: (shopData.bundles || [])
+      .filter(bundle => bundle.bundleType === 'combo')
+      .map(bundle => ({
+        id: bundle.id,
+        name: bundle.name,
+        headerText: bundle.headerText,
+        hideHeaderLines: bundle.hideHeaderLines,
+        items: parseJson(bundle.comboItems, []),
+        targetProductIds: parseJson(bundle.comboTargetProductIds, []),
+        discountType: bundle.comboDiscountType,
+        discountValue: bundle.comboDiscountValue,
+        highlightTag: bundle.comboHighlightTag,
+        showHighlightTag: bundle.showComboHighlightTag,
+        footerText: bundle.comboFooterText,
+        ctaText: bundle.comboCtaText,
+        showCompareAt: bundle.showComboCompareAt,
+        nativeAction: bundle.comboNativeAction || 'stay',
+        showStockWarning: bundle.showStockWarning,
+        styling: parseJson(bundle.styling, {}),
+      })),
     // Shipping rates for storefront
     shippingRates: shippingRates.map(rate => ({
       id: rate.id,

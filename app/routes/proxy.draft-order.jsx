@@ -112,7 +112,9 @@ export const action = async ({ request }) => {
       if (item.bundleDiscount && item.bundleDiscount > 0 && !item.hasCartDiscount) {
         const perUnitDiscount = normalizePrice(item.bundleDiscount) / (item.quantity || 1);
         lineItem.appliedDiscount = {
-          title: "Bundle Discount",
+          // Name the combo that produced the discount so the merchant can tell,
+          // from the Shopify order alone, which offer a line came from.
+          title: item.comboName ? String(item.comboName).slice(0, 255) : "Bundle Discount",
           value: parseFloat(perUnitDiscount.toFixed(2)),
           valueType: "FIXED_AMOUNT",
         };

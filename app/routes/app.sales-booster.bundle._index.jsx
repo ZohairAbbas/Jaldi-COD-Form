@@ -3,8 +3,9 @@ import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getOrCreateShop, getBundles, deleteBundle, updateBundleStatus, duplicateBundle } from "../lib/db.server";
+import { getOrCreateShop, getBundles, deleteBundle, updateBundleStatus, duplicateBundle, getShopByDomain } from "../lib/db.server";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
+import { ensureBundleDiscount } from "../lib/bundle-function.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -25,8 +26,14 @@ export const action = async ({ request }) => {
   const actionType = formData.get("action");
   const bundleId = formData.get("bundleId");
 
-  // Refresh the inlined storefront config metafield after a mutation (non-blocking).
-  const sync = () => syncStorefrontConfigByDomain(admin, session.shop);
+  // Refresh BOTH the storefront config and the native-checkout Discount Function
+  // config. Without the second one, an offer toggled off or deleted here stays
+  // in the function's metafield and keeps discounting at Shopify's checkout.
+  const sync = async () => {
+    await syncStorefrontConfigByDomain(admin, session.shop);
+    const shopWithOffers = await getShopByDomain(session.shop);
+    if (shopWithOffers) await ensureBundleDiscount(admin, shopWithOffers);
+  };
 
   if (actionType === "delete" && bundleId) {
     await deleteBundle(bundleId);

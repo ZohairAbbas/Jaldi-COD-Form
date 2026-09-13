@@ -482,3 +482,15 @@
     min-width: 0;
   }
 }
+
+/* Combo editor: settings beside a sticky live preview on desktop, stacked on
+   narrow screens where a 420px preview column would squeeze the form. */
+@media (max-width: 1000px) {
+  .pv-combo-editor {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .pv-combo-editor > div:last-child {
+    position: static !important;
+  }
+}

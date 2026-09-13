@@ -54,6 +54,8 @@ export const FIELD_CATALOG = [
   { id: "product_sku", label: "Product SKU (per line)" },
   { id: "product_quantity", label: "Product quantity (per line)" },
   { id: "product_price", label: "Product price (per line)" },
+  { id: "combo_name", label: "Combo offer name" },
+  { id: "combo_discount", label: "Combo discount amount" },
 ];
 
 // Ready-made column presets the merchant can pick from.
@@ -85,6 +87,8 @@ export const COLUMN_PRESETS = {
     "postal_code",
     "country",
     "products",
+    "combo_name",
+    "combo_discount",
     "subtotal",
     "shipping",
     "total",
@@ -505,9 +509,40 @@ function resolveField(colDef, rec, lineItem) {
       return lineItem ? lineItem.quantity ?? "" : "";
     case "product_price":
       return lineItem ? lineItem.price ?? "" : "";
+    case "combo_name":
+      return comboNames(rec.items);
+    case "combo_discount":
+      return comboDiscountTotal(rec.items);
     default:
       return "";
   }
+}
+
+/**
+ * Names of the combo offers an order came from, if any.
+ *
+ * Combo lines are tagged at the point of sale (buildComboCartItems), so this
+ * reads back what was actually sold rather than re-matching against offers that
+ * may since have been edited or deleted.
+ */
+function comboNames(items) {
+  const names = [...new Set((items || []).map((i) => i.comboName).filter(Boolean))];
+  return names.join(", ");
+}
+
+/**
+ * What the combo discount took off this order.
+ *
+ * Accept counts alone can't tell a merchant whether a combo makes money or just
+ * discounts sales that would have happened anyway — this is the other half.
+ */
+function comboDiscountTotal(items) {
+  const total = (items || []).reduce((sum, item) => {
+    if (!item.comboId || !item.originalPrice) return sum;
+    const discount = Number(item.originalPrice) - Number(item.price);
+    return discount > 0 ? sum + discount : sum;
+  }, 0);
+  return total > 0 ? total.toFixed(2) : "";
 }
 
 /**

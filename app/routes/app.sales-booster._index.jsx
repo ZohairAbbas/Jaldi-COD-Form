@@ -16,6 +16,7 @@ export default function SalesBoosterLanding() {
   const configureTickButtonRef = useRef(null);
   const configureDownsellButtonRef = useRef(null);
   const configureBundleButtonRef = useRef(null);
+  const configureComboButtonRef = useRef(null);
 
   const handleConfigureUpsells = useCallback(() => {
     navigate("/app/sales-booster/one-click");
@@ -33,12 +34,17 @@ export default function SalesBoosterLanding() {
     navigate("/app/sales-booster/bundle");
   }, [navigate]);
 
+  const handleConfigureCombos = useCallback(() => {
+    navigate("/app/sales-booster/combo");
+  }, [navigate]);
+
   // Attach event listeners to buttons
   useEffect(() => {
     const configureBtn = configureButtonRef.current;
     const configureTickBtn = configureTickButtonRef.current;
     const configureDownsellBtn = configureDownsellButtonRef.current;
     const configureBundleBtn = configureBundleButtonRef.current;
+    const configureComboBtn = configureComboButtonRef.current;
 
     if (configureBtn) {
       configureBtn.addEventListener("click", handleConfigureUpsells);
@@ -51,6 +57,9 @@ export default function SalesBoosterLanding() {
     }
     if (configureBundleBtn) {
       configureBundleBtn.addEventListener("click", handleConfigureBundles);
+    }
+    if (configureComboBtn) {
+      configureComboBtn.addEventListener("click", handleConfigureCombos);
     }
 
     return () => {
@@ -66,8 +75,11 @@ export default function SalesBoosterLanding() {
       if (configureBundleBtn) {
         configureBundleBtn.removeEventListener("click", handleConfigureBundles);
       }
+      if (configureComboBtn) {
+        configureComboBtn.removeEventListener("click", handleConfigureCombos);
+      }
     };
-  }, [handleConfigureUpsells, handleConfigureTickUpsells, handleConfigureDownsells, handleConfigureBundles]);
+  }, [handleConfigureUpsells, handleConfigureTickUpsells, handleConfigureDownsells, handleConfigureBundles, handleConfigureCombos]);
 
   return (
     <s-page heading="Upsells & Downsells">
@@ -271,6 +283,51 @@ export default function SalesBoosterLanding() {
                 borderRadius: "12px"
               }}>
                 <span style={{ fontSize: "64px" }}>📦</span>
+              </div>
+            </div>
+          </s-stack>
+        </s-box>
+      </s-section>
+      {/* Combo Offers Section */}
+      <s-section>
+        <s-box padding="loose" borderRadius="base">
+          <s-stack direction="block" gap="loose">
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+              <div style={{ flex: 1 }}>
+                <s-stack direction="block" gap="base">
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "24px" }}>🎁</span>
+                    <s-text variant="heading-lg">Combo Offers</s-text>
+                  </div>
+
+                  <s-text variant="body-md">
+                    Sell 2–3 different products together at a discounted rate.
+                    Example: <strong>Shirt + Trousers for 15% off</strong>
+                  </s-text>
+
+                  <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                    <s-button
+                      ref={configureComboButtonRef}
+                      variant="primary"
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        🎁 Configure Combos
+                      </span>
+                    </s-button>
+                  </div>
+                </s-stack>
+              </div>
+
+              <div style={{
+                width: "120px",
+                height: "120px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f9fafb",
+                borderRadius: "12px"
+              }}>
+                <span style={{ fontSize: "64px" }}>🎁</span>
               </div>
             </div>
           </s-stack>

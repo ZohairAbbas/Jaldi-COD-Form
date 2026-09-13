@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import CODForm from './CODForm';
 import BuyButton from './BuyButton';
@@ -6,6 +6,9 @@ import StickyBar from './StickyBar';
 import UpsellModal from './UpsellModal';
 import DownsellModal from './DownsellModal';
 import BundleWidget, { calculateTierPrice } from './BundleWidget';
+import ComboOffers from './ComboOffers';
+import { matchCombosForProduct, resolveCombo, comboProductHandles, numericId } from './combo-resolver';
+import { buildComboCartItems } from '../lib/combo-pricing';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPurchase } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol, resolvePixelCurrency, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
@@ -174,6 +177,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [productVariants, setProductVariants] = useState(null); // Cached product variants for variant mix dropdowns
   const [variantMixSelections, setVariantMixSelections] = useState(null); // Array of variant IDs per bundle slot
   const [variantMixOosError, setVariantMixOosError] = useState(false); // True if any slot has OOS variant
+
+  // Combo (multi-product) offer state. COD-only in v1: combos populate the COD
+  // form's cart directly and never touch the real Shopify cart.
+  const [activeCombos, setActiveCombos] = useState([]); // configs matched to this product page
+  const [comboProducts, setComboProducts] = useState(null); // handle -> /products/<handle>.js payload
+  const [comboVariantSelections, setComboVariantSelections] = useState({}); // comboId -> { productId: variantId }
+  const [selectedComboId, setSelectedComboId] = useState(null); // one combo at a time (COD path)
+  const [addedComboId, setAddedComboId] = useState(null); // transient "Added" confirmation (native path)
 
   // Multi-country detection state
   const [detectedCountry, setDetectedCountry] = useState(null);
@@ -1391,6 +1402,18 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             return false;
           });
 
+          // Combo offers matched against the SAME product id. Ordered by
+          // priority server-side and capped inside matchCombosForProduct.
+          // Config is applied twice (inlined metafield paint, then the fetched
+          // reconcile), so keep the previous array when the match is unchanged —
+          // a new array identity would re-run the component product fetch.
+          const matchedCombos = matchCombosForProduct(data.combos, currentProductId);
+          setActiveCombos((prev) => {
+            const same = prev.length === matchedCombos.length
+              && prev.every((c, i) => c.id === matchedCombos[i].id);
+            return same ? prev : matchedCombos;
+          });
+
           if (matchedBundle) {
             setActiveBundleConfig(matchedBundle);
             // Auto-select the preselected tier if one exists
@@ -1662,6 +1685,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Update cart based on product selection
   useEffect(() => {
     if (mode === 'popup' && currentProduct) {
+      // An accepted combo owns the cart (its own split line items). Rebuilding
+      // from currentProduct here would wipe it the moment anything re-renders.
+      if (selectedComboId) return;
+
       // When variant mix bundle is active, cart is managed by buildVariantMixCartItems
       // with split items per variant — don't overwrite it with the single currentProduct
       if (currentProduct.isVariantMixBundle) return;
@@ -1690,7 +1717,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         }
       }
     }
-  }, [productSelection, config, mode, currentProduct, fullCart]);
+  }, [productSelection, config, mode, currentProduct, fullCart, selectedComboId]);
 
   const handleRemoveItem = (variantId) => {
     // Only allow removing items in popup mode
@@ -1996,6 +2023,248 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     buildVariantMixCartItems(selectedBundleTier, unitPrice, newSelections.length, newSelections);
   };
 
+  // ==========================================================================
+  // COMBO (MULTI-PRODUCT) OFFERS
+  // ==========================================================================
+
+  // Fetch live data for every component product of the matched combos. Prices,
+  // variants and availability all come from Shopify at render time — the saved
+  // offer stores only which products are in it, never their prices.
+  useEffect(() => {
+    if (!activeCombos.length) return;
+
+    let cancelled = false;
+    const handles = comboProductHandles(activeCombos);
+
+    Promise.all(
+      handles.map(async (handle) => {
+        try {
+          const response = await fetch(`/products/${handle}.js`);
+          if (!response.ok) return [handle, null];
+          return [handle, await response.json()];
+        } catch {
+          return [handle, null];
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const byHandle = {};
+      for (const [handle, product] of entries) {
+        if (product) byHandle[handle] = product;
+      }
+      setComboProducts(byHandle);
+    });
+
+    return () => { cancelled = true; };
+  }, [activeCombos]);
+
+  // Resolve each combo against the fetched products. A combo whose component
+  // has been deleted or unpublished resolves to null and is dropped entirely —
+  // rendering it without that line would quietly turn a two-product discount
+  // into a single product at the same discount.
+  const resolvedCombos = useMemo(() => {
+    if (!activeCombos.length || !comboProducts) return [];
+    const inventoryMap = typeof window !== 'undefined' ? window.PREVENTIFY_VARIANT_INVENTORY : null;
+
+    return activeCombos
+      .map((combo) => resolveCombo(combo, comboProducts, comboVariantSelections[combo.id], inventoryMap))
+      .filter(Boolean);
+  }, [activeCombos, comboProducts, comboVariantSelections]);
+
+  // Reset the quantity-break selection back to a plain single unit.
+  //
+  // A combo always contains the product whose page it is shown on, so accepting
+  // one always overlaps whatever tier is selected. Both write `bundleDiscount`
+  // onto the same line, so leaving the tier applied would double-discount the
+  // product and show a total the order can't match. Last selection wins.
+  const clearQuantityTierSelection = useCallback(() => {
+    setSelectedBundleTier(null);
+    setVariantMixSelections(null);
+    setVariantMixOosError(false);
+    setCurrentProduct((prev) => (prev ? {
+      ...prev,
+      quantity: 1,
+      price: bundleBasePrice ?? prev.price,
+      originalPrice: undefined,
+      hasBundleDiscount: false,
+      isVariantMixBundle: false,
+      displayPrice: undefined,
+      displayOriginalPrice: undefined,
+    } : prev));
+  }, [bundleBasePrice]);
+
+  // Drop a combo's lines and restore the product whose page this is.
+  //
+  // Done explicitly rather than left to the cart-sync effect below, because that
+  // effect only runs in popup mode — embedded mode has to recover too.
+  const clearComboFromCart = useCallback(() => {
+    setCart((prevCart) => {
+      const kept = prevCart.items.filter((item) => !item.bundleGroupId);
+      const hasCurrent = currentProduct && kept.some((i) => i.variantId === currentProduct.variantId);
+      return { items: currentProduct && !hasCurrent ? [currentProduct, ...kept] : kept };
+    });
+  }, [currentProduct]);
+
+  // Accept or remove a combo. Returns true when the combo was ACCEPTED, which
+  // is the caller's cue to open the COD form — the form-opening handler is
+  // declared further down the component, so it cannot be referenced from this
+  // callback's dependency list without a temporal-dead-zone error.
+  const handleComboToggle = useCallback((comboId) => {
+    if (selectedComboId === comboId) {
+      setSelectedComboId(null);
+      clearComboFromCart();
+      return false;
+    }
+
+    const resolved = resolvedCombos.find((r) => r.combo.id === comboId);
+    if (!resolved || resolved.disabled) return false;
+
+    clearQuantityTierSelection();
+
+    const rate = currentProduct?.isShopifyMarkets ? null : (currentProduct?.displayExchangeRate || null);
+    const comboItems = buildComboCartItems(resolved.combo, resolved.components, resolved.pricing, {
+      exchangeRate: rate,
+      currencySymbol: currentProduct?.displayCurrencySymbol,
+      currencyCode: currentProduct?.displayCurrencyCode,
+    });
+
+    const comboProductIds = new Set(resolved.components.map((c) => c.numericProductId));
+
+    setCart((prevCart) => {
+      const kept = prevCart.items.filter((item) => {
+        // Any previously selected combo's lines (only one combo at a time).
+        if (item.bundleGroupId) return false;
+        // The product-page item this cart was seeded with, which is by
+        // definition one of the combo's products — keeping it would bill the
+        // customer for the same product twice.
+        if (currentProduct && item.variantId === currentProduct.variantId) return false;
+        // The same product already sitting in the real Shopify cart.
+        if (item.productId && comboProductIds.has(numericId(item.productId))) return false;
+        return true;
+      });
+      return { items: [...comboItems, ...kept] };
+    });
+
+    setSelectedComboId(comboId);
+
+    if (appPath) {
+      fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=accept`, { method: 'POST' }).catch(() => {});
+    }
+
+    return true;
+  }, [selectedComboId, resolvedCombos, clearQuantityTierSelection, clearComboFromCart, currentProduct, appPath]);
+
+  const handleComboVariantChange = useCallback((comboId, componentIndex, variantId) => {
+    const combo = activeCombos.find((c) => c.id === comboId);
+    const item = combo?.items?.[componentIndex];
+    if (!item) return;
+
+    setComboVariantSelections((prev) => ({
+      ...prev,
+      [comboId]: { ...prev[comboId], [item.productId]: variantId },
+    }));
+  }, [activeCombos]);
+
+  const handleComboImpression = useCallback((comboId) => {
+    if (!appPath) return;
+    fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=impression`, { method: 'POST' }).catch(() => {});
+  }, [appPath]);
+
+  // Native-checkout path: there is no COD form to open, so the card adds its
+  // component products to the real Shopify cart. The bundle Discount Function
+  // then applies the same discount at Shopify's checkout that the card
+  // advertised (see extensions/bundle-discount — combos are matched there by
+  // "cart contains every component").
+  const handleComboNativeAdd = useCallback(async (comboId) => {
+    const resolved = resolvedCombos.find((r) => r.combo.id === comboId);
+    if (!resolved || resolved.disabled) return;
+
+    const items = resolved.components.map((c) => ({
+      id: Number(c.variantId),
+      quantity: c.quantity,
+    }));
+    if (items.some((i) => !Number.isFinite(i.id) || i.id <= 0)) return;
+
+    try {
+      const res = await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, sections: 'cart-icon-bubble' }),
+      });
+      if (!res.ok) return;
+      const result = await res.json().catch(() => null);
+
+      // Keep the header cart count in sync. Without this the page looks like
+      // nothing happened, which is the main risk of the "stay on page" option.
+      try {
+        const bubbleHtml = result?.sections?.['cart-icon-bubble'];
+        if (bubbleHtml) {
+          const liveBubble = document.querySelector('#cart-icon-bubble');
+          const parsed = new DOMParser()
+            .parseFromString(bubbleHtml, 'text/html')
+            .querySelector('#cart-icon-bubble');
+          if (liveBubble && parsed) liveBubble.innerHTML = parsed.innerHTML;
+        }
+      } catch (err) { /* cosmetic only */ }
+
+      if (appPath) {
+        fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=accept`, { method: 'POST' }).catch(() => {});
+      }
+
+      const action = resolved.combo.nativeAction || 'stay';
+      if (action === 'checkout') {
+        // Shopify 302s /checkout to the tokenized /checkouts/cn/... URL.
+        window.location.href = '/checkout';
+        return;
+      }
+      if (action === 'cart') {
+        window.location.href = '/cart';
+        return;
+      }
+      setAddedComboId(comboId);
+    } catch (err) {
+      // Network failure — leave the card untouched so the customer can retry.
+    }
+  }, [resolvedCombos, appPath]);
+
+  // Clear the "Added" confirmation so the card returns to its call to action and
+  // a second combo (or a second set) can be added.
+  useEffect(() => {
+    if (!addedComboId) return;
+    const timer = setTimeout(() => setAddedComboId(null), 2500);
+    return () => clearTimeout(timer);
+  }, [addedComboId]);
+
+  // Re-price the accepted combo when the customer swaps a variant. Prices differ
+  // between variants, so the cart must follow the card rather than keep the
+  // totals from the variant that happened to be selected on accept.
+  useEffect(() => {
+    if (!selectedComboId) return;
+
+    const resolved = resolvedCombos.find((r) => r.combo.id === selectedComboId);
+
+    // The offer vanished (a component was deleted or unpublished mid-session),
+    // or a variant change pushed a component out of stock. Either way the
+    // selection can no longer be honoured, so clear it AND its cart lines
+    // rather than let the customer submit an unfulfillable order.
+    if (!resolved || resolved.disabled) {
+      setSelectedComboId(null);
+      clearComboFromCart();
+      return;
+    }
+
+    const rate = currentProduct?.isShopifyMarkets ? null : (currentProduct?.displayExchangeRate || null);
+    const comboItems = buildComboCartItems(resolved.combo, resolved.components, resolved.pricing, {
+      exchangeRate: rate,
+      currencySymbol: currentProduct?.displayCurrencySymbol,
+      currencyCode: currentProduct?.displayCurrencyCode,
+    });
+
+    setCart((prevCart) => ({
+      items: [...comboItems, ...prevCart.items.filter((item) => !item.bundleGroupId)],
+    }));
+  }, [resolvedCombos, selectedComboId, clearComboFromCart]);
+
   // Whether native-checkout bundle mode is active for THIS visitor. Requires the
   // master toggle on, and — if a country list is configured — the visitor's
   // detected country to be in it. Empty list = applies everywhere. Country still
@@ -2039,6 +2308,15 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     // than bundleBasePrice (e.g., fetchVariantData returns after initial Liquid data).
     if (currentProduct.compareAtPrice && !compareAtPrice) {
       setCompareAtPrice(currentProduct.compareAtPrice);
+    }
+
+    // Picking a quantity tier drops any accepted combo: the combo always
+    // contains this product, and both write a discount onto the same line.
+    // Clearing the combo's lines here lets the tier path rebuild the cart from
+    // currentProduct as it normally would.
+    if (selectedComboId) {
+      setSelectedComboId(null);
+      setCart((prevCart) => ({ items: prevCart.items.filter((item) => !item.bundleGroupId) }));
     }
 
     // Check if stock is sufficient for the requested tier quantity.
@@ -2887,6 +3165,38 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onVariantMixChange={handleVariantMixChange}
           variantMixOosError={variantMixOosError}
           inventoryMap={typeof window !== 'undefined' ? window.PREVENTIFY_VARIANT_INVENTORY : null}
+        />
+      )}
+
+      {/* Combo offers — product page only. Two paths: on the COD path the card
+          opens the form pre-loaded; in native-checkout mode it adds straight to
+          the Shopify cart and the Discount Function applies the same discount.
+          Outside native mode this whole component returns null when the COD form
+          is hidden, which is what keeps combos hidden in restricted countries. */}
+      {resolvedCombos.length > 0 && currentPageType === 'product' && currentProduct && !isCartDrawer && (
+        <ComboOffers
+          resolved={resolvedCombos}
+          currencySymbol={currentProduct?.displayCurrencySymbol || getCurrencySymbol(config?.shop?.country)}
+          exchangeRate={currentProduct?.isShopifyMarkets ? null : (currentProduct?.displayExchangeRate || null)}
+          isRTL={config?.settings?.enableRTL}
+          selectedComboId={nativeBundleMode ? null : selectedComboId}
+          addedComboId={addedComboId}
+          ctaFallbackLabel={
+            nativeBundleMode
+              ? 'Add combo to cart'
+              : (config?.settings?.buttonText || 'Order Now - Cash on Delivery')
+          }
+          onToggle={(comboId) => {
+            if (nativeBundleMode) {
+              handleComboNativeAdd(comboId);
+              return;
+            }
+            // COD path: accepting a combo takes the customer straight into the
+            // form with the combo already in it. Removing just updates the card.
+            if (handleComboToggle(comboId)) handleBuyButtonClick();
+          }}
+          onVariantChange={handleComboVariantChange}
+          onImpression={handleComboImpression}
         />
       )}
 

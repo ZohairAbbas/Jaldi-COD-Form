@@ -683,6 +683,13 @@ model Bundle {
   enabled  Boolean @default(false)
   status   String  @default("draft")
 
+  // "quantity" = Buy-More-Save-More tiers of ONE product (the original feature).
+  // "combo"    = 2-3 DIFFERENT products sold together at a discount.
+  // The two share this table because ~80% of the columns below (styling,
+  // priority, status, stats) are identical; only the offer-shape columns differ.
+  // Every `combo*` column below is unused when bundleType is "quantity".
+  bundleType String @default("quantity")
+
   // Display
   headerText      String  @default("Buy More Save More")
   hideHeaderLines Boolean @default(false)
@@ -703,6 +710,26 @@ model Bundle {
   // Tiers (JSON array)
   tiers Json @default("[]")
 
+  // ---- Combo-only fields (bundleType = "combo") ----
+  // Component products, 2-3 entries, no product twice:
+  // [{ productId, handle, title, image, quantity }]
+  comboItems            Json    @default("[]")
+  // Which of the component products show the widget on their page. Subset of
+  // comboItems productIds; at least one.
+  comboTargetProductIds Json    @default("[]")
+  // One discount for the whole combo. "perUnitFlat" takes the value off EVERY
+  // unit (qty 2 of a line = 2x the value), matching the reference behaviour.
+  comboDiscountType     String  @default("percentage") // none | percentage | flat | perUnitFlat
+  comboDiscountValue    Float   @default(10)
+  comboHighlightTag     String  @default("Combo")
+  showComboHighlightTag Boolean @default(true)
+  comboFooterText       String  @default("Buy all at:")
+  comboCtaText          String  @default("")
+  showComboCompareAt    Boolean @default(true)
+  // Where the customer lands after adding a combo in NATIVE checkout mode
+  // (no COD form to open). Ignored on the COD path, which opens the form.
+  comboNativeAction     String  @default("stay") // stay | cart | checkout
+
   // Styling (JSON object)
   styling Json @default("{}")
 
@@ -716,6 +743,7 @@ model Bundle {
 
   @@index([shopId])
   @@index([shopId, status])
+  @@index([shopId, bundleType, status])
   @@index([priority])
 }
 
