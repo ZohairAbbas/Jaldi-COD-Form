@@ -16,6 +16,14 @@ import { isNativeBundleMode } from './native-bundle';
 import { matchesOfferCountry, offersNeedCountry } from './offer-country';
 import { resolveOrderRedirect } from './order-redirect';
 
+// The element carrying the product data-* attributes. Merchants either enable the
+// app embed or place a manual Popup Button / Embedded Form app block (in which
+// case index.jsx mounts from the block and no app-embed element exists).
+function getPreventifyContainer() {
+  return document.querySelector('[data-preventify-app-embed]')
+    || document.querySelector('[data-preventify-manual-popup], [data-preventify-manual-embedded]');
+}
+
 // Write a quantity into the theme's native quantity input so the theme's own
 // Add-to-Cart adds the right amount. Used in native-bundle-checkout mode, where
 // bundle tier selection must drive the native cart (not the COD form).
@@ -289,7 +297,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   useEffect(() => {
     if (currentPageType !== 'product' || isCartDrawer) return;
 
-    const container = document.querySelector('[data-preventify-app-embed]');
+    const container = getPreventifyContainer();
     if (!container) return;
 
     // Track last known variant to avoid duplicate updates
@@ -1378,8 +1386,8 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       if (data.bundles && data.bundles.length > 0) {
         const pathname = window.location.pathname;
         if (pathname.includes('/products/')) {
-          // Get current product numeric ID from embed container
-          const container = document.querySelector('[data-preventify-app-embed]');
+          // Get current product numeric ID from embed container (or manual block)
+          const container = getPreventifyContainer();
           const currentProductId = container?.dataset?.productId;
           // Collection IDs from Liquid data attribute (if available)
           const productCollections = container?.dataset?.productCollections;
