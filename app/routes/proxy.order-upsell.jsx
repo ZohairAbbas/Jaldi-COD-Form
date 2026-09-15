@@ -1,5 +1,5 @@
-import { getShopByDomain } from "../lib/db.server";
 import { getCurrencyCode } from "../lib/constants";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -7,20 +7,25 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const data = await request.json();
-    const { shop: shopDomain, shopifyOrderId, upsellItem } = data;
+    // The shop comes from Shopify's verified app-proxy signature. The `shop`
+    // field the storefront sends is deliberately not read: this route commits an
+    // order edit against a live Shopify order, so accepting a caller-supplied
+    // shop let anyone add line items to any order of any installed shop.
+    //
+    // NOTE (PRV-3): a valid signature proves the request came through this shop,
+    // not that this caller placed *this* order. Binding the caller to
+    // `shopifyOrderId` needs an order token issued at creation — tracked
+    // separately; this change closes the cross-shop half only.
+    const { data, shop, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
-    if (!shopDomain || !shopifyOrderId || !upsellItem) {
+    const { shopifyOrderId, upsellItem } = data;
+
+    if (!shopifyOrderId || !upsellItem) {
       return Response.json(
-        { error: "Missing required fields: shop, shopifyOrderId, upsellItem" },
+        { error: "Missing required fields: shopifyOrderId, upsellItem" },
         { status: 400 }
       );
-    }
-
-    // Get shop from database
-    const shop = await getShopByDomain(shopDomain);
-    if (!shop) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
     }
 
     // Extract numeric variant ID from GID

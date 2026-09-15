@@ -1,7 +1,8 @@
-import { getShopByDomain, isUserBlocked } from "../lib/db.server";
+import { isUserBlocked } from "../lib/db.server";
 import { normalizePrice, parseJsonColumn } from "../lib/constants";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -9,17 +10,10 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const data = await request.json();
-
-    if (!data.shop) {
-      return Response.json({ error: "Shop parameter is required" }, { status: 400 });
-    }
-
-    // Get shop from database
-    const shop = await getShopByDomain(data.shop);
-    if (!shop) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
-    }
+    // Creates a Shopify draft order with the shop's access token — the shop must
+    // come from the verified signature, not the request body.
+    const { data, shop, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
     // Check if user is blocked (fraud prevention)
     if (shop.settings?.enableUserBlocking) {
@@ -194,7 +188,10 @@ export const action = async ({ request }) => {
         ] : []),
         // Internal markers read by the order-create webhook.
         { key: "_preventify_source", value: "card_checkout" },
-        { key: "_preventify_shop", value: data.shop },
+        // Same key and format as before (frozen contract — the order-create
+        // webhook reads it); the value is now the signature-verified domain
+        // rather than whatever the request body claimed.
+        { key: "_preventify_shop", value: shop.shopifyDomain },
         // Custom fields -> Additional details on the order (readable labels)
         ...(data.customFields && Object.keys(data.customFields).length > 0
           ? Object.entries(data.customFields).map(([fieldId, fieldValue]) => ({
@@ -326,7 +323,7 @@ export const action = async ({ request }) => {
       totalPrice: draftOrder.totalPrice,
       inputPresentmentCurrencyCode: data.presentmentCurrencyCode || null,
       phoneLast4: (customerInfo.phone || '').replace(/[^\d]/g, '').slice(-4),
-      shop: data.shop,
+      shop: shop.shopifyDomain,
     }));
 
     // Update buyer's preferred payment method to "card" (non-blocking)

@@ -1,9 +1,11 @@
+import { timingSafeEqual } from "node:crypto";
 import db from "../db.server";
 import { createDraftOrderForAbandonedCart } from "../lib/abandoned-cart.server";
 import { syncShopFulfillments } from "../lib/fulfillment-sync.server";
 import { syncCourierifyData } from "../lib/courierify-sync.server";
 import { runGoogleSheetsSync } from "../lib/google-sheets-sync.server";
 import { CRON_STATUS, getCronHealth } from "../lib/cron-health.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 
 const ABANDONED_THRESHOLD_MINUTES = 10;
@@ -30,17 +32,44 @@ export const action = async ({ request, params }) => {
     case "cron-google-sheets-sync":
       return handleGoogleSheetsSync(request);
     case "cron-health":
-      return handleCronHealth();
+      return handleCronHealth(request);
     default:
       return Response.json({ error: "Not found" }, { status: 404 });
   }
 };
 
-// Verify cron secret
+/**
+ * Verify the cron shared secret.
+ *
+ * These endpoints are called by cron-worker.cjs directly, not through Shopify,
+ * so they authenticate with X-Cron-Secret rather than an app-proxy signature.
+ *
+ * Fails closed when CRON_SECRET is unset. This previously returned true for
+ * convenience in local dev, which meant a deploy that forgot the variable left
+ * every cron endpoint — including the ones that create draft orders — open to
+ * the internet, with nothing to indicate it.
+ */
 function verifyCronSecret(request) {
-  if (!CRON_SECRET) return true; // Skip if not configured (local dev)
+  if (!CRON_SECRET) {
+    console.error(
+      "[cron-auth] CRON_SECRET is not set — rejecting cron request. " +
+        "Set CRON_SECRET to enable these endpoints."
+    );
+    return false;
+  }
   const secret = request.headers.get("X-Cron-Secret");
-  return secret === CRON_SECRET;
+  if (!secret) return false;
+
+  // Compared in constant time so a caller can't recover the secret byte by byte
+  // from response timing. TextEncoder rather than Buffer to stay within the
+  // lint config's declared globals; timingSafeEqual accepts any TypedArray.
+  const encoder = new TextEncoder();
+  const provided = encoder.encode(secret);
+  const expected = encoder.encode(CRON_SECRET);
+  // Length is checked first because timingSafeEqual throws on a mismatch. This
+  // leaks only the length, not the contents.
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(provided, expected);
 }
 
 /**
@@ -460,9 +489,14 @@ async function handleSessionTrack(request) {
   }
 
   try {
-    const body = await request.json();
+    // Storefront-facing (called from CODForm as the buyer fills the form), so
+    // this one authenticates by app-proxy signature rather than the cron secret.
+    // It stores the buyer's email and phone against a session.
+    const { data: body, shop: shopData, errorResponse } =
+      await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
+
     const {
-      shop,
       sessionId,
       email,
       phone,
@@ -471,19 +505,11 @@ async function handleSessionTrack(request) {
       formData,
     } = body;
 
-    if (!shop || !sessionId) {
+    if (!sessionId) {
       return Response.json(
-        { error: "Shop and sessionId are required" },
+        { error: "sessionId is required" },
         { status: 400 }
       );
-    }
-
-    const shopData = await db.shop.findUnique({
-      where: { shopifyDomain: shop },
-    });
-
-    if (!shopData) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
     }
 
     // Only store email/phone if valid format
@@ -673,8 +699,17 @@ async function handleCourierifySync(request) {
  * Job health lives in lib/cron-health.server so the admin Monitor page and this
  * endpoint cannot drift apart. Returns 503 when degraded so an uptime monitor
  * can page on it directly.
+ *
+ * Behind the cron secret: the detailed body names every job, its last run and
+ * its failure counts, which is more operational detail than belongs on an open
+ * endpoint. Callers without the secret get a bare {ok: true} — enough for a
+ * liveness probe, nothing more.
  */
-async function handleCronHealth() {
+async function handleCronHealth(request) {
+  if (!verifyCronSecret(request)) {
+    return Response.json({ ok: true });
+  }
+
   try {
     const health = await getCronHealth();
     return Response.json(health, { status: health.healthy ? 200 : 503 });
@@ -686,22 +721,19 @@ async function handleCronHealth() {
   }
 }
 
-// Allow GET for testing
-export const loader = async ({ params }) => {
+/**
+ * GET handler.
+ *
+ * Only cron-health is exposed. This previously echoed a list of available
+ * endpoints to any caller, which handed an attacker the route inventory for
+ * free; unknown paths now 404 like any other unrouted URL.
+ */
+export const loader = async ({ request, params }) => {
   const path = params["*"];
 
   if (path === "cron-health") {
-    return handleCronHealth();
+    return handleCronHealth(request);
   }
 
-  return Response.json({
-    message: `Proxy route handler for: ${path}`,
-    availableEndpoints: [
-      "cron-abandoned-carts",
-      "abandoned-carts-create-draft",
-      "cron-fulfillment-sync",
-      "session-track",
-      "cron-health",
-    ],
-  });
+  return Response.json({ error: "Not found" }, { status: 404 });
 };

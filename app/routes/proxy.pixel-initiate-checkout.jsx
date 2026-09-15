@@ -1,6 +1,7 @@
-import { getShopByDomain, getEnabledPixels } from "../lib/db.server";
+import { getEnabledPixels } from "../lib/db.server";
 import { fireInitiateCheckoutEvent } from "../lib/pixels.server";
 import { resolvePixelCurrency } from "../lib/constants";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -8,17 +9,12 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const data = await request.json();
-    const { shop: shopDomain, items, total, currency, pixelAttribution } = data;
+    // Fires server-side conversion events against the merchant's ad accounts,
+    // so an unauthenticated caller could pollute their pixel data.
+    const { data, shop, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
-    if (!shopDomain) {
-      return Response.json({ error: "Missing shop" }, { status: 400 });
-    }
-
-    const shop = await getShopByDomain(shopDomain);
-    if (!shop) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
-    }
+    const { items, total, currency, pixelAttribution } = data;
 
     const pixels = await getEnabledPixels(shop.id);
     if (!pixels || pixels.length === 0) {

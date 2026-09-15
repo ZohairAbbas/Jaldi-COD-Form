@@ -1,6 +1,16 @@
 import { incrementDownsellStat } from "../lib/db.server";
+import { requireProxyShop, ProxyAuthError } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
+  // Counters only, but unauthenticated they let anyone skew a merchant's downsell
+  // analytics. Params are on the query string, not a JSON body.
+  try {
+    await requireProxyShop(request, { requireShopRecord: false });
+  } catch (error) {
+    if (error instanceof ProxyAuthError) return error.response;
+    throw error;
+  }
+
   const url = new URL(request.url);
   const downsellId = url.searchParams.get("downsellId");
   const stat = url.searchParams.get("stat");

@@ -1,19 +1,22 @@
-import { getShopByDomain } from "../lib/db.server";
 import { buildStorefrontConfig } from "../lib/storefront-config.server";
+import { requireProxyShop, ProxyAuthError } from "../lib/proxy-auth.server";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
-  const shop = url.searchParams.get("shop");
-
-  if (!shop) {
-    return Response.json({ error: "Shop parameter is required" }, { status: 400 });
-  }
 
   try {
-    const shopData = await getShopByDomain(shop);
-
-    if (!shopData) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
+    // The storefront's first call, and it returns merchant settings plus the
+    // Mixpanel token — so the shop must come from the signature, not the query
+    // string. Note this is a GET: the signature is over the query parameters,
+    // which is exactly what Shopify signs.
+    let shopData;
+    try {
+      ({ shop: shopData } = await requireProxyShop(request, {
+        fallbackShopDomain: url.searchParams.get("shop"),
+      }));
+    } catch (error) {
+      if (error instanceof ProxyAuthError) return error.response;
+      throw error;
     }
 
     // Detect app path from request URL (e.g., /apps/preventify/ or /apps/preventify-staging/)

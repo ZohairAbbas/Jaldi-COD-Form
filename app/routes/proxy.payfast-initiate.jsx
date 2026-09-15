@@ -1,7 +1,8 @@
-import { getShopByDomain, isUserBlocked } from "../lib/db.server";
+import { isUserBlocked } from "../lib/db.server";
 import { getPayfastToken, buildHmac, validateCustomer } from "../lib/payfast.server";
 import { normalizePrice } from "../lib/constants";
 import { normalizePhone } from "../lib/buyer.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -9,16 +10,10 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const data = await request.json();
-
-    if (!data.shop) {
-      return Response.json({ error: "Shop parameter is required" }, { status: 400 });
-    }
-
-    const shop = await getShopByDomain(data.shop);
-    if (!shop) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
-    }
+    // Reads the merchant's PayFast credentials, so a caller-supplied shop let
+    // anyone initiate a card transaction under another merchant's account.
+    const { data, shop, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
     if (data.phone) data.phone = normalizePhone(data.phone);
 

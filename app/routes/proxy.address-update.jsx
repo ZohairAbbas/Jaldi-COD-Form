@@ -1,5 +1,6 @@
 import prisma from "../db.server";
 import { normalizePhone } from "../lib/buyer.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 /**
  * Update a saved BuyerAddress (label and/or address fields).
@@ -17,8 +18,15 @@ export const action = async ({ request }) => {
   }
 
   try {
+    // Ownership is currently established by knowing the phone number alone,
+    // which anyone can guess. The proxy signature restricts callers to real
+    // storefronts; PRV-2 replaces the phone-as-proof check with a verified
+    // session token.
+    const { data, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
+
     const { phone, addressId, label, address, address2, city, province, postalCode } =
-      await request.json();
+      data;
 
     if (!addressId || !phone) {
       return Response.json({ success: false, error: "Missing required fields" }, { status: 400 });
