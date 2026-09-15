@@ -1,4 +1,5 @@
 import { createWhatsAppLoginSession } from "../lib/whatsapp.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -6,7 +7,15 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { phone } = await request.json();
+    // Mints a login session whose completion marks a phone verified. No shop
+    // record is needed — the session is global — but the caller must still be a
+    // real storefront.
+    const { data, errorResponse } = await authenticateJsonProxyRequest(request, {
+      requireShopRecord: false,
+    });
+    if (errorResponse) return errorResponse;
+
+    const { phone } = data;
 
     if (!phone) {
       return Response.json({ error: "Phone is required" }, { status: 400 });

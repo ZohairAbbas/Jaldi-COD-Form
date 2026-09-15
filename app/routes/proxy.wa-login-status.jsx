@@ -1,4 +1,5 @@
 import { checkWhatsAppLoginStatus } from "../lib/whatsapp.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -6,7 +7,14 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { token } = await request.json();
+    // Polled by the storefront while the buyer completes WhatsApp login. The
+    // token is the secret here; the signature keeps polling to real storefronts.
+    const { data, errorResponse } = await authenticateJsonProxyRequest(request, {
+      requireShopRecord: false,
+    });
+    if (errorResponse) return errorResponse;
+
+    const { token } = data;
 
     if (!token) {
       return Response.json({ status: "expired" });

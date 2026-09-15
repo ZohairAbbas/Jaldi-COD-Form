@@ -1,4 +1,4 @@
-import { getShopByDomain, getEnabledPixels, isUserBlocked } from "../lib/db.server";
+import { getEnabledPixels, isUserBlocked } from "../lib/db.server";
 import { buildHmac, executeTransaction, getTransactionStatus, isPayfastSuccess, isPayfastPending } from "../lib/payfast.server";
 import { createShopifyOrder } from "../lib/order.server";
 import { firePurchaseEvent, fireTikTokEvents } from "../lib/pixels.server";
@@ -6,6 +6,7 @@ import { normalizePrice, parseJsonColumn, resolvePixelCurrency } from "../lib/co
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import prisma from "../db.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -13,16 +14,10 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const data = await request.json();
-
-    if (!data.shop) {
-      return Response.json({ error: "Shop parameter is required" }, { status: 400 });
-    }
-
-    const shop = await getShopByDomain(data.shop);
-    if (!shop) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
-    }
+    // Executes the card transaction and creates the Shopify order, using the
+    // merchant's PayFast secured key — the shop must be signature-verified.
+    const { data, shop, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
     if (data.phone) data.phone = normalizePhone(data.phone);
 

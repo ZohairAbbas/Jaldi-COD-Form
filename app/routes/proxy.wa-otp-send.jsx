@@ -1,5 +1,5 @@
-import { getShopByDomain } from "../lib/db.server";
 import { sendWhatsAppOTP } from "../lib/whatsapp.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -7,18 +7,16 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { shop, phone } = await request.json();
+    // Sends a WhatsApp message from Preventify's business number. Unauthenticated,
+    // this let anyone send template messages to arbitrary phone numbers.
+    const { data, shop: shopData, errorResponse } =
+      await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
-    if (!shop || !phone) {
-      return Response.json(
-        { error: "Shop and phone are required" },
-        { status: 400 }
-      );
-    }
+    const { phone } = data;
 
-    const shopData = await getShopByDomain(shop);
-    if (!shopData) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
+    if (!phone) {
+      return Response.json({ error: "Phone is required" }, { status: 400 });
     }
 
     const result = await sendWhatsAppOTP(shopData.id, phone);

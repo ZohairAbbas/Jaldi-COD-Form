@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { requireProxyShop, ProxyAuthError } from "../lib/proxy-auth.server";
 
 // Map ISO 3166-1 alpha-2 country codes to internal codes
 const ISO_TO_INTERNAL = {
@@ -76,16 +77,26 @@ async function detectCountryFromIP(ip) {
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
-  const shop = url.searchParams.get("shop");
-
-  if (!shop) {
-    return Response.json({ error: "Shop parameter is required" }, { status: 400 });
-  }
 
   try {
+    // Gates whether the COD form renders for this visitor, so the shop comes
+    // from the verified signature rather than the query string.
+    let shopDomain;
+    try {
+      ({ shopDomain } = await requireProxyShop(request, {
+        fallbackShopDomain: url.searchParams.get("shop"),
+        // This route selects its own narrow column set below rather than using
+        // the full Shop record.
+        requireShopRecord: false,
+      }));
+    } catch (error) {
+      if (error instanceof ProxyAuthError) return error.response;
+      throw error;
+    }
+
     // Get shop data with multi-country settings
     const shopData = await prisma.shop.findUnique({
-      where: { shopifyDomain: shop },
+      where: { shopifyDomain: shopDomain },
       select: {
         country: true,
         enableMultiCountry: true,

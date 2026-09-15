@@ -1,5 +1,6 @@
 import prisma from "../db.server";
 import { lookupGlobalBuyer } from "../lib/buyer.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 /**
  * Device-based buyer lookup (Layer 2 fallback when localStorage is empty)
@@ -14,7 +15,14 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { fingerprintId } = await request.json();
+    // Turns a device fingerprint into a phone number, and a trusted buyer's full
+    // profile — previously for any caller, with no shop named. The proxy
+    // signature now limits this to real storefronts (PRV-2 adds the
+    // verification requirement on top).
+    const { data, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
+
+    const { fingerprintId } = data;
 
     if (!fingerprintId || typeof fingerprintId !== "string") {
       return Response.json({ phone: null });

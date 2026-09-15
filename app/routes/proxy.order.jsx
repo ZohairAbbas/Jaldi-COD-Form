@@ -1,5 +1,5 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
-import { getShopByDomain, getUpsells, getEnabledPixels, isUserBlocked } from "../lib/db.server";
+import { getUpsells, getEnabledPixels, isUserBlocked } from "../lib/db.server";
 import { firePurchaseEvent, fireTikTokEvents } from "../lib/pixels.server";
 import { normalizePrice, CORE_FIELD_IDS, parseJsonColumn, resolvePixelCurrency } from "../lib/constants";
 import { matchesOfferCountryServer } from "../lib/offer-country.server";
@@ -8,6 +8,7 @@ import { upsertCustomerProfile } from "../lib/sms.server";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { sendWhatsAppReply } from "../lib/whatsapp.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -15,10 +16,14 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const orderData = await request.json();
+    // Creates a real Shopify order against the shop's access token, so the shop
+    // must come from Shopify's verified signature rather than the request body.
+    const { data: orderData, shop, errorResponse } =
+      await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
     console.log('[Preventify]', 'order-received', JSON.stringify({
-      shop: orderData.shop,
+      shop: shop.shopifyDomain,
       presentmentCurrencyCode: orderData.presentmentCurrencyCode || null,
       currencyDebug: orderData.currencyDebug || null,
       countryCode: orderData.countryCode || null,
@@ -33,15 +38,8 @@ export const action = async ({ request }) => {
       })),
     }));
 
-    if (!orderData.shop) {
-      return Response.json({ error: "Shop parameter is required" }, { status: 400 });
-    }
-
-    // Get shop from database
-    const shop = await getShopByDomain(orderData.shop);
-    if (!shop) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
-    }
+    // Shop resolution and the not-found case are handled by the authentication
+    // step above, which derives the shop from the verified signature.
 
     // Determine which core fields the merchant hid in the Form Designer so
     // validation doesn't require values for fields the customer never sees.
@@ -419,7 +417,7 @@ export const action = async ({ request }) => {
         };
 
         // Fire purchase event to all enabled CAPI pixels
-        console.log(`[Pixel] Firing CAPI Purchase for ${orderData.shop}, ${pixels.length} pixels: ${pixels.map(p => `${p.type}:${p.pixelId}`).join(', ')}`);
+        console.log(`[Pixel] Firing CAPI Purchase for ${shop.shopifyDomain}, ${pixels.length} pixels: ${pixels.map(p => `${p.type}:${p.pixelId}`).join(', ')}`);
         firePurchaseEvent(pixels, {
           orderId: dbOrder.id,
           orderNumber: shopifyResult.orderNumber,

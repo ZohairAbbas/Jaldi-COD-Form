@@ -1,4 +1,4 @@
-import { getShopByDomain } from "../lib/db.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 const DISCOUNT_QUERY = `
   query getDiscountByCode($code: String!) {
@@ -52,17 +52,17 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { shop, code, subtotal, itemCount } = await request.json();
+    // Queries the merchant's discount catalogue with their access token —
+    // unauthenticated, this let anyone enumerate any shop's discount codes.
+    const { data, shop: shopData, errorResponse } =
+      await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
-    if (!shop || !code) {
-      return Response.json({ valid: false, error: "Shop and discount code are required" }, { status: 400 });
+    const { code, subtotal, itemCount } = data;
+
+    if (!code) {
+      return Response.json({ valid: false, error: "Discount code is required" }, { status: 400 });
     }
-
-    const shopData = await getShopByDomain(shop);
-    if (!shopData) {
-      return Response.json({ valid: false, error: "Shop not found" }, { status: 404 });
-    }
-
     // Call Shopify GraphQL API
     const response = await fetch(
       `https://${shopData.shopifyDomain}/admin/api/2025-01/graphql.json`,

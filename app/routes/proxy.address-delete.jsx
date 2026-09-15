@@ -1,5 +1,6 @@
 import prisma from "../db.server";
 import { normalizePhone } from "../lib/buyer.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 /**
  * Delete a saved BuyerAddress.
@@ -17,7 +18,14 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { phone, addressId } = await request.json();
+    // Ownership is currently established by knowing the phone number alone,
+    // which anyone can guess — and this one deletes. The proxy signature
+    // restricts callers to real storefronts; PRV-2 replaces the phone-as-proof
+    // check with a verified session token.
+    const { data, errorResponse } = await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
+
+    const { phone, addressId } = data;
 
     if (!addressId || !phone) {
       return Response.json({ success: false, error: "Missing required fields" }, { status: 400 });

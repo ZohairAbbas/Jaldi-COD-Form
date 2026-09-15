@@ -1,5 +1,6 @@
 import prisma from "../db.server";
 import { normalizePhone } from "../lib/buyer.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 /**
  * Register a device fingerprint → phone mapping after a successful order.
@@ -14,7 +15,16 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { fingerprintId, phone } = await request.json();
+    // Writes the fingerprint → phone mapping that device-lookup later trusts to
+    // return buyer PII, so poisoning it unauthenticated was a way to attach an
+    // attacker's device to someone else's phone. No shop record needed — the
+    // mapping is global.
+    const { data, errorResponse } = await authenticateJsonProxyRequest(request, {
+      requireShopRecord: false,
+    });
+    if (errorResponse) return errorResponse;
+
+    const { fingerprintId, phone } = data;
 
     if (!fingerprintId || typeof fingerprintId !== "string") {
       return Response.json({ success: false, error: "Missing fingerprintId" });

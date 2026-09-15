@@ -1,6 +1,6 @@
-import { getShopByDomain } from "../lib/db.server";
 import { verifyOTP } from "../lib/sms.server";
 import { markBuyerVerified } from "../lib/buyer.server";
+import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -8,15 +8,16 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { shop, phone, otp } = await request.json();
+    // Success here marks the buyer globally verified, which is what PRV-6 will
+    // treat as proof of verification — so the caller must be a real storefront.
+    const { data, shop: shopData, errorResponse } =
+      await authenticateJsonProxyRequest(request);
+    if (errorResponse) return errorResponse;
 
-    if (!shop || !phone || !otp) {
-      return Response.json({ error: "Shop, phone, and OTP are required" }, { status: 400 });
-    }
+    const { phone, otp } = data;
 
-    const shopData = await getShopByDomain(shop);
-    if (!shopData) {
-      return Response.json({ error: "Shop not found" }, { status: 404 });
+    if (!phone || !otp) {
+      return Response.json({ error: "Phone and OTP are required" }, { status: 400 });
     }
 
     const result = await verifyOTP(shopData.id, phone, otp);
