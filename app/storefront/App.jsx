@@ -2947,6 +2947,10 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         body: JSON.stringify({
           shop: shopDomain,
           shopifyOrderId: orderResult.shopifyOrderId,
+          // Issued in the order-creation response; proves this buyer placed
+          // this order. Without it the server cannot tell an upsell for your
+          // own order from one for a stranger's.
+          orderToken: orderResult.orderToken,
           upsellItem: {
             variantId: postPurchaseUpsellConfig.product.variantId,
             title: postPurchaseUpsellConfig.product.title,

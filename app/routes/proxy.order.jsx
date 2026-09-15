@@ -9,6 +9,7 @@ import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { sendWhatsAppReply } from "../lib/whatsapp.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { resolveOrderVerification, issueOrderToken } from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -137,6 +138,16 @@ export const action = async ({ request }) => {
       console.error("Risk scoring failed (non-blocking):", err);
     }
 
+    // Verification is resolved from the database, not from what the client sent.
+    // The storefront's claim is passed in only so a disagreement gets logged.
+    // Same tag strings as before (frozen contract) — only their truthfulness
+    // changes, so an order that skipped verification is no longer tagged as
+    // verified just because the request said so.
+    const verificationMethod = await resolveOrderVerification(shop.id, orderData.phone, {
+      clientClaim: orderData.verificationMethod || null,
+      allowTrustedBypass: shop.settings?.enableOTP !== false,
+    });
+
     // Calculate totals from items if not provided
     const items = orderData.items || [];
     const calculatedSubtotal = items.reduce((sum, item) => {
@@ -227,7 +238,7 @@ export const action = async ({ request }) => {
         utmData: utmAttribution, // UTM parameters for note_attributes
         countryCode: orderData.countryCode, // Country code for currency symbol lookup
         presentmentCurrencyCode: orderData.presentmentCurrencyCode, // Shopify Markets currency
-        verificationMethod: orderData.verificationMethod, // WhatsApp verification tag
+        verificationMethod, // Resolved server-side above, not taken from the client
         riskData, // Risk intelligence data for tags/notes
       },
       shop.shopifyDomain // Pass shop domain for REST API call
@@ -282,7 +293,7 @@ export const action = async ({ request }) => {
         riskLevel: riskData?.riskLevel || null,
         shopifyOrderId: shopifyResult.orderId,
         shopifyOrderNumber: shopifyResult.orderNumber,
-        verificationMethod: orderData.verificationMethod || null,
+        verificationMethod, // Server-resolved, so the DB matches the Shopify tag
         customFields: JSON.stringify({
           ...(typeof orderData.customFields === 'string'
               ? JSON.parse(orderData.customFields || '{}')
@@ -526,6 +537,15 @@ export const action = async ({ request }) => {
       total: calculatedTotal,
       currency: pixelCurrency,
       postPurchaseUpsell: postPurchaseUpsell,
+      // Proves this caller placed this order, so the post-purchase upsell can
+      // edit it. Only issued when there is an upsell to accept, so the token
+      // does not exist in responses that have no use for it.
+      orderToken: postPurchaseUpsell
+        ? issueOrderToken({
+            shopifyOrderId: shopifyResult.orderId,
+            shopDomain: shop.shopifyDomain,
+          })
+        : undefined,
     });
   } catch (error) {
     console.error("Order submission error:", error);

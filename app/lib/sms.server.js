@@ -1,71 +1,17 @@
 import prisma from "../db.server.js";
 
 /**
- * Generate a random 6-digit OTP
+ * Customer profiles and OTP verification.
+ *
+ * The SMS sending path (smsmobileapi.com) was removed: that provider is no
+ * longer used and its route, `proxy/otp-send`, had no live caller. WhatsApp is
+ * the only channel now — `sendWhatsAppOTP` in whatsapp.server writes to the
+ * same OTPSession table, so `verifyOTP` below still serves it.
+ *
+ * `hasVerifiedOTP` was removed alongside it: it was never called from anywhere,
+ * and the equivalent check now lives in verification.server, which reads both
+ * channels rather than only OTPSession.
  */
-function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-/**
- * Send OTP via smsmobileapi.com
- */
-export async function sendOTP(shopId, phone) {
-  const apiKey = process.env.SMS_API_KEY;
-  if (!apiKey) {
-    throw new Error("SMS_API_KEY is not configured");
-  }
-
-  // Rate limit: max 3 OTPs per phone per 15 minutes
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-  const recentOTPs = await prisma.oTPSession.count({
-    where: {
-      shopId,
-      phone,
-      createdAt: { gte: fifteenMinutesAgo },
-    },
-  });
-
-  if (recentOTPs >= 3) {
-    throw new Error("Too many OTP requests. Please try again later.");
-  }
-
-  const otp = generateOTP();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-  // Find existing customer profile
-  const customer = await prisma.customerProfile.findUnique({
-    where: {
-      shopId_phone: { shopId, phone },
-    },
-  });
-
-  // Store OTP in database
-  const otpSession = await prisma.oTPSession.create({
-    data: {
-      shopId,
-      phone,
-      otp,
-      expiresAt,
-      customerId: customer?.id || null,
-    },
-  });
-
-  // Send SMS via smsmobileapi.com
-  const message = `Your verification code is: ${otp}. Valid for 5 minutes.`;
-  const smsUrl = `https://api.smsmobileapi.com/sendsms/?apikey=${encodeURIComponent(apiKey)}&recipients=${encodeURIComponent(phone)}&message=${encodeURIComponent(message)}`;
-
-  try {
-    const response = await fetch(smsUrl);
-    if (!response.ok) {
-      console.error("SMS API error:", response.status, await response.text());
-    }
-  } catch (error) {
-    console.error("SMS send error:", error);
-  }
-
-  return { success: true, sessionId: otpSession.id };
-}
 
 /**
  * Verify OTP entered by customer
@@ -117,21 +63,6 @@ export async function verifyOTP(shopId, phone, otpCode) {
   return { success: true };
 }
 
-/**
- * Check if phone has a verified OTP session (for order submission validation)
- */
-export async function hasVerifiedOTP(shopId, phone) {
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-  const verified = await prisma.oTPSession.findFirst({
-    where: {
-      shopId,
-      phone,
-      verified: true,
-      createdAt: { gte: fiveMinutesAgo },
-    },
-  });
-  return !!verified;
-}
 
 /**
  * Look up customer profile by phone (for auto-fill on phone blur)

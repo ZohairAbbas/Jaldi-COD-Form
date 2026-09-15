@@ -114,6 +114,23 @@ export async function getRiskOrders(shopId, { page = 1, perPage = 20, riskLevel,
 
 /**
  * Get buyer risk profile by phone number (for buyer detail view).
+ *
+ * Reached via the `?buyer=<phone>` URL parameter, which is not restricted to
+ * phones the shop has sold to. Previously the whole GlobalBuyer record was
+ * returned for any phone in the network, so a merchant could read the name and
+ * email of someone who had never been their customer — the panel rendered the
+ * identity block above a "No orders found" list.
+ *
+ * Split by what the data actually is:
+ *
+ *   - Risk aggregates (order counts, RTO rate, risk score) stay network-wide for
+ *     every phone. That cross-merchant signal is the point of the feature: a
+ *     merchant needs to know a buyer has a high RTO rate elsewhere, and these
+ *     are statistics, not identity.
+ *
+ *   - Identity (name, email) is returned only when the phone appears in this
+ *     shop's own orders. For anyone else the merchant sees the risk profile
+ *     with no personal details attached.
  */
 export async function getBuyerProfile(shopId, phone) {
   const [globalBuyer, shopOrders] = await Promise.all([
@@ -158,8 +175,21 @@ export async function getBuyerProfile(shopId, phone) {
   const shopTerminal = shopDelivered + shopReturned;
   const shopRtoRate = shopTerminal > 0 ? shopReturned / shopTerminal : 0;
 
+  // An order in this shop is what entitles the merchant to the buyer's identity.
+  // Derived from the same query the panel already runs, so this costs nothing.
+  const isOwnCustomer = shopOrders.length > 0;
+
+  const { firstName, lastName, email, ...networkProfile } = globalBuyer;
+
   return {
-    ...globalBuyer,
+    ...networkProfile,
+    // Present only for the shop's own customers; the panel renders "Unknown"
+    // when they are absent, which is the correct thing to show a merchant
+    // looking at a buyer they have never sold to.
+    firstName: isOwnCustomer ? firstName : null,
+    lastName: isOwnCustomer ? lastName : null,
+    email: isOwnCustomer ? email : null,
+    isOwnCustomer,
     shopOrders,
     shopStats: {
       totalOrders: shopOrders.length,

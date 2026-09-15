@@ -3,6 +3,7 @@ import { normalizePrice, parseJsonColumn } from "../lib/constants";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { resolveOrderVerification } from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -62,6 +63,17 @@ export const action = async ({ request }) => {
     } catch (err) {
       console.error("Risk scoring failed (non-blocking):", err);
     }
+
+    // Resolved from the database rather than taken from the request — see
+    // proxy.order.jsx. Same tag strings; only their truthfulness changes.
+    const verificationMethod = await resolveOrderVerification(
+      shop.id,
+      customerInfo.phone || data.phone,
+      {
+        clientClaim: data.verificationMethod || null,
+        allowTrustedBypass: shop.settings?.enableOTP !== false,
+      }
+    );
 
     // Build line items for draft order
     const lineItems = items.map(item => {
@@ -174,7 +186,7 @@ export const action = async ({ request }) => {
       tags: [
         "preventify_cod_form",
         "draft_order_for_card_checkout",
-        data.verificationMethod,
+        verificationMethod,
         riskData?.riskLevel === "HIGH" ? "preventify-high-risk" : null,
         riskData?.riskLevel === "MEDIUM" ? "preventify-medium-risk" : null,
         riskData?.riskLevel === "LOW" ? "preventify-trusted-buyer" : null,
