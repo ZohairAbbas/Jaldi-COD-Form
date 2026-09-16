@@ -264,15 +264,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [focusedOtpIndex, setFocusedOtpIndex] = useState(-1);
   const otpInputRefs = useRef([]);
 
-  // Whether this phone is known to the network. The only thing buyer-lookup
-  // discloses before verification, so the form can say "welcome back" without
-  // revealing who the buyer is.
-  const [isRecognizedBuyer, setIsRecognizedBuyer] = useState(false);
-
   // Whether the server says this buyer may skip verification (trusted, on a
   // device we have seen them use). Skipping unlocks the flow but yields no
   // verification token, so their saved details stay withheld either way.
   const [canSkipVerification, setCanSkipVerification] = useState(false);
+
+  // Shown when editing or deleting a saved address is refused for want of a
+  // verification token. A trusted buyer who skipped verification reaches this:
+  // they can order without verifying, but changing stored personal data needs
+  // proof the number is theirs. Without this the request failed silently.
+  const [addressAuthError, setAddressAuthError] = useState('');
 
   // Server-issued proof that this buyer verified this phone number, handed back
   // by otp-verify / wa-login-status. Required by buyer-lookup and the address
@@ -606,7 +607,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       });
       const data = await response.json();
 
-      setIsRecognizedBuyer(data.exists === true);
       // Server's decision, not ours: a trusted buyer on a recognised device may
       // skip verification. It arrives as a bare boolean and carries no PII.
       setCanSkipVerification(data.canSkipVerification === true);
@@ -690,7 +690,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setSelectedAddressId(null);
     setIsVerified(false);
     setVerificationTag(null);
-    setIsRecognizedBuyer(false);
     setCanSkipVerification(false);
     // The token is for the phone that was verified. Going back to change the
     // number must not carry authorisation for the old one into the new lookup.
@@ -1167,8 +1166,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           ...editFormData,
         }),
       });
+      if (response.status === 401) {
+        // Refused for want of a verification token — a trusted buyer who
+        // skipped verification. Say so, rather than appearing to do nothing.
+        setAddressAuthError(t(lang, 'verifyToManageAddresses'));
+        return;
+      }
+
       const result = await response.json();
       if (result.success) {
+        setAddressAuthError('');
         // Update local buyerData so UI reflects change immediately
         setBuyerData(prev => ({
           ...prev,
@@ -1219,8 +1226,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           verificationToken: verificationTokenRef.current,
         }),
       });
+      if (response.status === 401) {
+        // Refused for want of a verification token — a trusted buyer who
+        // skipped verification. Say so, rather than appearing to do nothing.
+        setAddressAuthError(t(lang, 'verifyToManageAddresses'));
+        return;
+      }
+
       const result = await response.json();
       if (result.success) {
+        setAddressAuthError('');
         setBuyerData(prev => ({
           ...prev,
           addresses: prev.addresses.filter(a => a.id !== addressId),
@@ -2878,16 +2893,22 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       // `otpStep !== 'form'` covers the submit-time fallback: handleSubmit can
       // still ask for verification from the review step, and without this the
       // request would have nowhere to render.
+      // The server decides who may skip: buyerData is deliberately empty until
+      // after verification, so the old `buyerData.trustLevel` test would never
+      // fire here and every trusted buyer would be sent through full
+      // verification. canSkipVerification carries that decision without PII.
       const trusted = checkoutStep === 'verify'
         && otpStep === 'form'
-        && buyerData?.trustLevel === 'trusted'
-        && isFingerprintMatched;
+        && canSkipVerification;
       pane = (
         <VerifyStep
           variant={trusted ? 'trusted' : otpStep === 'otp' ? 'otp' : 'walogin'}
           lang={lang}
           isRTL={isRTL}
           phone={formData.phone}
+          // Not available pre-verification by design — VerifyStep falls back to
+          // a name-free greeting, which is the intended trade for not
+          // disclosing who the buyer is before they prove the number is theirs.
           firstName={buyerData?.firstName}
           totalOrders={buyerData?.totalOrders || 0}
           phase={trusted ? 'verified' : 'checking'}
@@ -2928,6 +2949,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             if (target) handleEditAddress({ preventDefault() {}, stopPropagation() {} }, target);
           }}
           onDeleteAddress={(id) => handleDeleteAddress({ stopPropagation() {} }, id)}
+          authError={addressAuthError}
+          onVerifyForAddresses={() => {
+            // Send them through the normal verification step. Returning here
+            // with a token in hand is what makes the edit succeed.
+            setAddressAuthError('');
+            setCheckoutStep('verify');
+          }}
           renderEditForm={() => renderAddressEditForm()}
           newAddressNode={<>{addressFields.map(renderField)}</>}
           continueDisabled={useSaved && !effectiveAddressId}

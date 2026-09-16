@@ -163,6 +163,8 @@ export const translations = {
     verified: "Verified",
     useSavedAddress: "Use saved address",
     deleteAddress: "Delete address",
+    verifyToManageAddresses: "Verify your number to edit or remove saved addresses.",
+    verifyNow: "Verify now",
 
     // Step 4 — review
     reviewYourOrder: "Review your order",
@@ -352,6 +354,8 @@ export const translations = {
     verified: "تم التحقق",
     useSavedAddress: "استخدم عنواناً محفوظاً",
     deleteAddress: "حذف العنوان",
+    verifyToManageAddresses: "تحقق من رقمك لتعديل العناوين المحفوظة أو حذفها.",
+    verifyNow: "تحقق الآن",
 
     // Step 4 — review
     reviewYourOrder: "راجع طلبك",

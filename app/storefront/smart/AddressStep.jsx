@@ -27,6 +27,8 @@ export default function AddressStep({
   newAddressNode,
   onContinue,
   continueDisabled = false,
+  authError = '',
+  onVerifyForAddresses,
 }) {
   const hasSaved = addresses.length > 0;
 
@@ -38,6 +40,24 @@ export default function AddressStep({
           <p className="jaldi-sc-sub">{t(lang, 'savedFromLastOrders')}</p>
         )}
       </div>
+
+      {/* Editing or removing a saved address needs proof the number is theirs.
+          A trusted buyer who skipped verification lands here — offer the way
+          forward rather than leaving the button looking broken. */}
+      {authError && (
+        <div className="jaldi-sc-address-auth-notice" role="status">
+          <span>{authError}</span>
+          {onVerifyForAddresses && (
+            <button
+              type="button"
+              className="jaldi-sc-link-btn"
+              onClick={onVerifyForAddresses}
+            >
+              {t(lang, 'verifyNow')}
+            </button>
+          )}
+        </div>
+      )}
 
       {mode === 'saved' && hasSaved && (
         <div className="jaldi-sc-stack">
