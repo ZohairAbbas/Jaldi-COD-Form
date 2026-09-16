@@ -264,6 +264,25 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [focusedOtpIndex, setFocusedOtpIndex] = useState(-1);
   const otpInputRefs = useRef([]);
 
+  // Whether the server says this buyer may skip verification (trusted, on a
+  // device we have seen them use). Skipping unlocks the flow but yields no
+  // verification token, so their saved details stay withheld either way.
+  const [canSkipVerification, setCanSkipVerification] = useState(false);
+
+  // Shown when editing or deleting a saved address is refused for want of a
+  // verification token. A trusted buyer who skipped verification reaches this:
+  // they can order without verifying, but changing stored personal data needs
+  // proof the number is theirs. Without this the request failed silently.
+  const [addressAuthError, setAddressAuthError] = useState('');
+
+  // Server-issued proof that this buyer verified this phone number, handed back
+  // by otp-verify / wa-login-status. Required by buyer-lookup and the address
+  // routes before they return or modify anything personal — knowing a phone
+  // number is not proof of owning it. Held in a ref rather than state because
+  // it is never rendered and must be readable synchronously by the request that
+  // follows verification. Lives for the page session only; it expires server-side.
+  const verificationTokenRef = useRef(null);
+
   // WhatsApp verification state
   const [waLoginToken, setWaLoginToken] = useState(null);
   const [waLoginDeepLink, setWaLoginDeepLink] = useState(null);
@@ -413,6 +432,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         if (!fp || cancelled) return;
         fingerprintRef.current = fp;
         try {
+          // No verification token at this point, so this returns the phone
+          // number only — which is all this prefill uses. The buyer's saved
+          // details come later, after they verify.
           const response = await fetch(`${appPath}proxy/device-lookup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -487,6 +509,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         if (data.status === 'verified') {
           clearInterval(pollInterval);
           setWaLoginStatus('verified');
+          // Proof of this verification, needed to retrieve the buyer's saved
+          // details. Captured before handleVerificationSuccess so the lookup
+          // it triggers can already use it.
+          if (data.verificationToken) {
+            verificationTokenRef.current = data.verificationToken;
+          }
           // Either advances to the address step or places the pending order,
           // depending on where verification was triggered from.
           await handleVerificationSuccess();
@@ -568,7 +596,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       const fingerprintId = fingerprintRef.current || await getFingerprint().catch(() => null);
       if (fingerprintId) fingerprintRef.current = fingerprintId;
 
-      // Buyer lookup with fingerprint match check
+      // Before verification this returns `{exists}` and nothing else — no name,
+      // no city, no order count. Enough to greet a returning buyer; not enough
+      // to identify them to someone who merely typed their number. The saved
+      // details arrive from applyVerifiedBuyerData() once they verify.
       const response = await fetch(`${appPath}proxy/buyer-lookup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -576,38 +607,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       });
       const data = await response.json();
 
-      if (data.buyer) {
-        setBuyerData(data.buyer);
-        setIsFingerprintMatched(data.fingerprintMatch === true);
-        nextStep = resolveStepAfterPhone(data.buyer, data.fingerprintMatch === true);
-
-        if (data.buyer.trustLevel === 'trusted' && data.buyer.address) {
-          // Trusted buyer — full address autofill
-          setFormData(prev => ({
-            ...prev,
-            firstname: prev.firstname || data.buyer.firstName || '',
-            lastname: prev.lastname || data.buyer.lastName || '',
-            email: prev.email || data.buyer.email || '',
-            address: prev.address || data.buyer.address?.address || '',
-            address2: prev.address2 || data.buyer.address?.address2 || '',
-            city: prev.city || data.buyer.address?.city || data.buyer.lastCity || '',
-            province: prev.province || data.buyer.address?.province || data.buyer.lastProvince || '',
-            postalCode: prev.postalCode || data.buyer.address?.postalCode || '',
-          }));
-        } else if (data.buyer.trustLevel === 'recognized') {
-          // Recognized buyer — preview only (firstName, city, province)
-          setFormData(prev => ({
-            ...prev,
-            firstname: prev.firstname || data.buyer.firstName || '',
-            city: prev.city || data.buyer.city || '',
-            province: prev.province || data.buyer.province || '',
-          }));
-        }
-      } else {
-        setBuyerData(null);
-        setIsFingerprintMatched(false);
-        nextStep = resolveStepAfterPhone(null, false);
-      }
+      // Server's decision, not ours: a trusted buyer on a recognised device may
+      // skip verification. It arrives as a bare boolean and carries no PII.
+      setCanSkipVerification(data.canSkipVerification === true);
+      setBuyerData(null);
+      setIsFingerprintMatched(false);
+      nextStep = resolveStepAfterPhone(null, false);
     } catch (error) {
       console.error('Step 1 lookup failed:', error);
       // On error, still proceed with empty data (safe fallback)
@@ -620,6 +625,63 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     }
   };
 
+  /**
+   * Fetch and apply the buyer's saved details, after verification.
+   *
+   * This is the autofill that used to happen at phone entry. It moved here
+   * because the server will not release name, email or addresses without proof
+   * that the caller controls the number — so it can only run once we hold a
+   * verification token.
+   *
+   * Failure is non-fatal: the buyer types their details as a first-time buyer
+   * would. Never block checkout on a convenience feature.
+   */
+  const applyVerifiedBuyerData = async () => {
+    const token = verificationTokenRef.current;
+    if (!token || !formData.phone) return;
+
+    try {
+      const response = await fetch(`${appPath}proxy/buyer-lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: formData.phone,
+          fingerprintId: fingerprintRef.current || undefined,
+          verificationToken: token,
+        }),
+      });
+      const data = await response.json();
+      if (!data.buyer) return;
+
+      setBuyerData(data.buyer);
+      setIsFingerprintMatched(data.fingerprintMatch === true);
+
+      if (data.buyer.trustLevel === 'trusted' && data.buyer.address) {
+        // Full autofill, including addresses saved at other Preventify stores.
+        setFormData(prev => ({
+          ...prev,
+          firstname: prev.firstname || data.buyer.firstName || '',
+          lastname: prev.lastname || data.buyer.lastName || '',
+          email: prev.email || data.buyer.email || '',
+          address: prev.address || data.buyer.address?.address || '',
+          address2: prev.address2 || data.buyer.address?.address2 || '',
+          city: prev.city || data.buyer.address?.city || data.buyer.lastCity || '',
+          province: prev.province || data.buyer.address?.province || data.buyer.lastProvince || '',
+          postalCode: prev.postalCode || data.buyer.address?.postalCode || '',
+        }));
+      } else if (data.buyer.trustLevel === 'recognized') {
+        setFormData(prev => ({
+          ...prev,
+          firstname: prev.firstname || data.buyer.firstName || '',
+          city: prev.city || data.buyer.city || '',
+          province: prev.province || data.buyer.province || '',
+        }));
+      }
+    } catch (error) {
+      console.error('Verified buyer lookup failed:', error);
+    }
+  };
+
   // Go back to Step 1 (phone entry)
   const handleBackToPhone = () => {
     setCheckoutStep('phone');
@@ -628,6 +690,10 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setSelectedAddressId(null);
     setIsVerified(false);
     setVerificationTag(null);
+    setCanSkipVerification(false);
+    // The token is for the phone that was verified. Going back to change the
+    // number must not carry authorisation for the old one into the new lookup.
+    verificationTokenRef.current = null;
     resetVerification();
     // Keep formData intact so user doesn't lose entered data
   };
@@ -669,6 +735,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setIsVerified(true);
     setVerificationTag(tag);
 
+    // Now that the buyer has proved this number is theirs, retrieve their saved
+    // details — the autofill that used to happen at phone entry. Skipped
+    // verification yields no token, so this is a no-op in that case.
+    await applyVerifiedBuyerData();
+
     if (pendingAction) {
       await executePendingAction(skipped);
       return;
@@ -701,6 +772,12 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       });
       const data = await response.json();
       if (data.success) {
+        // Proof of this verification, needed to retrieve the buyer's saved
+        // details. Captured before handleVerificationSuccess so the lookup it
+        // triggers can already use it.
+        if (data.verificationToken) {
+          verificationTokenRef.current = data.verificationToken;
+        }
         // OTP verified — advance, or place the pending order.
         await handleVerificationSuccess();
       } else {
@@ -1083,11 +1160,22 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         body: JSON.stringify({
           phone: formData.phone,
           addressId,
+          // The server no longer treats knowing the phone number as proof of
+          // owning the address.
+          verificationToken: verificationTokenRef.current,
           ...editFormData,
         }),
       });
+      if (response.status === 401) {
+        // Refused for want of a verification token — a trusted buyer who
+        // skipped verification. Say so, rather than appearing to do nothing.
+        setAddressAuthError(t(lang, 'verifyToManageAddresses'));
+        return;
+      }
+
       const result = await response.json();
       if (result.success) {
+        setAddressAuthError('');
         // Update local buyerData so UI reflects change immediately
         setBuyerData(prev => ({
           ...prev,
@@ -1130,10 +1218,24 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       const response = await fetch(`${appPath}proxy/address-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone, addressId }),
+        body: JSON.stringify({
+          phone: formData.phone,
+          addressId,
+          // The server no longer treats knowing the phone number as proof of
+          // owning the address.
+          verificationToken: verificationTokenRef.current,
+        }),
       });
+      if (response.status === 401) {
+        // Refused for want of a verification token — a trusted buyer who
+        // skipped verification. Say so, rather than appearing to do nothing.
+        setAddressAuthError(t(lang, 'verifyToManageAddresses'));
+        return;
+      }
+
       const result = await response.json();
       if (result.success) {
+        setAddressAuthError('');
         setBuyerData(prev => ({
           ...prev,
           addresses: prev.addresses.filter(a => a.id !== addressId),
@@ -1390,7 +1492,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     // If OTP/verification is enabled, trigger WhatsApp-first verification.
     // Skipped when the buyer already verified at step 2 of Smart Checkout, and
     // for trusted buyers (verified within 90 days + have previous orders).
-    if (config.settings?.enableOTP && !isVerified && (!isSmartCheckout || !(buyerData?.trustLevel === 'trusted' && isFingerprintMatched))) {
+    if (config.settings?.enableOTP && !isVerified && (!isSmartCheckout || !canSkipVerification)) {
       setPendingOrderData(orderData);
       setPendingAction('cod');
       setOtpStep('whatsapp'); // Show WhatsApp verification screen
@@ -1582,7 +1684,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
       // Gate card payment behind verification too, with the same exemptions:
       // already verified at step 2, or a trusted fingerprint-matched buyer.
-      if (config.settings?.enableOTP && !isVerified && (!isSmartCheckout || !(buyerData?.trustLevel === 'trusted' && isFingerprintMatched))) {
+      if (config.settings?.enableOTP && !isVerified && (!isSmartCheckout || !canSkipVerification)) {
         pendingCardPayloadRef.current = cardPayload;
         setPendingAction('card');
         setOtpStep('whatsapp');
@@ -2791,16 +2893,22 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       // `otpStep !== 'form'` covers the submit-time fallback: handleSubmit can
       // still ask for verification from the review step, and without this the
       // request would have nowhere to render.
+      // The server decides who may skip: buyerData is deliberately empty until
+      // after verification, so the old `buyerData.trustLevel` test would never
+      // fire here and every trusted buyer would be sent through full
+      // verification. canSkipVerification carries that decision without PII.
       const trusted = checkoutStep === 'verify'
         && otpStep === 'form'
-        && buyerData?.trustLevel === 'trusted'
-        && isFingerprintMatched;
+        && canSkipVerification;
       pane = (
         <VerifyStep
           variant={trusted ? 'trusted' : otpStep === 'otp' ? 'otp' : 'walogin'}
           lang={lang}
           isRTL={isRTL}
           phone={formData.phone}
+          // Not available pre-verification by design — VerifyStep falls back to
+          // a name-free greeting, which is the intended trade for not
+          // disclosing who the buyer is before they prove the number is theirs.
           firstName={buyerData?.firstName}
           totalOrders={buyerData?.totalOrders || 0}
           phase={trusted ? 'verified' : 'checking'}
@@ -2841,6 +2949,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
             if (target) handleEditAddress({ preventDefault() {}, stopPropagation() {} }, target);
           }}
           onDeleteAddress={(id) => handleDeleteAddress({ stopPropagation() {} }, id)}
+          authError={addressAuthError}
+          onVerifyForAddresses={() => {
+            // Send them through the normal verification step. Returning here
+            // with a token in hand is what makes the edit succeed.
+            setAddressAuthError('');
+            setCheckoutStep('verify');
+          }}
           renderEditForm={() => renderAddressEditForm()}
           newAddressNode={<>{addressFields.map(renderField)}</>}
           continueDisabled={useSaved && !effectiveAddressId}

@@ -615,6 +615,35 @@
   line-height: var(--lh-body);
 }
 
+/* Shown when editing or removing a saved address needs verification first.
+   Informational rather than an error — the buyer has done nothing wrong, they
+   just need to prove the number is theirs before changing what is stored. */
+.jaldi-sc-address-auth-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  font-size: var(--fs-body-sm);
+  color: var(--ink);
+  line-height: var(--lh-body);
+}
+
+.jaldi-sc-link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--fw-bold);
+  color: #2563eb;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .jaldi-sc-label {
   display: block;
   margin-bottom: var(--sp-3);

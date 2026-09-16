@@ -3,7 +3,7 @@ import { normalizePrice, parseJsonColumn } from "../lib/constants";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
-import { resolveOrderVerification } from "../lib/verification.server";
+import { resolveOrderVerification, isGenuineVerification } from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -353,6 +353,8 @@ export const action = async ({ request }) => {
         country: address.country,
         countryCode: data.countryCode || "PAK",
         paymentMethod: "card",
+        // Only a genuine verification refreshes the trust window.
+        verified: isGenuineVerification(verificationMethod),
       }).catch((err) =>
         console.error("[draft-order] Failed to update global buyer:", err)
       );

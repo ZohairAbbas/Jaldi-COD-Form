@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { lookupGlobalBuyer } from "../lib/buyer.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { verifyVerificationToken } from "../lib/verification.server";
 
 /**
  * Device-based buyer lookup (Layer 2 fallback when localStorage is empty)
@@ -15,14 +16,20 @@ export const action = async ({ request }) => {
   }
 
   try {
-    // Turns a device fingerprint into a phone number, and a trusted buyer's full
-    // profile — previously for any caller, with no shop named. The proxy
-    // signature now limits this to real storefronts (PRV-2 adds the
-    // verification requirement on top).
-    const { data, errorResponse } = await authenticateJsonProxyRequest(request);
+    // Turns a device fingerprint into a phone number, and a trusted buyer's
+    // full profile. The fingerprint is not a secret — it is derived from
+    // browser characteristics and is guessable in principle — so it cannot
+    // stand in for proof of identity.
+    //
+    // The phone number alone is returned for a fingerprint match, which is what
+    // makes returning-buyer prefill work on a known device. The buyer's saved
+    // details require a verification token for that same number, exactly as in
+    // buyer-lookup.
+    const { data, shopDomain, errorResponse } =
+      await authenticateJsonProxyRequest(request);
     if (errorResponse) return errorResponse;
 
-    const { fingerprintId } = data;
+    const { fingerprintId, verificationToken } = data;
 
     if (!fingerprintId || typeof fingerprintId !== "string") {
       return Response.json({ phone: null });
@@ -46,6 +53,20 @@ export const action = async ({ request }) => {
       .catch((err) =>
         console.error("[device-lookup] Failed to update lastSeenAt:", err)
       );
+
+    // Without a token proving control of this number, the phone is all the
+    // caller gets — enough to prefill the field they were going to type anyway,
+    // and enough for the form to offer verification.
+    const verified = Boolean(
+      verifyVerificationToken(verificationToken, {
+        phone: deviceRecord.phone,
+        shopDomain,
+      })
+    );
+
+    if (!verified) {
+      return Response.json({ phone: deviceRecord.phone });
+    }
 
     const buyer = await lookupGlobalBuyer(deviceRecord.phone);
 

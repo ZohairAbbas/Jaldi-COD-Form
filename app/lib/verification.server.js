@@ -188,6 +188,26 @@ export async function resolveOrderVerification(shopId, phone, options = {}) {
   return resolved;
 }
 
+/**
+ * Whether a resolved verification tag represents a genuine verification event.
+ *
+ * `trusted_buyer_verified` is deliberately excluded: it records that the buyer
+ * was allowed to skip verification, not that they performed one. Counting it
+ * would let the trust window renew itself indefinitely off its own output — a
+ * buyer verifies once, then every later order refreshes the window without
+ * anyone verifying again, and the 90-day bound stops meaning anything.
+ *
+ * @param {string} tag A VERIFICATION_TAGS value.
+ * @returns {boolean}
+ */
+export function isGenuineVerification(tag) {
+  return (
+    tag === VERIFICATION_TAGS.WHATSAPP_LOGIN ||
+    tag === VERIFICATION_TAGS.WHATSAPP_OTP ||
+    tag === VERIFICATION_TAGS.SMS_OTP
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Verification tokens
 // ---------------------------------------------------------------------------
