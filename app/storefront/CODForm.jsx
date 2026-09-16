@@ -268,7 +268,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [waLoginToken, setWaLoginToken] = useState(null);
   const [waLoginDeepLink, setWaLoginDeepLink] = useState(null);
   const [waLoginStatus, setWaLoginStatus] = useState('idle'); // 'idle' | 'waiting' | 'verified'
-  const [verifyMethod, setVerifyMethod] = useState('whatsapp-login'); // 'whatsapp-login' | 'whatsapp-otp' | 'sms-otp'
+  const [verifyMethod, setVerifyMethod] = useState('whatsapp-login'); // 'whatsapp-login' | 'whatsapp-otp'
   const [waError, setWaError] = useState('');
   const waPollingRef = useRef(null);
   const [pendingAction, setPendingAction] = useState(null); // 'cod' | 'card' — what to do after verification
@@ -682,30 +682,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
     setCheckoutStep('address');
   };
 
-  // Send OTP to customer's phone
-  const handleSendOtp = async () => {
-    setIsSendingOtp(true);
-    setOtpError('');
-    setOtpCode('');
-    try {
-      const response = await fetch(`${appPath}proxy/otp-send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop: config.shopDomain, phone: formData.phone }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        setOtpStep('otp');
-        setOtpCountdown(60); // 60 second cooldown for resend
-      } else {
-        setOtpError(data.error || t(lang, 'failedToSendOTP'));
-      }
-    } catch (error) {
-      setOtpError(t(lang, 'failedToSendOTP'));
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
+  // The SMS OTP sender was removed with the smsmobileapi provider. WhatsApp is
+  // the only verification channel; see handleSendWhatsAppOtp.
 
   // Verify OTP and submit order
   const handleVerifyOtp = async () => {
@@ -806,12 +784,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
       setIsSendingOtp(false);
     }
   };
-
-  // Switch to SMS OTP (most expensive fallback) — disabled, re-enable when smsmobileapi is active
-  // const handleSwitchToSmsOtp = async () => {
-  //   setVerifyMethod('sms-otp');
-  //   await handleSendOtp(); // Existing SMS OTP handler
-  // };
 
   // Reset WhatsApp verification state
   const resetVerification = () => {
@@ -4040,34 +4012,6 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                 {t(lang, 'sendWhatsAppOTP')}
               </button>
 
-              {/* SMS OTP fallback disabled — re-enable when smsmobileapi is active
-              <button
-                type="button"
-                onClick={handleSwitchToSmsOtp}
-                disabled={isSendingOtp}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#6B7280',
-                  border: '1px solid #E5E7EB',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: isSendingOtp ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                Send SMS OTP
-              </button>
-              */}
             </div>
           )}
 

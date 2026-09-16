@@ -118,13 +118,22 @@ function BuyerProfilePanel({ profile, onClose }) {
         </button>
       </div>
 
-      {/* Buyer info */}
+      {/* Buyer info. Name and email are withheld for buyers who have never
+          ordered from this shop — the network risk figures below are still
+          shown in full. Saying so explicitly beats rendering a bare "Unknown",
+          which reads like missing data rather than a deliberate boundary. */}
       <div style={{ marginBottom: "20px" }}>
         <div style={{ fontSize: "14px", fontWeight: "600" }}>
           {[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Unknown"}
         </div>
         <div style={{ fontSize: "13px", color: "#6b7177", marginTop: "4px" }}>{profile.phone}</div>
         {profile.email && <div style={{ fontSize: "13px", color: "#6b7177" }}>{profile.email}</div>}
+        {!profile.isOwnCustomer && (
+          <div style={{ fontSize: "12px", color: "#8c9196", marginTop: "6px" }}>
+            Contact details are hidden — this buyer has not ordered from your store.
+            Network risk data is shown below.
+          </div>
+        )}
       </div>
 
       {/* Network risk */}

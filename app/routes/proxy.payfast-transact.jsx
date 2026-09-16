@@ -7,6 +7,7 @@ import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import prisma from "../db.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { resolveOrderVerification } from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -130,6 +131,13 @@ export const action = async ({ request }) => {
       console.error("[PayFast] Risk scoring failed (non-blocking):", riskErr);
     }
 
+    // Resolved from the database rather than taken from the request — see
+    // proxy.order.jsx. Same tag strings; only their truthfulness changes.
+    const verificationMethod = await resolveOrderVerification(shop.id, data.phone, {
+      clientClaim: data.verificationMethod || null,
+      allowTrustedBypass: shop.settings?.enableOTP !== false,
+    });
+
     const admin = {
       accessToken: shop.accessToken,
       graphql: async (query, options) => {
@@ -197,7 +205,7 @@ export const action = async ({ request }) => {
         utmData: data.pixelAttribution || {},
         countryCode: data.countryCode,
         presentmentCurrencyCode: data.presentmentCurrencyCode,
-        verificationMethod: data.verificationMethod,
+        verificationMethod,
         riskData,
         // PayFast-specific overrides (applied inside createShopifyOrder via spread)
         _financialStatus: "paid",
@@ -242,7 +250,7 @@ export const action = async ({ request }) => {
         riskLevel: riskData?.riskLevel || null,
         shopifyOrderId: shopifyResult.orderId,
         shopifyOrderNumber: shopifyResult.orderNumber,
-        verificationMethod: data.verificationMethod || null,
+        verificationMethod, // Server-resolved, so the DB matches the Shopify tag
         customFields: JSON.stringify({
           ...(typeof data.customFields === "string"
             ? JSON.parse(data.customFields || "{}")

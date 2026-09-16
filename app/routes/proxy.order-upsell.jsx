@@ -1,5 +1,6 @@
 import { getCurrencyCode } from "../lib/constants";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { verifyOrderToken } from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -11,21 +12,46 @@ export const action = async ({ request }) => {
     // field the storefront sends is deliberately not read: this route commits an
     // order edit against a live Shopify order, so accepting a caller-supplied
     // shop let anyone add line items to any order of any installed shop.
-    //
-    // NOTE (PRV-3): a valid signature proves the request came through this shop,
-    // not that this caller placed *this* order. Binding the caller to
-    // `shopifyOrderId` needs an order token issued at creation — tracked
-    // separately; this change closes the cross-shop half only.
     const { data, shop, errorResponse } = await authenticateJsonProxyRequest(request);
     if (errorResponse) return errorResponse;
 
-    const { shopifyOrderId, upsellItem } = data;
+    const { shopifyOrderId, upsellItem, orderToken } = data;
 
     if (!shopifyOrderId || !upsellItem) {
       return Response.json(
         { error: "Missing required fields: shopifyOrderId, upsellItem" },
         { status: 400 }
       );
+    }
+
+    // The signature proves the request came through this shop, not that this
+    // caller placed *this* order — so without the token any buyer on the store
+    // could add line items to any other order of the same store. The token is
+    // issued in the order-creation response and bound to that order id.
+    //
+    // Staged like PRV-1: `log` records what would have been rejected so a
+    // cached storefront bundle that predates the token doesn't break the
+    // post-purchase upsell mid-rollout. Flip to `enforce` once the deployed
+    // bundle is sending it.
+    const tokenValid = verifyOrderToken(orderToken, {
+      shopifyOrderId,
+      shopDomain: shop.shopifyDomain,
+    });
+
+    if (!tokenValid) {
+      const enforcing = process.env.PROXY_AUTH_MODE === "enforce";
+      console.warn(
+        "[order-upsell] " +
+          JSON.stringify({
+            event: "missing_or_invalid_order_token",
+            shop: shop.shopifyDomain,
+            hadToken: Boolean(orderToken),
+            mode: enforcing ? "enforce" : "log",
+          })
+      );
+      if (enforcing) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
     }
 
     // Extract numeric variant ID from GID
