@@ -43,10 +43,18 @@ function getTrustLevel(buyer) {
 
 /**
  * Look up a buyer globally by phone number.
+ *
  * Returns trust-appropriate data:
  * - Trusted: full name, email, complete address
  * - Recognized: firstName, city, province only
  * - Unknown: null
+ *
+ * IMPORTANT: this returns cross-merchant PII and performs no authorisation of
+ * its own. Knowing a phone number is not proof of owning it, so every caller
+ * that can be reached from a storefront must establish that separately — see
+ * `proxy.buyer-lookup`, which requires a verification token before calling this
+ * at all. Kept as a pure data function so the authorisation decision lives at
+ * the route, in one place, rather than being half-enforced here.
  */
 export async function lookupGlobalBuyer(phone) {
   const normalized = normalizePhone(phone);
@@ -116,32 +124,52 @@ export async function lookupGlobalBuyer(phone) {
 
 /**
  * Mark a buyer as verified (called after OTP verification or WhatsApp login).
- * Updates lastVerifiedAt which promotes them to "trusted" if they have orders.
+ * Updates lastVerifiedAt, which promotes them to "trusted" if they have orders.
+ *
+ * Upserts rather than updates. A first-time buyer verifies *before* placing
+ * their first order, so there is no row yet; the previous version swallowed
+ * that case and returned null, discarding the verification. It didn't show
+ * because upsertGlobalBuyer then stamped lastVerifiedAt on the order anyway —
+ * now that it only does so for genuinely verified orders, losing this write
+ * would mean a buyer who verified never became trusted.
  */
 export async function markBuyerVerified(phone) {
   const normalized = normalizePhone(phone);
   if (!normalized) return null;
 
-  try {
-    return await prisma.globalBuyer.update({
-      where: { phone: normalized },
-      data: { lastVerifiedAt: new Date() },
-    });
-  } catch (error) {
-    // Buyer might not exist yet (first-time user verifying OTP before any order)
-    // That's fine — they'll get created when they place their first order
-    if (error.code === "P2025") return null;
-    throw error;
-  }
+  return prisma.globalBuyer.upsert({
+    where: { phone: normalized },
+    update: { lastVerifiedAt: new Date() },
+    create: { phone: normalized, lastVerifiedAt: new Date() },
+  });
 }
 
 /**
  * Create or update GlobalBuyer + BuyerAddress + ShopBuyerProfile.
  * Called after successful order creation (dual-write alongside CustomerProfile).
+ *
+ * `lastVerifiedAt` is written ONLY when this order was genuinely verified.
+ * It used to be stamped on every order regardless, which — combined with the
+ * `totalOrdersGlobal >= 1` half of the trust test — made essentially every
+ * buyer who had ever ordered "trusted", and so released full name, email and
+ * the entire cross-merchant address book to anyone who knew their phone number.
+ * The trust gate was effectively no gate.
+ *
+ * A verified order also refreshes the window, so an active buyer who keeps
+ * verifying never falls out of it.
+ *
+ * @param {string} shopId
+ * @param {object} orderData
+ * @param {boolean} [orderData.verified] Whether this order carried genuine
+ *   verification. Callers pass the server-resolved value, never the client's claim.
  */
 export async function upsertGlobalBuyer(shopId, orderData) {
   const phone = normalizePhone(orderData.phone);
   if (!phone) return null;
+
+  // Only a genuine verification moves the window. `undefined` rather than a
+  // date leaves the stored value untouched on update.
+  const verifiedAt = orderData.verified ? new Date() : undefined;
 
   // 1. Upsert GlobalBuyer
   const buyer = await prisma.globalBuyer.upsert({
@@ -151,7 +179,7 @@ export async function upsertGlobalBuyer(shopId, orderData) {
       lastName: orderData.lastName,
       email: orderData.email || undefined,
       totalOrdersGlobal: { increment: 1 },
-      lastVerifiedAt: new Date(),
+      ...(verifiedAt && { lastVerifiedAt: verifiedAt }),
       // Smart defaults: track last-used city/province and payment method
       ...(orderData.city && { lastCity: orderData.city }),
       ...(orderData.province && { lastProvince: orderData.province }),
@@ -165,7 +193,7 @@ export async function upsertGlobalBuyer(shopId, orderData) {
       lastName: orderData.lastName,
       email: orderData.email || null,
       totalOrdersGlobal: 1,
-      lastVerifiedAt: new Date(),
+      lastVerifiedAt: verifiedAt || null,
       lastCity: orderData.city || null,
       lastProvince: orderData.province || null,
       preferredPaymentMethod: orderData.paymentMethod || null,

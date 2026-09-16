@@ -9,7 +9,11 @@ import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { sendWhatsAppReply } from "../lib/whatsapp.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
-import { resolveOrderVerification, issueOrderToken } from "../lib/verification.server";
+import {
+  resolveOrderVerification,
+  issueOrderToken,
+  isGenuineVerification,
+} from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -343,6 +347,9 @@ export const action = async ({ request }) => {
         country: orderData.country,
         countryCode: orderData.countryCode || "PAK",
         paymentMethod: orderData.paymentMethod || "cod",
+        // Only a genuine verification refreshes the trust window. Previously
+        // every order did, which made almost every buyer permanently "trusted".
+        verified: isGenuineVerification(verificationMethod),
       });
     } catch (globalBuyerError) {
       console.error("Failed to upsert global buyer:", globalBuyerError);

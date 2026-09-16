@@ -20,6 +20,7 @@ const {
   verifyVerificationToken,
   issueOrderToken,
   verifyOrderToken,
+  isGenuineVerification,
   VERIFICATION_TAGS,
 } = await import("./verification.server");
 
@@ -249,6 +250,31 @@ describe("verification tokens", () => {
     expect(
       verifyVerificationToken(token, { phone: "+923001234567", shopDomain: SHOP })
     ).not.toBeNull();
+  });
+});
+
+describe("isGenuineVerification", () => {
+  test("real verification channels count", () => {
+    expect(isGenuineVerification(VERIFICATION_TAGS.WHATSAPP_LOGIN)).toBe(true);
+    expect(isGenuineVerification(VERIFICATION_TAGS.WHATSAPP_OTP)).toBe(true);
+    expect(isGenuineVerification(VERIFICATION_TAGS.SMS_OTP)).toBe(true);
+  });
+
+  // The trust window must not renew itself off its own output: if skipping
+  // verification counted as verifying, one verification would keep a buyer
+  // trusted forever and the 90-day bound would never expire.
+  test("the trusted bypass does not count as a verification", () => {
+    expect(isGenuineVerification(VERIFICATION_TAGS.TRUSTED_BUYER)).toBe(false);
+  });
+
+  test("skipped does not count", () => {
+    expect(isGenuineVerification(VERIFICATION_TAGS.SKIPPED)).toBe(false);
+  });
+
+  test("unknown values do not count", () => {
+    for (const bad of [null, undefined, "", "something_else"]) {
+      expect(isGenuineVerification(bad)).toBe(false);
+    }
   });
 });
 

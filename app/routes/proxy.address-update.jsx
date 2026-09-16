@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { normalizePhone } from "../lib/buyer.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { verifyVerificationToken } from "../lib/verification.server";
 
 /**
  * Update a saved BuyerAddress (label and/or address fields).
@@ -18,11 +19,12 @@ export const action = async ({ request }) => {
   }
 
   try {
-    // Ownership is currently established by knowing the phone number alone,
-    // which anyone can guess. The proxy signature restricts callers to real
-    // storefronts; PRV-2 replaces the phone-as-proof check with a verified
-    // session token.
-    const { data, errorResponse } = await authenticateJsonProxyRequest(request);
+    // Ownership was established by knowing the phone number alone, which anyone
+    // can guess — so this edits a stranger's saved address. It now requires a
+    // verification token for that same number, issued only after WhatsApp login
+    // or an OTP.
+    const { data, shopDomain, errorResponse } =
+      await authenticateJsonProxyRequest(request);
     if (errorResponse) return errorResponse;
 
     const { phone, addressId, label, address, address2, city, province, postalCode } =
@@ -30,6 +32,13 @@ export const action = async ({ request }) => {
 
     if (!addressId || !phone) {
       return Response.json({ success: false, error: "Missing required fields" }, { status: 400 });
+    }
+
+    if (!verifyVerificationToken(data.verificationToken, { phone, shopDomain })) {
+      return Response.json(
+        { success: false, error: "Verification required" },
+        { status: 401 }
+      );
     }
 
     const normalized = normalizePhone(phone);

@@ -1,6 +1,7 @@
 import { verifyOTP } from "../lib/sms.server";
 import { markBuyerVerified } from "../lib/buyer.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { issueVerificationToken, VERIFICATION_TAGS } from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -29,6 +30,18 @@ export const action = async ({ request }) => {
       } catch (err) {
         console.error("Failed to mark buyer verified:", err);
       }
+
+      // The token is what later releases this buyer's saved details. Issued
+      // only here and on WhatsApp login — the two points where the server has
+      // actually seen proof the caller controls this number.
+      return Response.json({
+        ...result,
+        verificationToken: issueVerificationToken({
+          phone,
+          shopDomain: shopData.shopifyDomain,
+          method: VERIFICATION_TAGS.WHATSAPP_OTP,
+        }),
+      });
     }
 
     return Response.json(result);

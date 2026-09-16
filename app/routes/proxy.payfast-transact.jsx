@@ -7,7 +7,7 @@ import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import prisma from "../db.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
-import { resolveOrderVerification } from "../lib/verification.server";
+import { resolveOrderVerification, isGenuineVerification } from "../lib/verification.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -281,6 +281,8 @@ export const action = async ({ request }) => {
         country: data.country,
         countryCode: data.countryCode || "PAK",
         paymentMethod: "payfast",
+        // Only a genuine verification refreshes the trust window.
+        verified: isGenuineVerification(verificationMethod),
       });
     } catch (buyerErr) {
       console.error("[PayFast] Failed to upsert global buyer:", buyerErr);
