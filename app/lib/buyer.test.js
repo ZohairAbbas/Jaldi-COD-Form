@@ -90,6 +90,38 @@ describe("upsertGlobalBuyer — lastVerifiedAt", () => {
   });
 });
 
+describe("upsertGlobalBuyer — what counts as an order (PRV-8)", () => {
+  test("a real order increments the total", async () => {
+    await upsertGlobalBuyer(SHOP_ID, orderData());
+
+    const call = mockUpsert.mock.calls[0][0];
+    expect(call.update.totalOrdersGlobal).toEqual({ increment: 1 });
+    expect(call.create.totalOrdersGlobal).toBe(1);
+  });
+
+  // A card draft is an intent to pay, not a purchase. Counting it inflated the
+  // buyer's order history and so their risk score.
+  test("a draft order does not increment the total", async () => {
+    await upsertGlobalBuyer(SHOP_ID, orderData({ countsAsOrder: false }));
+
+    const call = mockUpsert.mock.calls[0][0];
+    expect(call.update.totalOrdersGlobal).toBeUndefined();
+    expect(call.create.totalOrdersGlobal).toBe(0);
+  });
+
+  test("a draft order still records the buyer's profile details", async () => {
+    await upsertGlobalBuyer(
+      SHOP_ID,
+      orderData({ countsAsOrder: false, city: "Karachi", paymentMethod: "card" })
+    );
+
+    const call = mockUpsert.mock.calls[0][0];
+    expect(call.update.firstName).toBe("Ada");
+    expect(call.update.lastCity).toBe("Karachi");
+    expect(call.update.preferredPaymentMethod).toBe("card");
+  });
+});
+
 describe("markBuyerVerified", () => {
   // Previously an update(), which threw P2025 for a buyer with no row and was
   // swallowed — discarding the verification. It went unnoticed because

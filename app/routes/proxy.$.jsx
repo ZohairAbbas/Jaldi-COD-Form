@@ -661,7 +661,13 @@ async function handleCourierifySync(request) {
     const result = await syncCourierifyData();
     const duration = Date.now() - startTime;
 
-    await logCronJob("courierify-sync", "completed", {
+    // A connection failure is logged `failed`, not `completed`. It previously
+    // reported success with 0 errors, so cron-health stayed green for as long
+    // as the connection was down. An absent env var is still a skip — that is
+    // a configuration choice, not a fault.
+    const status = result.failed ? "failed" : "completed";
+
+    await logCronJob("courierify-sync", status, {
       message: result.skipped
         ? `Skipped: ${result.reason}`
         : `Enriched ${result.phonesEnriched} buyers, imported ${result.recordsImported} records`,
@@ -673,7 +679,7 @@ async function handleCourierifySync(request) {
     // Spread first so the derived fields below always win.
     return Response.json({
       ...result,
-      success: (result.errors ?? 0) === 0,
+      success: !result.failed && (result.errors ?? 0) === 0,
       errors: result.errors ?? 0,
       duration: `${duration}ms`,
     });

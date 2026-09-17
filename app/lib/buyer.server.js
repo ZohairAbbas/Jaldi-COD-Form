@@ -162,6 +162,10 @@ export async function markBuyerVerified(phone) {
  * @param {object} orderData
  * @param {boolean} [orderData.verified] Whether this order carried genuine
  *   verification. Callers pass the server-resolved value, never the client's claim.
+ * @param {boolean} [orderData.countsAsOrder=true] Whether to increment the order
+ *   total. Draft orders pass false: a card draft is an intent to pay, not a
+ *   purchase, and counting it inflated every buyer's order history and so their
+ *   risk score. The buyer's profile details are still recorded.
  */
 export async function upsertGlobalBuyer(shopId, orderData) {
   const phone = normalizePhone(orderData.phone);
@@ -170,6 +174,7 @@ export async function upsertGlobalBuyer(shopId, orderData) {
   // Only a genuine verification moves the window. `undefined` rather than a
   // date leaves the stored value untouched on update.
   const verifiedAt = orderData.verified ? new Date() : undefined;
+  const countsAsOrder = orderData.countsAsOrder !== false;
 
   // 1. Upsert GlobalBuyer
   const buyer = await prisma.globalBuyer.upsert({
@@ -178,7 +183,7 @@ export async function upsertGlobalBuyer(shopId, orderData) {
       firstName: orderData.firstName,
       lastName: orderData.lastName,
       email: orderData.email || undefined,
-      totalOrdersGlobal: { increment: 1 },
+      ...(countsAsOrder && { totalOrdersGlobal: { increment: 1 } }),
       ...(verifiedAt && { lastVerifiedAt: verifiedAt }),
       // Smart defaults: track last-used city/province and payment method
       ...(orderData.city && { lastCity: orderData.city }),
@@ -192,7 +197,7 @@ export async function upsertGlobalBuyer(shopId, orderData) {
       firstName: orderData.firstName,
       lastName: orderData.lastName,
       email: orderData.email || null,
-      totalOrdersGlobal: 1,
+      totalOrdersGlobal: countsAsOrder ? 1 : 0,
       lastVerifiedAt: verifiedAt || null,
       lastCity: orderData.city || null,
       lastProvince: orderData.province || null,

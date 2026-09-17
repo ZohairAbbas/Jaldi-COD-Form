@@ -355,6 +355,16 @@ export const action = async ({ request }) => {
         paymentMethod: "card",
         // Only a genuine verification refreshes the trust window.
         verified: isGenuineVerification(verificationMethod),
+        // A draft order is an intent to pay, not a purchase — the buyer may
+        // never complete checkout. Counting it inflated their order history and
+        // so their risk score.
+        //
+        // When payment does go through, webhooks.orders.create writes the Order
+        // row, and recalculateBuyerRisk derives totalOrdersGlobal by counting
+        // Order rows from source (see risk.server) — so the completed purchase
+        // is counted there rather than being lost. That derivation is what makes
+        // skipping the increment here safe.
+        countsAsOrder: false,
       }).catch((err) =>
         console.error("[draft-order] Failed to update global buyer:", err)
       );
