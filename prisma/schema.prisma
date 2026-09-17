@@ -136,6 +136,10 @@ model Settings {
   buttonFontSize               Int      @default(16)
   buttonIcon                   String   @default("cart")
   buttonShadow                 Int      @default(4)
+  // Vertical gap between the theme's buy buttons and the injected COD button
+  // (product page, default placement only). Defaults keep the historical 20px.
+  buttonSpacingTop             Int      @default(20)
+  buttonSpacingBottom          Int      @default(20)
   allowCartItems               Boolean  @default(true)
   enableRTL                    Boolean  @default(false)
   buttonPageVisibility         String   @default("both")

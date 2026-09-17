@@ -403,6 +403,21 @@ export default function FormDesigner() {
                         box-shadow: 0 ${(settings.buttonShadow || 4) + 4}px ${((settings.buttonShadow || 4) + 4) * 2}px rgba(0, 0, 0, 0.15) !important;
                       }
                     `}</style>
+                    {/* Stand-in for the theme's Add to Cart so the configured
+                        spacing above the COD button is visible in the preview */}
+                    <div
+                      style={{
+                        padding: "14px 32px",
+                        border: "1px dashed #b5b5b5",
+                        borderRadius: `${settings.buttonBorderRadius || 4}px`,
+                        color: "#8a8a8a",
+                        fontSize: "14px",
+                        textAlign: "center",
+                      }}
+                    >
+                      Theme&apos;s Add to Cart
+                    </div>
+                    <div style={{ paddingTop: `${settings.buttonSpacingTop ?? 20}px`, paddingBottom: `${settings.buttonSpacingBottom ?? 20}px` }}>
                     <button
                       className="preview-button"
                       style={{
@@ -477,6 +492,7 @@ export default function FormDesigner() {
                       })()}
                       {settings.buttonText || "Buy with Cash on Delivery"}
                     </button>
+                    </div>
                   </s-box>
                   <s-text variant="body-sm" tone="subdued">
                     This is how your button will appear on product and cart pages. Hover over the button to see the shadow effect.

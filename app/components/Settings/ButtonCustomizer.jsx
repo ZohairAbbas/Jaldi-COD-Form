@@ -259,6 +259,44 @@ export default function ButtonCustomizer({ settings, onUpdate }) {
         </s-text>
       </s-stack>
 
+      {/* Spacing Above */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">
+          Spacing Above: {settings.buttonSpacingTop ?? 20}px
+        </s-text>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={settings.buttonSpacingTop ?? 20}
+          onChange={(e) => handleChange("buttonSpacingTop", parseInt(e.target.value))}
+          style={{ width: "100%" }}
+        />
+        <s-text variant="body-sm" tone="subdued">
+          Gap between your theme&apos;s buy buttons and the COD button (0px - 100px).
+          Lower this if the COD button sits too far below Add to Cart.
+        </s-text>
+      </s-stack>
+
+      {/* Spacing Below */}
+      <s-stack direction="block" gap="tight">
+        <s-text variant="heading-sm">
+          Spacing Below: {settings.buttonSpacingBottom ?? 20}px
+        </s-text>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={settings.buttonSpacingBottom ?? 20}
+          onChange={(e) => handleChange("buttonSpacingBottom", parseInt(e.target.value))}
+          style={{ width: "100%" }}
+        />
+        <s-text variant="body-sm" tone="subdued">
+          Gap below the COD button (0px - 100px). Applies to the default button
+          position on product pages.
+        </s-text>
+      </s-stack>
+
       {/* Animation */}
       <s-stack direction="block" gap="tight">
         <s-text variant="heading-sm">Animation</s-text>

@@ -17,7 +17,10 @@ export default function SectionManager({ sections, onUpdate }) {
     shippingAddress: "Enter your shipping address",
   };
 
-  const updateLabel = (sectionId, value) => {
+  // Sections rendered as collapsible cards on the storefront
+  const collapsibleTypes = ["orderSummary", "shippingMethod"];
+
+  const updateLabel =(sectionId, value) => {
     const updated = sections.map((section) =>
       section.id === sectionId
         ? { ...section, customLabel: value }
@@ -30,6 +33,15 @@ export default function SectionManager({ sections, onUpdate }) {
     const updated = sections.map((section) =>
       section.id === sectionId
         ? { ...section, headingAlign: value }
+        : section,
+    );
+    onUpdate(updated);
+  };
+
+  const updateDefaultCollapsed = (sectionId, collapsed) => {
+    const updated = sections.map((section) =>
+      section.id === sectionId
+        ? { ...section, defaultCollapsed: collapsed }
         : section,
     );
     onUpdate(updated);
@@ -250,6 +262,43 @@ export default function SectionManager({ sections, onUpdate }) {
                     </button>
                   ))}
                 </div>
+
+                {/* Default open/closed state for collapsible cards */}
+                {collapsibleTypes.includes(section.type) && (
+                  <>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#6D7175', margin: '10px 0 4px' }}>
+                      Default state
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {[
+                        { label: 'Expanded', collapsed: false },
+                        { label: 'Collapsed', collapsed: true },
+                      ].map(({ label, collapsed }) => {
+                        const active = !!section.defaultCollapsed === collapsed;
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => updateDefaultCollapsed(section.id, collapsed)}
+                            style={{
+                              flex: 1,
+                              padding: '6px',
+                              borderRadius: '6px',
+                              border: active ? '2px solid #000' : '1px solid #D1D5DB',
+                              backgroundColor: active ? '#F5F5F5' : '#fff',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: active ? '600' : '400',
+                              color: '#202223',
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

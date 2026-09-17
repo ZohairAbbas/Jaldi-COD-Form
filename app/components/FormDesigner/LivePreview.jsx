@@ -289,7 +289,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                   justifyContent: "space-between",
                   padding: "14px 16px",
                   backgroundColor: "#f9fafb",
-                  borderBottom: "1px solid #E5E7EB",
+                  borderBottom: section.defaultCollapsed ? "none" : "1px solid #E5E7EB",
                 }}>
                   <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", justifyContent: (section.headingAlign === "center" ? "center" : section.headingAlign === "right" ? "flex-end" : "flex-start"), minWidth: 0 }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -304,13 +304,14 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                     {(section.headingAlign || "left") === "left" && (
                       <span style={{ fontSize: "15px", fontWeight: "700", color: "#111" }}>{currencySymbol} 19.99</span>
                     )}
-                    <svg width="12" height="12" viewBox="0 0 12 12">
+                    <svg width="12" height="12" viewBox="0 0 12 12" style={{ transform: section.defaultCollapsed ? "rotate(0deg)" : "rotate(180deg)" }}>
                       <path d="M2.5 4.5L6 8L9.5 4.5" stroke="#6B7280" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   </div>
                 </div>
 
-                {/* Body — product card + price breakdown */}
+                {/* Body — product card + price breakdown (hidden when merchant picks collapsed by default) */}
+                {!section.defaultCollapsed && (
                 <div style={{ padding: "12px 16px 16px 16px" }}>
                   <div style={{ display: "flex", gap: "12px", marginBottom: "12px", position: "relative" }}>
                     <div style={{
@@ -350,6 +351,7 @@ export default function LivePreview({ formConfig, sections, fields, settings, cu
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             );
 

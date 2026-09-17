@@ -404,8 +404,13 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const [isFingerprintMatched, setIsFingerprintMatched] = useState(false);
   const [isTransitioningStep, setIsTransitioningStep] = useState(false);
   const fingerprintRef = useRef(null);
-  const [step2SummaryOpen, setStep2SummaryOpen] = useState(true);
-  const [shippingMethodOpen, setShippingMethodOpen] = useState(true);
+  // Merchants choose each card's initial state in Form Designer; absent flag = expanded
+  const [step2SummaryOpen, setStep2SummaryOpen] = useState(
+    () => !config.formConfig?.sections?.find(s => s.type === 'orderSummary')?.defaultCollapsed
+  );
+  const [shippingMethodOpen, setShippingMethodOpen] = useState(
+    () => !config.formConfig?.sections?.find(s => s.type === 'shippingMethod')?.defaultCollapsed
+  );
 
   // Device recognition: pre-fill phone only (buyer lookup happens on "Continue" click)
   // Layer 1: localStorage (instant) — pre-fill phone field

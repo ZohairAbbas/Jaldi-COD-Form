@@ -635,15 +635,26 @@ function hideNativeButtons(config) {
   }
 }
 
+// Normalize a merchant-configured spacing value to a usable pixel number.
+// Falls back to the historical 20px when unset/invalid, and clamps to 0-100.
+function toSpacing(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 20;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
 // Create popup button element
-function createPopupButton(container, shopDomain, productData, pageType) {
+function createPopupButton(container, shopDomain, productData, pageType, settings) {
   const buttonContainer = document.createElement('div');
   buttonContainer.id = 'preventify-popup';
   // Ensure full width even when injected inside third-party flex containers
   buttonContainer.style.width = '100%';
-  // Only add padding on product page, not on cart page
+  // Only add padding on product page, not on cart page. Merchants control the
+  // gap to the theme's buy buttons from Form Designer → Button Customization.
   if (pageType === 'product') {
-    buttonContainer.style.padding = '20px 0';
+    const top = toSpacing(settings?.buttonSpacingTop);
+    const bottom = toSpacing(settings?.buttonSpacingBottom);
+    buttonContainer.style.padding = `${top}px 0 ${bottom}px`;
   }
   buttonContainer.dataset.shop = shopDomain;
 
@@ -819,7 +830,7 @@ function getInsertionTarget(element) {
 }
 
 // Render popup button at default position
-function renderPopupAtDefault(shopDomain, productData) {
+function renderPopupAtDefault(shopDomain, productData, settings) {
   const pageType = detectPageType();
 
   if (pageType === 'product') {
@@ -839,14 +850,14 @@ function renderPopupAtDefault(shopDomain, productData) {
 
     if (quantityBreaks) {
       // Place after quantity-breaks so COD button appears between bundles and Add to Cart
-      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
+      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product', settings);
       quantityBreaks.after(button);
     } else if (productFormButtons) {
       // Place after product-form-buttons (below ATC button)
-      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
+      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product', settings);
       productFormButtons.after(button);
     } else if (shopifyProductForm || productSection) {
-      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product');
+      const button = createPopupButton(appEmbedContainer, shopDomain, productData, 'product', settings);
       const insertTarget = getInsertionTarget(shopifyProductForm || productSection);
       insertTarget.after(button);
     }
@@ -867,7 +878,7 @@ function renderPopupAtDefault(shopDomain, productData) {
 
     if (targetContainer) {
       const appEmbedContainer = document.querySelector('[data-preventify-app-embed]');
-      const button = createPopupButton(appEmbedContainer, shopDomain, null, 'cart');
+      const button = createPopupButton(appEmbedContainer, shopDomain, null, 'cart', settings);
       targetContainer.after(button);
     }
   }
@@ -1039,7 +1050,7 @@ function renderFromConfig(config, shopDomain, productData, appEmbedContainer) {
 
     // Render based on mode
     if (config.settings.formMode === 'popup') {
-      renderPopupAtDefault(shopDomain, productData);
+      renderPopupAtDefault(shopDomain, productData, config.settings);
     } else if (config.settings.formMode === 'embedded') {
       renderEmbeddedAtDefault(shopDomain, productData);
     }

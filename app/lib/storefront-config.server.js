@@ -109,6 +109,8 @@ export async function buildStorefrontConfig(shopData) {
       buttonBorderWidth: shopData.settings.buttonBorderWidth,
       buttonBorderColor: shopData.settings.buttonBorderColor,
       buttonShadow: shopData.settings.buttonShadow,
+      buttonSpacingTop: shopData.settings.buttonSpacingTop ?? 20,
+      buttonSpacingBottom: shopData.settings.buttonSpacingBottom ?? 20,
       buttonAnimation: shopData.settings.buttonAnimation,
       buttonIcon: shopData.settings.buttonIcon,
       // Pay with Card settings

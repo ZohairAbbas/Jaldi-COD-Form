@@ -105,6 +105,8 @@ const defaultConfig = {
     buttonBorderWidth: 0,
     buttonBorderColor: '#000000',
     buttonShadow: 4,
+    buttonSpacingTop: 20,
+    buttonSpacingBottom: 20,
     buttonAnimation: 'none',
     buttonIcon: 'cart',
   },
