@@ -26,8 +26,13 @@ const BATCH_SIZE = 50;
 export async function syncCourierifyData() {
   const courierifyUrl = process.env.COURIERIFY_DATABASE_URL;
   if (!courierifyUrl) {
+    // Genuinely not configured — expected in local dev, and not a failure.
     console.warn("[courierify-sync] COURIERIFY_DATABASE_URL not set — skipping");
-    return { skipped: true, reason: "COURIERIFY_DATABASE_URL not configured" };
+    return {
+      skipped: true,
+      unconfigured: true,
+      reason: "COURIERIFY_DATABASE_URL not configured",
+    };
   }
 
   let courierifyPrisma;
@@ -35,8 +40,16 @@ export async function syncCourierifyData() {
     courierifyPrisma = new PrismaClient({ datasources: { db: { url: courierifyUrl } } });
     await courierifyPrisma.$connect();
   } catch (err) {
+    // A connection failure is a failure, not a skip. Returning `skipped` here
+    // had the caller log the job `completed` with 0 errors, so cron-health
+    // reported green while the sync had not run for as long as the connection
+    // stayed down — which is exactly when it needs to be visible.
     console.error("[courierify-sync] Failed to connect to Courierify DB:", err.message);
-    return { skipped: true, reason: `DB connection failed: ${err.message}` };
+    return {
+      skipped: true,
+      failed: true,
+      reason: `DB connection failed: ${err.message}`,
+    };
   }
 
   try {

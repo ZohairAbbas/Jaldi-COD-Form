@@ -103,6 +103,16 @@ export async function recalculateBuyerRisk(phone) {
     where: { phone: normalized },
   });
 
+  // Count real Preventify orders from source rather than trusting the stored
+  // counter. The previous version computed `buyer.totalOrdersGlobal +
+  // externalTotal` and wrote the result back to the same column, so every
+  // recalculation re-added the entire external history — a buyer with 5
+  // external records gained 5 phantom orders per run, permanently and
+  // invisibly. Deriving the total makes recalculation idempotent.
+  const internalTotal = await prisma.order.count({
+    where: { phone: normalized },
+  });
+
   // Merge internal + external outcome counts
   let deliveredOrders = 0;
   let rtoOrders = 0;
@@ -119,8 +129,9 @@ export async function recalculateBuyerRisk(phone) {
     if (row.deliveryOutcome === "cancelled") cancelledOrders += row._count.id;
   }
 
-  // totalOrders = Preventify orders + all external shipments (Courierify etc.)
-  const combinedTotal = buyer.totalOrdersGlobal + externalTotal;
+  // totalOrders = Preventify orders + all external shipments (Courierify etc.),
+  // both counted from source so running this twice leaves the total unchanged.
+  const combinedTotal = internalTotal + externalTotal;
 
   const terminalOrders = deliveredOrders + rtoOrders;
   const rtoRate = terminalOrders > 0 ? rtoOrders / terminalOrders : 0;

@@ -289,22 +289,42 @@ export function verifyWebhookSubscription(mode, verifyToken, challenge) {
  * Returns { senderPhone, messageText } or null if not a text message.
  */
 export function extractWebhookMessage(body) {
+  return extractWebhookMessages(body)[0] || null;
+}
+
+/**
+ * Extract every text message in a webhook payload.
+ *
+ * Meta batches: one POST can carry several entries, each with several changes,
+ * each with several messages. Reading only `entry[0].changes[0].messages[0]`
+ * silently dropped the rest — a buyer whose verification arrived in the same
+ * batch as someone else's would simply never be verified, with nothing logged.
+ *
+ * Non-text messages (images, reactions, status callbacks) are skipped: the
+ * login flow is text-only.
+ *
+ * @param {object} body Parsed Meta webhook payload.
+ * @returns {Array<{senderPhone: string, messageText: string}>}
+ */
+export function extractWebhookMessages(body) {
+  const messages = [];
+
   try {
-    const entry = body?.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-
-    if (!value?.messages?.length) return null;
-
-    const message = value.messages[0];
-    if (message.type !== "text") return null;
-
-    // WhatsApp sends phone as country+number without +
-    const senderPhone = "+" + message.from;
-    const messageText = message.text?.body || "";
-
-    return { senderPhone, messageText };
+    for (const entry of body?.entry || []) {
+      for (const change of entry?.changes || []) {
+        for (const message of change?.value?.messages || []) {
+          if (message?.type !== "text" || !message.from) continue;
+          messages.push({
+            // WhatsApp sends the phone as country+number with no leading +.
+            senderPhone: "+" + message.from,
+            messageText: message.text?.body || "",
+          });
+        }
+      }
+    }
   } catch {
-    return null;
+    return messages;
   }
+
+  return messages;
 }
