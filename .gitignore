@@ -74,6 +74,7 @@ coverage/
 *.pid.lock
 image/
 *.md
+*.csv
 
 Inventorify Current Flow/
 Google Sheets Flow/
