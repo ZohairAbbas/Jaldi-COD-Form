@@ -643,6 +643,25 @@ function toSpacing(value) {
   return Math.min(100, Math.max(0, Math.round(n)));
 }
 
+// Mirror the app-embed's product/variant data onto an injected container.
+//
+// These are namespaced `data-preventify-*` on purpose. They used to be copied
+// verbatim (data-product-id, data-product-price, data-variant-id, …), which made
+// our injected div look like a theme price element to any app scanning for
+// generic product attributes. On genztech.pk a discount-badge app matched our
+// container that way and replaced the COD button's DOM with its own
+// strikethrough price ~1s after we rendered — the button appeared, then vanished,
+// but only on products carrying a compare-at price. Nothing of ours reads these
+// back (all readers use getPreventifyContainer()), so the prefix is free.
+function mirrorProductData(target, source) {
+  if (!source) return;
+  Object.keys(source.dataset).forEach(key => {
+    if (key.startsWith('product') || key.startsWith('variant')) {
+      target.dataset[`preventify${key.charAt(0).toUpperCase()}${key.slice(1)}`] = source.dataset[key];
+    }
+  });
+}
+
 // Create popup button element
 function createPopupButton(container, shopDomain, productData, pageType, settings) {
   const buttonContainer = document.createElement('div');
@@ -658,12 +677,8 @@ function createPopupButton(container, shopDomain, productData, pageType, setting
   }
   buttonContainer.dataset.shop = shopDomain;
 
-  if (productData && container) {
-    Object.keys(container.dataset).forEach(key => {
-      if (key.startsWith('product') || key.startsWith('variant')) {
-        buttonContainer.dataset[key] = container.dataset[key];
-      }
-    });
+  if (productData) {
+    mirrorProductData(buttonContainer, container);
   }
 
   const root = createRoot(buttonContainer);
@@ -678,12 +693,8 @@ function createEmbeddedForm(container, shopDomain, productData) {
   formContainer.id = 'preventify-embedded';
   formContainer.dataset.shop = shopDomain;
 
-  if (productData && container) {
-    Object.keys(container.dataset).forEach(key => {
-      if (key.startsWith('product') || key.startsWith('variant')) {
-        formContainer.dataset[key] = container.dataset[key];
-      }
-    });
+  if (productData) {
+    mirrorProductData(formContainer, container);
   }
 
   const root = createRoot(formContainer);
