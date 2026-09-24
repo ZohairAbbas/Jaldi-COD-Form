@@ -23,6 +23,7 @@ import {
   COMBO_MAX_PRODUCTS,
 } from "../lib/combo-pricing";
 import ComboWidget from "../storefront/ComboWidget";
+import HexColorField from "../components/HexColorField";
 
 /**
  * Look up the live price/title/image of each component product.
@@ -225,6 +226,40 @@ function Field({ label, hint, children }) {
   );
 }
 
+// The colour groups ComboWidget actually reads. Same keys as the quantity-break
+// styling (so presets apply to both), minus `mostPopularTag`, which a combo
+// card has no equivalent of.
+const COMBO_COLOR_GROUPS = [
+  { label: "Combo title", group: "headerText", fields: [{ f: "color", l: "Color", type: "color" }, { f: "fontSize", l: "Font Size", type: "number" }] },
+  { label: "Product title & footer text", group: "tierTitle", fields: [{ f: "color", l: "Color", type: "color" }, { f: "fontSize", l: "Font Size", type: "number" }] },
+  { label: "Price", group: "price", fields: [{ f: "color", l: "Color", type: "color" }, { f: "fontSize", l: "Font Size", type: "number" }] },
+  { label: "Compare-at price", group: "strikethroughPrice", fields: [{ f: "color", l: "Color", type: "color" }, { f: "fontSize", l: "Font Size", type: "number" }] },
+  { label: "Highlight tag", group: "badge", fields: [{ f: "bgColor", l: "Background", type: "color" }, { f: "textColor", l: "Text", type: "color" }, { f: "fontSize", l: "Font Size", type: "number" }] },
+  { label: "Card", group: "unselectedTier", fields: [{ f: "borderColor", l: "Border", type: "color" }, { f: "bgColor", l: "Background", type: "color" }] },
+  { label: "Card when added to order (border is also the button colour)", group: "selectedTier", fields: [{ f: "borderColor", l: "Border", type: "color" }, { f: "bgColor", l: "Background", type: "color" }] },
+];
+
+function PaletteSwatch({ background, active, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      style={{
+        width: "34px",
+        height: "34px",
+        borderRadius: "8px",
+        border: active ? "3px solid #111827" : "1px solid #d1d5db",
+        background,
+        cursor: "pointer",
+        padding: 0,
+      }}
+    />
+  );
+}
+
 function Checkbox({ checked, onChange, label }) {
   return (
     <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", marginBottom: "10px", fontSize: "14px" }}>
@@ -281,6 +316,28 @@ export default function ComboEditor() {
       styling: { ...prev.styling, colorPalette: palette.id, colors: { ...palette.colors } },
     }));
   }, []);
+
+  const updateStylingColor = useCallback((group, field, value) => {
+    setCombo((prev) => {
+      const nextGroup = { ...prev.styling?.colors?.[group], [field]: value };
+      // A gradient palette renders `bgGradient` in place of `bgColor`, so a
+      // hand-picked card background would otherwise be invisible.
+      if (field === "bgColor") delete nextGroup.bgGradient;
+      return {
+        ...prev,
+        styling: {
+          ...prev.styling,
+          // Any manual edit means this is no longer a stock palette.
+          colorPalette: "custom",
+          colors: { ...prev.styling?.colors, [group]: nextGroup },
+        },
+      };
+    });
+  }, []);
+
+  // Per-element colour controls. Open on load when the saved theme is custom.
+  const [showCustomColors, setShowCustomColors] = useState(initialCombo.styling?.colorPalette === "custom");
+  const colors = combo.styling?.colors || {};
 
   const handleSave = useCallback((action) => {
     if (action === "publish" && errors.length) {
@@ -774,32 +831,124 @@ export default function ComboEditor() {
             <div style={CARD_STYLE}>
               <h3 style={{ margin: "0 0 14px", fontSize: "16px", fontWeight: "600" }}>Style</h3>
 
-              <Field label="Colour theme">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {[...COLOR_PALETTES, ...GRADIENT_PALETTES].map((palette) => {
-                    const active = combo.styling?.colorPalette === palette.id;
+              <Field
+                label="Template layout"
+                hint="Horizontal puts the products side by side; best with 2–3 short product titles."
+              >
+                <div style={{ display: "flex", gap: "8px" }}>
+                  {["vertical", "horizontal"].map((layout) => {
+                    const active = (combo.styling?.layout || "vertical") === layout;
                     return (
                       <button
-                        key={palette.id}
+                        key={layout}
                         type="button"
-                        onClick={() => applyPalette(palette)}
-                        title={palette.label}
-                        aria-label={palette.label}
+                        onClick={() => updateStyling("layout", layout)}
                         aria-pressed={active}
                         style={{
-                          width: "34px",
-                          height: "34px",
+                          padding: "8px 18px",
                           borderRadius: "8px",
-                          border: active ? "3px solid #111827" : "1px solid #d1d5db",
-                          background: palette.swatch,
+                          border: active ? "2px solid #111827" : "1px solid #d1d5db",
+                          backgroundColor: active ? "#f5f5f5" : "#fff",
                           cursor: "pointer",
-                          padding: 0,
+                          fontSize: "14px",
+                          fontWeight: "500",
+                          textTransform: "capitalize",
                         }}
-                      />
+                      >
+                        {layout}
+                      </button>
                     );
                   })}
                 </div>
               </Field>
+
+              <Field
+                label="Color palettes"
+                hint="Pick a preset, or choose Custom to set your own hex values per element."
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {COLOR_PALETTES.map((palette) => (
+                    <PaletteSwatch
+                      key={palette.id}
+                      background={palette.swatch}
+                      label={palette.label}
+                      active={combo.styling?.colorPalette === palette.id}
+                      onClick={() => applyPalette(palette)}
+                    />
+                  ))}
+                  <PaletteSwatch
+                    background="conic-gradient(#ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)"
+                    label="Custom colors"
+                    active={combo.styling?.colorPalette === "custom"}
+                    onClick={() => setShowCustomColors((open) => !open)}
+                  />
+                </div>
+              </Field>
+
+              <Field label="Gradient palettes">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {GRADIENT_PALETTES.map((palette) => (
+                    <PaletteSwatch
+                      key={palette.id}
+                      background={palette.swatch}
+                      label={palette.label}
+                      active={combo.styling?.colorPalette === palette.id}
+                      onClick={() => applyPalette(palette)}
+                    />
+                  ))}
+                </div>
+              </Field>
+
+              {showCustomColors && (
+                <div style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "12px", marginBottom: "14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <strong style={{ fontSize: "14px" }}>Custom colors</strong>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomColors(false)}
+                      style={{ border: "none", background: "none", cursor: "pointer", fontSize: "13px", color: "#6b7280" }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "10px" }}>
+                    Starts from the current theme. Any change switches the combo to Custom.
+                  </div>
+                  {COMBO_COLOR_GROUPS.map(({ label, group, fields }, index) => (
+                    <div
+                      key={group}
+                      style={{
+                        borderBottom: index < COMBO_COLOR_GROUPS.length - 1 ? "1px solid #f3f4f6" : "none",
+                        padding: "8px 0",
+                      }}
+                    >
+                      <div style={{ fontSize: "13px", fontWeight: "500", marginBottom: "6px", color: "#374151" }}>{label}</div>
+                      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                        {fields.map(({ f, l, type }) => (
+                          <div key={f} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ fontSize: "12px", color: "#6b7280" }}>{l}</span>
+                            {type === "color" ? (
+                              <HexColorField
+                                value={colors[group]?.[f] || "#000000"}
+                                onChange={(hex) => updateStylingColor(group, f, hex)}
+                              />
+                            ) : (
+                              <input
+                                type="number"
+                                min="8"
+                                max="40"
+                                value={colors[group]?.[f] || 14}
+                                onChange={(e) => updateStylingColor(group, f, parseInt(e.target.value, 10) || 14)}
+                                style={{ width: "60px", padding: "4px 6px", borderRadius: "4px", border: "1px solid #d1d5db", fontSize: "13px" }}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 160px" }}>

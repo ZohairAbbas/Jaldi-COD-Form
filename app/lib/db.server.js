@@ -1276,6 +1276,7 @@ export function getDefaultCombo() {
     showComboCompareAt: true,
     comboNativeAction: "stay",
     styling: {
+      layout: "vertical",
       cornerRoundness: 12,
       breathingSpace: 12,
       colorPalette: "default",

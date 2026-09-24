@@ -1384,8 +1384,12 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       const resolvedAppPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
       setAppPath(resolvedAppPath);
 
-      // Find matching bundle for current product page
-      if (data.bundles && data.bundles.length > 0) {
+      // Find matching quantity offer and combos for the current product page.
+      // Not gated on `data.bundles` being non-empty: combos ship in their own
+      // array and must show even when the shop has no quantity offers. Also
+      // runs with both empty so the fetched reconcile can clear an offer the
+      // inlined config still had.
+      {
         const pathname = window.location.pathname;
         if (pathname.includes('/products/')) {
           // Get current product numeric ID from embed container (or manual block)
@@ -1395,7 +1399,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           const productCollections = container?.dataset?.productCollections;
           const collectionIds = productCollections ? productCollections.split(',').map(id => id.trim()).filter(Boolean) : [];
 
-          const matchedBundle = data.bundles.find(bundle => {
+          const matchedBundle = (data.bundles || []).find(bundle => {
             if (bundle.applyOn === 'all') return true;
             if (bundle.applyOn === 'specific' && currentProductId) {
               return (bundle.productIds || []).some(pid => {
