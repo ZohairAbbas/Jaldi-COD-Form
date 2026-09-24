@@ -1,8 +1,9 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { enqueueGrowzarEvent } from "../lib/growzar-outbox.server";
 
 export const action = async ({ request }) => {
-  const { shop, session, topic } = await authenticate.webhook(request);
+  const { shop, session, topic, webhookId } = await authenticate.webhook(request);
 
   // Webhook requests can trigger multiple times and after an app has already been uninstalled.
   // If this webhook already ran, the session may have been deleted previously.
@@ -25,6 +26,25 @@ export const action = async ({ request }) => {
     }
   } catch (err) {
     console.error("Failed to mark abandoned carts on uninstall:", err.message);
+  }
+
+  // Tell Growzar (API-CONTRACT §7, D-17), so it can switch this shop to
+  // reconnect mode instead of showing stale data with no explanation. Only the
+  // outbox insert is awaited; the send happens after we answer Shopify and is
+  // retried from the outbox, because Growzar being down must never make
+  // Shopify think this webhook failed.
+  try {
+    const triggeredAt = request.headers.get("X-Shopify-Triggered-At");
+    await enqueueGrowzarEvent({
+      topic: "app.uninstalled",
+      shop,
+      occurredAt: triggeredAt ? new Date(triggeredAt) : new Date(),
+      actor: { type: "shopify" },
+      data: {},
+      sourceId: webhookId,
+    });
+  } catch (err) {
+    console.error("Failed to queue Growzar app.uninstalled:", err.message);
   }
 
   return new Response();

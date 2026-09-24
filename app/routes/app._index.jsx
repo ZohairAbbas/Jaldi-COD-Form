@@ -9,6 +9,8 @@ import { getCurrencyCode } from "../lib/constants";
 import { deriveSetupSteps } from "../lib/setup-status.server";
 import { useState } from "react";
 import { OtherAppsCarousel } from "../components/OtherAppsCarousel";
+import OpenInGrowzarButton from "../components/OpenInGrowzarButton";
+import { getGrowzarConfig } from "../lib/growzar.server";
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -163,6 +165,9 @@ export const loader = async ({ request }) => {
     stats,
     themeAppEmbedStatus,
     setupProgress,
+    // Hidden until the Growzar env is set, so a deploy ahead of its secrets
+    // shows no button rather than one that fails.
+    growzarEnabled: !!getGrowzarConfig(),
     planUsage: {
       planName: currentPlanName,
       monthlyOrderCount,
@@ -175,7 +180,7 @@ export const loader = async ({ request }) => {
 };
 
 export default function Index() {
-  const { stats, themeAppEmbedStatus, shop, setupProgress, planUsage } = useLoaderData();
+  const { stats, themeAppEmbedStatus, shop, setupProgress, planUsage, growzarEnabled } = useLoaderData();
   const fetcher = useFetcher();
   const navigation = useNavigation();
   const isNavigatingToBilling = navigation.state === 'loading' && navigation.location?.pathname === '/app/billing';
@@ -699,6 +704,29 @@ export default function Index() {
           </div>
         </s-card>
       </s-section>
+      )}
+
+      {growzarEnabled && (
+        <s-section>
+          <s-card>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              padding: '12px 16px',
+            }}>
+              <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+                <div style={{ fontWeight: 500 }}>Growzar</div>
+                <div style={{ fontSize: '13px', color: '#616161' }}>
+                  See Preventify alongside your other apps in one place. No sign-in details needed.
+                </div>
+              </div>
+              <OpenInGrowzarButton />
+            </div>
+          </s-card>
+        </s-section>
       )}
 
       <s-section heading="More apps from our team">
