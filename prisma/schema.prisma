@@ -167,6 +167,11 @@ model Settings {
   // mode when the visitor's country is in this list, else the COD form.
   nativeBundleCountries        Json     @default("[]")
   enableOTP                    Boolean  @default(false)
+  // Order-tag toggles (see app/lib/order-tags.js). Default on so existing
+  // merchants' tag-based automations keep working.
+  enableSourceTags             Boolean  @default(true)
+  enableVerificationTags       Boolean  @default(true)
+  enableRiskTags               Boolean  @default(true)
   enableSmartCheckout          Boolean  @default(false)
   language                     String   @default("en")
   enableSpecificProducts       Boolean  @default(false)

@@ -92,6 +92,16 @@ describe("resolveVerificationMethod", () => {
 });
 
 describe("resolveOrderVerification", () => {
+  test("OTP disabled yields no tag and no lookup", async () => {
+    const result = await resolveOrderVerification(SHOP_ID, PHONE, {
+      clientClaim: VERIFICATION_TAGS.SKIPPED,
+      otpEnabled: false,
+    });
+    expect(result).toBeNull();
+    expect(mockOtpFindFirst).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
   // The core of PRV-6.
   test("a client claiming verification without a session gets skipped", async () => {
     const result = await resolveOrderVerification(SHOP_ID, PHONE, {

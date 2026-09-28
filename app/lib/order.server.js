@@ -1,5 +1,6 @@
 import { validatePhone, getCurrencySymbol, normalizePrice } from './constants.js';
 import { GIFT_ORDER_LABEL } from './tier-gift.js';
+import { buildOrderTags } from './order-tags.js';
 
 // Map country names to country codes for currency lookup
 const COUNTRY_NAME_TO_CODE = {
@@ -14,7 +15,7 @@ const COUNTRY_NAME_TO_CODE = {
  * Create a Shopify order directly (not draft order)
  */
 export async function createShopifyOrder(admin, orderData, shopDomain) {
-  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod, riskData, _financialStatus, _paymentGateway, _orderTags, _orderNote } = orderData;
+  const { customerInfo, address, items, total, recoveryDiscount, userDiscount, shippingCost = 0, shippingRateName = 'Standard Shipping', utmData = {}, countryCode: passedCountryCode, presentmentCurrencyCode, verificationMethod, riskData, _financialStatus, _paymentGateway, _orderTags, _orderNote, tagSettings } = orderData;
 
   // Clean phone number (remove all non-digit characters except +).
   // Phone may be empty/undefined when the field is hidden in the Form Designer.
@@ -165,13 +166,12 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       billing_address: restBillingAddress,
       financial_status: _financialStatus || "pending",
       note: "",
-      tags: [
-        _orderTags || "preventify_cod_form",
+      tags: buildOrderTags({
+        baseTags: [_orderTags || "preventify_cod_form"],
         verificationMethod,
-        riskData?.riskLevel === "HIGH" ? "preventify-high-risk" : null,
-        riskData?.riskLevel === "MEDIUM" ? "preventify-medium-risk" : null,
-        riskData?.riskLevel === "LOW" ? "preventify-trusted-buyer" : null,
-      ].filter(Boolean).join(", "),
+        riskLevel: riskData?.riskLevel,
+        settings: tagSettings,
+      }).join(", "),
       // Shopify Markets: set order currency to the presentment (customer-facing) currency.
       // Only set when presentmentCurrencyCode is provided (i.e., Shopify Markets is active).
       // For non-Markets stores this is undefined and Shopify uses the shop's base currency.
