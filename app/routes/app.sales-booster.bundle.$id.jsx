@@ -16,6 +16,59 @@ import { getShopByDomain } from "../lib/db.server";
 import { ensureBundleDiscount } from "../lib/bundle-function.server";
 import { COLOR_PALETTES, GRADIENT_PALETTES } from "../lib/bundle-palettes";
 import HexColorField from "../components/HexColorField";
+import GiftStrip from "../storefront/GiftStrip";
+import { normalizeTierGift, validateTierGifts, sanitizeTierGifts, GIFT_MAX_QUANTITY } from "../lib/tier-gift";
+
+// Live state of every tier's gift product, checked when the editor opens:
+// price/variants for the preview, and why (if at all) customers won't see it.
+async function loadGiftStatus(admin, tiers) {
+  const ids = [...new Set((tiers || []).map((t) => normalizeTierGift(t.gift)?.productId).filter(Boolean))];
+  if (!ids.length) return {};
+  try {
+    const res = await admin.graphql(
+      `#graphql
+      query tierGiftStatus($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on Product {
+            id
+            status
+            onlineStoreUrl
+            featuredImage { url }
+            variants(first: 100) { nodes { id title price availableForSale } }
+          }
+        }
+      }`,
+      { variables: { ids } },
+    );
+    const json = await res.json();
+    const nodes = json?.data?.nodes || [];
+    const out = {};
+    ids.forEach((id, i) => {
+      const product = nodes[i];
+      if (!product) {
+        out[id] = { warning: "This gift product was deleted, so the gift won't appear. Pick another gift." };
+        return;
+      }
+      const variants = product.variants?.nodes || [];
+      let warning = null;
+      if (product.status !== "ACTIVE" || !product.onlineStoreUrl) {
+        warning = "This gift product isn't published on your Online Store, so the gift won't appear until it is.";
+      } else if (!variants.some((v) => v.availableForSale)) {
+        warning = "This gift product is out of stock, so the gift won't appear until it's restocked.";
+      }
+      out[id] = {
+        warning,
+        image: product.featuredImage?.url || null,
+        price: variants[0] ? Number(variants[0].price) : null,
+        variants: variants.filter((v) => v.availableForSale).map((v) => ({ id: v.id, title: v.title })),
+      };
+    });
+    return out;
+  } catch (e) {
+    // Best-effort: the editor still works, it just can't warn.
+    return {};
+  }
+}
 
 export const loader = async ({ request, params }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -24,7 +77,7 @@ export const loader = async ({ request, params }) => {
 
   if (params.id === "new") {
     const defaultBundle = getDefaultBundle();
-    return { bundle: defaultBundle, isNew: true, shopId: shop.id, currencySymbol, sampleProductImage: null };
+    return { bundle: defaultBundle, isNew: true, shopId: shop.id, currencySymbol, sampleProductImage: null, giftStatus: {} };
   }
 
   const bundle = await getBundleById(params.id);
@@ -65,7 +118,9 @@ export const loader = async ({ request, params }) => {
     }
   }
 
-  return { bundle: parsed, isNew: false, shopId: shop.id, currencySymbol, sampleProductImage };
+  const giftStatus = await loadGiftStatus(admin, parsed.tiers);
+
+  return { bundle: parsed, isNew: false, shopId: shop.id, currencySymbol, sampleProductImage, giftStatus };
 };
 
 export const action = async ({ request, params }) => {
@@ -83,6 +138,16 @@ export const action = async ({ request, params }) => {
   delete bundleData.updatedAt;
   delete bundleData.impressions;
   delete bundleData.accepts;
+
+  // Gift rules are enforced here too, so a crafted request can't save a gift
+  // that is one of the offer's own products.
+  if (Array.isArray(bundleData.tiers)) {
+    const giftErrors = validateTierGifts(bundleData);
+    if (giftErrors.length) {
+      return Response.json({ error: giftErrors[0] }, { status: 400 });
+    }
+    bundleData.tiers = sanitizeTierGifts(bundleData.tiers);
+  }
 
   // Stringify JSON fields for storage
   if (bundleData.tiers && typeof bundleData.tiers !== "string") {
@@ -160,7 +225,7 @@ function calculateTierPrice(productPrice, tier) {
 // COMPONENT
 // ============================================
 export default function BundleEditor() {
-  const { bundle: initialBundle, isNew, currencySymbol, sampleProductImage: initialSampleProductImage } = useLoaderData();
+  const { bundle: initialBundle, isNew, currencySymbol, sampleProductImage: initialSampleProductImage, giftStatus: initialGiftStatus } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -172,6 +237,10 @@ export default function BundleEditor() {
   const [customizeSubTab, setCustomizeSubTab] = useState("style");
   // Sample product image for the live preview (from the product picker, not persisted)
   const [sampleProductImage, setSampleProductImage] = useState(initialSampleProductImage || null);
+  // productId -> { warning, image, price, variants }. Warnings come only from the
+  // load-time check; a gift picked in this session gets its preview data from
+  // the product picker.
+  const [giftStatus, setGiftStatus] = useState(initialGiftStatus || {});
 
   const saveButtonRef = useRef(null);
   const publishButtonRef = useRef(null);
@@ -184,10 +253,17 @@ export default function BundleEditor() {
     if (fetcher.data?.success) {
       shopify.toast.show(isNew ? "Bundle created!" : "Bundle saved!");
       navigate("/app/sales-booster/bundle");
+    } else if (fetcher.data?.error) {
+      shopify.toast.show(fetcher.data.error, { isError: true });
     }
   }, [fetcher.data]);
 
   const handleSave = useCallback((action) => {
+    const giftErrors = validateTierGifts(bundle);
+    if (giftErrors.length) {
+      shopify.toast.show(giftErrors[0], { isError: true });
+      return;
+    }
     fetcher.submit(
       JSON.stringify({ ...bundle, _action: action }),
       { method: "POST", encType: "application/json" }
@@ -370,6 +446,55 @@ export default function BundleEditor() {
       // User cancelled
     }
   };
+
+  // Free gift: the merchant picks a PRODUCT; customers choose the variant.
+  const handleSelectGift = async (tierIdx) => {
+    const current = normalizeTierGift(bundle.tiers[tierIdx]?.gift);
+    try {
+      const selected = await shopify.resourcePicker({
+        type: "product",
+        multiple: false,
+        selectionIds: current ? [{ id: current.productId }] : [],
+      });
+      const product = selected?.[0];
+      if (!product) return;
+      if (bundle.applyOn === "specific" && (bundle.productIds || []).includes(product.id)) {
+        shopify.toast.show("The gift must be a different product from the ones in this offer", { isError: true });
+        return;
+      }
+      const image = product.images?.[0]?.originalSrc || product.images?.[0]?.src || null;
+      updateTier(tierIdx, "gift", {
+        productId: product.id,
+        handle: product.handle,
+        title: product.title,
+        // A rename belongs to the old product; start fresh on a new one.
+        name: current && current.productId === product.id ? current.name : "",
+        image,
+        quantity: current?.quantity || 1,
+        showOriginalPrice: current ? current.showOriginalPrice : true,
+      });
+      const variants = (product.variants || []).map((v) => ({ id: v.id, title: v.title }));
+      setGiftStatus((prev) => ({
+        ...prev,
+        [product.id]: {
+          warning: null,
+          image,
+          price: product.variants?.[0]?.price != null ? Number(product.variants[0].price) : null,
+          variants,
+        },
+      }));
+    } catch (e) {
+      // User cancelled
+    }
+  };
+
+  const updateTierGift = (tierIdx, field, value) => {
+    const gift = bundle.tiers[tierIdx]?.gift;
+    if (!gift) return;
+    updateTier(tierIdx, "gift", { ...gift, [field]: value });
+  };
+
+  const giftErrors = validateTierGifts(bundle);
 
   const styling = bundle.styling || {};
   const colors = styling.colors || {};
@@ -866,6 +991,15 @@ export default function BundleEditor() {
                                 />
                                 Pre-select this tier by default
                               </label>
+
+                              {/* Free Gift add-on */}
+                              <TierGiftEditor
+                                gift={normalizeTierGift(tier.gift)}
+                                status={giftStatus[normalizeTierGift(tier.gift)?.productId]}
+                                onPick={() => handleSelectGift(idx)}
+                                onRemove={() => updateTier(idx, "gift", null)}
+                                onChange={(field, value) => updateTierGift(idx, field, value)}
+                              />
                             </s-stack>
                           </div>
                         )}
@@ -1106,6 +1240,12 @@ export default function BundleEditor() {
             </s-box>
           </s-section>
 
+          {giftErrors.length > 0 && (
+            <div style={{ marginTop: "16px", padding: "12px 16px", borderRadius: "8px", background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", fontSize: "14px" }}>
+              {giftErrors.map((e) => <div key={e}>{e}</div>)}
+            </div>
+          )}
+
           {/* Bottom Action Bar */}
           <div style={{
             display: "flex",
@@ -1134,6 +1274,7 @@ export default function BundleEditor() {
                 selectedTierId={selectedPreviewTier}
                 onTierSelect={setSelectedPreviewTier}
                 sampleProductImage={sampleProductImage}
+                giftStatus={giftStatus}
               />
             </div>
           </s-box>
@@ -1146,7 +1287,7 @@ export default function BundleEditor() {
 // ============================================
 // LIVE PREVIEW COMPONENT
 // ============================================
-function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, onTierSelect, sampleProductImage = null }) {
+function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, onTierSelect, sampleProductImage = null, giftStatus = {} }) {
   const styling = bundle.styling || {};
   const colors = styling.colors || {};
   const tiers = bundle.tiers || [];
@@ -1157,6 +1298,8 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
   // Use preselected tier as default if nothing is manually selected
   const preselectedTier = tiers.find(t => t.preselectTier);
   const effectiveSelectedId = selectedTierId || (preselectedTier ? preselectedTier.id : null);
+  // Variant picked in a gift's dropdown, per tier (preview only).
+  const [giftVariants, setGiftVariants] = useState({});
 
   return (
     <div style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -1421,9 +1564,126 @@ function BundlePreview({ bundle, currencySymbol, samplePrice, selectedTierId, on
                   </div>
                 </div>
               )}
+
+              {(() => {
+                const gift = normalizeTierGift(tier.gift);
+                if (!gift) return null;
+                const status = giftStatus[gift.productId] || {};
+                return (
+                  <GiftStrip
+                    gift={{
+                      ...gift,
+                      name: gift.name || gift.title,
+                      image: gift.image || status.image,
+                      unitPrice: status.price,
+                      variants: status.variants,
+                      variantId: giftVariants[tier.id] || status.variants?.[0]?.id,
+                    }}
+                    isSelected={isSelected}
+                    colors={colors}
+                    radius={radius}
+                    space={space}
+                    currencySymbol={currencySymbol}
+                    compact={isHorizontal}
+                    onVariantChange={(id) => setGiftVariants((prev) => ({ ...prev, [tier.id]: id }))}
+                  />
+                );
+              })()}
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// FREE GIFT EDITOR (per tier)
+// ============================================
+function TierGiftEditor({ gift, status, onPick, onRemove, onChange }) {
+  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box" };
+
+  if (!gift) {
+    return (
+      <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+        <label style={{ display: "block", fontWeight: "500", marginBottom: "8px", fontSize: "14px" }}>Add-ons</label>
+        <button
+          type="button"
+          onClick={onPick}
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
+            padding: "14px 20px", borderRadius: "10px", border: "1.5px solid #374151",
+            background: "#fff", cursor: "pointer", fontSize: "14px", fontWeight: "500",
+          }}
+        >
+          <span style={{ fontSize: "24px" }}>🎁</span>
+          + Free Gift
+        </button>
+      </div>
+    );
+  }
+
+  const image = gift.image || status?.image;
+
+  return (
+    <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <span style={{ fontWeight: "600", fontSize: "14px" }}>🎁 Free Gift</span>
+        <button type="button" onClick={onRemove} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px" }}>
+          Remove Gift
+        </button>
+      </div>
+
+      {status?.warning && (
+        <div style={{ marginBottom: "12px", padding: "10px 12px", borderRadius: "6px", background: "#fffbeb", border: "1px solid #fcd34d", color: "#92400e", fontSize: "13px" }}>
+          {status.warning}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+          {image ? (
+            <img src={image} alt="" style={{ width: "72px", height: "72px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb" }} />
+          ) : (
+            <div style={{ width: "72px", height: "72px", borderRadius: "8px", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "28px" }}>🎁</div>
+          )}
+          <button type="button" onClick={onPick} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "13px" }}>
+            Change Gift
+          </button>
+        </div>
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Gift name</label>
+              <input
+                type="text"
+                value={gift.name}
+                placeholder={gift.title}
+                onChange={(e) => onChange("name", e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ width: "90px" }}>
+              <label style={{ display: "block", fontWeight: "500", marginBottom: "4px", fontSize: "14px" }}>Quantity</label>
+              <input
+                type="number"
+                min="1"
+                max={GIFT_MAX_QUANTITY}
+                value={gift.quantity}
+                onChange={(e) => onChange("quantity", Math.min(GIFT_MAX_QUANTITY, Math.max(1, parseInt(e.target.value) || 1)))}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+            <input type="checkbox" checked={gift.showOriginalPrice} onChange={(e) => onChange("showOriginalPrice", e.target.checked)} />
+            Show original price
+          </label>
+          <s-text tone="subdued">
+            Customers choose the variant. Leave the name blank to use the product title. Sold-out variants are hidden, and the gift is hidden if it&apos;s fully sold out.
+          </s-text>
+        </div>
       </div>
     </div>
   );

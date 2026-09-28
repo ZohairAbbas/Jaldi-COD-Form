@@ -9,6 +9,10 @@ import BundleWidget, { calculateTierPrice } from './BundleWidget';
 import ComboOffers from './ComboOffers';
 import { matchCombosForProduct, resolveCombo, comboProductHandles, numericId } from './combo-resolver';
 import { buildComboCartItems } from '../lib/combo-pricing';
+import { resolveTierGift, giftProductHandles } from './gift-resolver';
+import { buildGiftCartItem, GIFT_LINE_PROPERTY } from '../lib/tier-gift';
+import { installGiftCartSync, reconcileGiftCart, withoutGiftWatcher } from './gift-cart-sync';
+import { t } from './translations';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPurchase } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol, resolvePixelCurrency, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
@@ -196,6 +200,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const [selectedComboId, setSelectedComboId] = useState(null); // one combo at a time (COD path)
   const [addedComboId, setAddedComboId] = useState(null); // transient "Added" confirmation (native path)
 
+  // Free gifts on quantity tiers. Live product data for each gift product, and
+  // the variant the customer picked on each tier's gift strip.
+  const [giftProducts, setGiftProducts] = useState(null); // handle -> /products/<handle>.js payload
+  const [giftVariantSelections, setGiftVariantSelections] = useState({}); // tierId -> variantId
+
   // Multi-country detection state
   const [detectedCountry, setDetectedCountry] = useState(null);
 
@@ -226,6 +235,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // from a capture-phase click handler that must not use stale closure values.
   const selectedBundleTierRef = React.useRef(null);
   const currentProductRef = React.useRef(null);
+  const resolvedGiftsRef = React.useRef({});
 
   useEffect(() => {
     loadConfig();
@@ -1379,6 +1389,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     try {
       setConfig(data);
       setConfigLoaded(true);
+      installGiftCartSync(data);
 
       // Use app path from Liquid template (most reliable), fallback to config response
       const resolvedAppPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
@@ -1737,9 +1748,11 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     // Only allow removing items in popup mode
     if (mode !== 'popup') return;
 
-    // Remove the item from the cart
+    // Remove the item from the cart. A free gift can share a variant with a
+    // paid line (on an all-products offer) but is never removed directly — it
+    // follows the tier it belongs to.
     setCart(prevCart => ({
-      items: prevCart.items.filter(item => item.variantId !== variantId)
+      items: prevCart.items.filter(item => item.isFreeGift || item.variantId !== variantId)
     }));
 
     // Also remove from fullCart if it exists there
@@ -2114,7 +2127,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   const clearComboFromCart = useCallback(() => {
     setCart((prevCart) => {
       const kept = prevCart.items.filter((item) => !item.bundleGroupId);
-      const hasCurrent = currentProduct && kept.some((i) => i.variantId === currentProduct.variantId);
+      const hasCurrent = currentProduct && kept.some((i) => !i.isFreeGift && i.variantId === currentProduct.variantId);
       return { items: currentProduct && !hasCurrent ? [currentProduct, ...kept] : kept };
     });
   }, [currentProduct]);
@@ -2291,6 +2304,102 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // override so both files resolve identically from the shared cache.
   const nativeBundleMode = isNativeBundleMode(config, shopDomain, getRealVisitorCountry());
 
+  // ==========================================================================
+  // FREE GIFTS ON QUANTITY TIERS
+  // ==========================================================================
+
+  // Fetch live data for the offer's gift products. A deleted or unpublished
+  // product 404s and is left out, which hides that tier's gift.
+  const giftHandlesKey = giftProductHandles(activeBundleConfig).join(',');
+  useEffect(() => {
+    if (!giftHandlesKey || currentPageType !== 'product' || isCartDrawer) {
+      setGiftProducts(null);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      giftHandlesKey.split(',').map(async (handle) => {
+        try {
+          const response = await fetch(`/products/${handle}.js`);
+          return [handle, response.ok ? await response.json() : null];
+        } catch {
+          return [handle, null];
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const byHandle = {};
+      for (const [handle, product] of entries) {
+        if (product) byHandle[handle] = product;
+      }
+      setGiftProducts(byHandle);
+    });
+    return () => { cancelled = true; };
+  }, [giftHandlesKey, currentPageType, isCartDrawer]);
+
+  // tierId -> resolved gift; tiers whose gift is sold out or gone are absent.
+  const resolvedGifts = useMemo(() => {
+    const out = {};
+    if (!activeBundleConfig || !giftProducts) return out;
+    const inventoryMap = typeof window !== 'undefined' ? window.PREVENTIFY_VARIANT_INVENTORY : null;
+    for (const tier of activeBundleConfig.tiers || []) {
+      if (!tier.gift?.handle) continue;
+      const resolved = resolveTierGift(tier.gift, giftProducts[tier.gift.handle], giftVariantSelections[tier.id], inventoryMap);
+      if (resolved) out[tier.id] = resolved;
+    }
+    return out;
+  }, [activeBundleConfig, giftProducts, giftVariantSelections]);
+  useEffect(() => { resolvedGiftsRef.current = resolvedGifts; }, [resolvedGifts]);
+
+  const handleGiftVariantChange = useCallback((tierId, variantId) => {
+    setGiftVariantSelections((prev) => ({ ...prev, [tierId]: variantId }));
+  }, []);
+
+  // The gift line the COD form's cart should hold right now, or null. Only on
+  // the product page, only while a tier is selected AND the quantity still
+  // matches it exactly (stock capping or the theme's quantity box can change
+  // it), and never alongside an accepted combo.
+  const giftCartItem = useMemo(() => {
+    if (nativeBundleMode || isCartDrawer || currentPageType !== 'product') return null;
+    if (!selectedBundleTier || !activeBundleConfig || !currentProduct || selectedComboId) return null;
+    if (Number(currentProduct.quantity) !== Number(selectedBundleTier.quantity)) return null;
+    const resolved = resolvedGifts[selectedBundleTier.id];
+    if (!resolved) return null;
+    const rate = currentProduct.isShopifyMarkets ? null : (currentProduct.displayExchangeRate || null);
+    return buildGiftCartItem(
+      resolved,
+      { bundleId: activeBundleConfig.id, tierId: selectedBundleTier.id, tierTitle: selectedBundleTier.titleText },
+      { exchangeRate: rate, currencySymbol: currentProduct.displayCurrencySymbol, currencyCode: currentProduct.displayCurrencyCode },
+    );
+  }, [nativeBundleMode, isCartDrawer, currentPageType, selectedBundleTier, activeBundleConfig, currentProduct, selectedComboId, resolvedGifts]);
+
+  // Keep the cart's gift line in step with `giftCartItem`. Several code paths
+  // rebuild the cart from scratch (tier select, variant mix, the popup cart
+  // sync), so this reconciles after every cart change instead of hooking each
+  // one. It returns the same cart object when nothing differs, so it settles.
+  useEffect(() => {
+    setCart((prev) => {
+      const paid = prev.items.filter((i) => !i.isFreeGift);
+      const gifts = prev.items.filter((i) => i.isFreeGift);
+      // The customer removed the offer product itself: its gift goes too.
+      const hasOfferLine = !!currentProduct && paid.some((i) =>
+        i.variantId === currentProduct.variantId
+        || (activeBundleConfig && i.bundleGroupId === `bundle-${activeBundleConfig.id}`));
+      const want = giftCartItem && hasOfferLine ? giftCartItem : null;
+
+      if (!want && gifts.length === 0) return prev;
+      if (want && gifts.length === 1) {
+        const g = gifts[0];
+        if (g.variantId === want.variantId && g.quantity === want.quantity
+          && g.originalPrice === want.originalPrice && g.giftTierId === want.giftTierId
+          && g.displayOriginalPrice === want.displayOriginalPrice) {
+          return prev;
+        }
+      }
+      return { items: want ? [...paid, want] : paid };
+    });
+  }, [cart, giftCartItem, currentProduct, activeBundleConfig]);
+
   // Handle bundle tier selection
   const handleBundleTierSelect = (tier) => {
     console.log('[Preventify Debug] handleBundleTierSelect ENTER:', { tierQty: tier.quantity, inventoryQuantity, hasCurrentProduct: !!currentProduct, currentProductQty: currentProduct?.quantity, currentProductVariantId: currentProduct?.variantId });
@@ -2425,7 +2534,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
         const filteredItems = prevCart.items.filter(item => !item.bundleGroupId);
         console.log('[Preventify Debug] handleBundleTierSelect setCart callback:', { cartItemCount: filteredItems.length, cartVariantIds: filteredItems.map(i => i.variantId), currentProductVariantId: currentProduct.variantId });
         const updatedItems = filteredItems.map(item => {
-          if (item.variantId === currentProduct.variantId) {
+          if (!item.isFreeGift && item.variantId === currentProduct.variantId) {
             console.log('[Preventify Debug] handleBundleTierSelect setCart MATCHED item, setting qty:', effectiveQuantity);
             return {
               ...item,
@@ -2579,19 +2688,44 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       return /^\d+$/.test(n) ? n : null;
     };
 
-    const addToCart = async (quantity) => {
+    const addToCart = async (quantity, tier) => {
       const id = numericVariantId();
       if (!id) return null;
-      const res = await fetch('/cart/add.js', {
+      const post = (items) => fetch('/cart/add.js', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: [{ id: Number(id), quantity }],
-          sections: 'cart-drawer,cart-icon-bubble',
-        }),
+        body: JSON.stringify({ items, sections: 'cart-drawer,cart-icon-bubble' }),
       });
-      if (!res.ok) return null;
-      return res.json().catch(() => null); // contains `sections` HTML for re-render
+      const main = { id: Number(id), quantity };
+
+      // The tier's free gift rides along as its own line, tagged with the
+      // offer id so the Discount Function knows it may make it free.
+      const gift = tier ? resolvedGiftsRef.current[tier.id] : null;
+      const giftLine = gift && activeBundleConfig?.id
+        ? { id: Number(gift.variantId), quantity: gift.quantity, properties: { [GIFT_LINE_PROPERTY]: activeBundleConfig.id } }
+        : null;
+
+      return withoutGiftWatcher(async () => {
+        let res = await post(giftLine ? [main, giftLine] : [main]);
+        // A multi-item add fails as a whole; never let the gift (e.g. it just
+        // sold out) block the customer's actual purchase.
+        if (!res.ok && giftLine) res = await post([main]);
+        if (!res.ok) return null;
+        const result = await res.json().catch(() => null); // contains `sections` HTML for re-render
+        if (!giftLine) return result;
+
+        // The cart may already have held units or another gift, so the new
+        // total can miss the tier (or break one gift per order). Clean up now,
+        // before the drawer or checkout shows it.
+        const changed = await reconcileGiftCart();
+        if (!changed) return result;
+        try {
+          const fresh = await fetch(`${window.Shopify?.routes?.root || '/'}?sections=cart-drawer,cart-icon-bubble`);
+          return fresh.ok ? { ...result, sections: await fresh.json() } : result;
+        } catch {
+          return result;
+        }
+      });
     };
 
     // Re-render the theme's cart drawer from the sections HTML returned by
@@ -2688,7 +2822,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       submitting = true;
 
       try {
-        const result = await addToCart(quantity);
+        const result = await addToCart(quantity, tier);
         if (!result) { submitting = false; return; }
         if (bin) {
           window.location.href = '/checkout';
@@ -3183,6 +3317,9 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
           onVariantMixChange={handleVariantMixChange}
           variantMixOosError={variantMixOosError}
           inventoryMap={typeof window !== 'undefined' ? window.PREVENTIFY_VARIANT_INVENTORY : null}
+          giftsByTierId={resolvedGifts}
+          onGiftVariantChange={handleGiftVariantChange}
+          freeLabel={t(config?.settings?.language || 'en', 'free')}
         />
       )}
 

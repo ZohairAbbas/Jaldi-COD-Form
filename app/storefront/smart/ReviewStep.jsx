@@ -157,7 +157,12 @@ function LineItem({ item, lang, money }) {
         </span>
       </div>
       <div className="jaldi-sc-line-price">
-        {discounted ? (
+        {item.isFreeGift ? (
+          <>
+            {original > 0 && <span className="jaldi-sc-was">{money(original)}</span>}
+            <span className="jaldi-sc-now">{t(lang, 'free')}</span>
+          </>
+        ) : discounted ? (
           <>
             <span className="jaldi-sc-was">{money(original)}</span>
             <span className="jaldi-sc-now">{money(unit)}</span>

@@ -13,6 +13,11 @@ import {
 // ---------------------------------------------------------------------------
 type TierDiscountType = 'percentage' | 'flat' | 'specific' | 'bogo' | 'none';
 
+interface TierGift {
+  productId: string; // Shopify product GID
+  quantity: number; // units given free
+}
+
 interface Tier {
   quantity: number;
   discountType: TierDiscountType;
@@ -20,9 +25,11 @@ interface Tier {
   bogoBuyX?: number;
   priceRounding?: boolean;
   priceRoundingValue?: number;
+  gift?: TierGift;
 }
 
 interface BundleConfig {
+  id?: string;
   // 'all' applies to every product; 'specific' restricts to productIds.
   applyOn?: 'all' | 'specific' | 'collections';
   productIds?: string[]; // Shopify product GIDs
@@ -168,6 +175,101 @@ function allocationFull(allocations: Allocation[]): number {
   return allocations.reduce((sum, a) => sum + unitPrice(a.line) * a.quantity, 0);
 }
 
+// ---------------------------------------------------------------------------
+// Free gifts on quantity tiers.
+//
+// The storefront widget adds the gift as its own line carrying the hidden
+// `_preventify_gift` property (value = bundle id). Only such lines can be made
+// free, so a customer buying the gift product on purpose is never given a unit.
+//
+// Winner selection mirrors findEarnedGift in app/lib/tier-gift.js, which the
+// storefront uses to remove gift lines the cart no longer earns. Keep in step.
+// ---------------------------------------------------------------------------
+
+function giftBundleId(line: CartLine): string {
+  return line.giftAttribute?.value ?? '';
+}
+
+function numericProductId(gid: string): string {
+  return String(gid).replace(/\D/g, '');
+}
+
+/** Order digit strings numerically without BigInt (ids exceed 2^53). */
+function compareNumericIds(a: string, b: string): number {
+  if (a.length !== b.length) return a.length - b.length;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function coversProduct(bundle: BundleConfig, productId: string): boolean {
+  if (bundle.applyOn === 'specific') return (bundle.productIds ?? []).includes(productId);
+  return bundle.applyOn === 'all' || bundle.applyOn === undefined;
+}
+
+/**
+ * The one gift the cart has earned: offers in priority order (config order),
+ * EXACT tier match on the units combos left unclaimed, lowest product id first
+ * within an offer. One gift per order.
+ */
+function earnedGift(
+  bundles: BundleConfig[],
+  lines: CartLine[],
+  remaining: Map<string, number>,
+): {bundleId: string; productId: string; quantity: number} | null {
+  const units = new Map<string, number>();
+  for (const line of lines) {
+    if (line.merchandise.__typename !== 'ProductVariant') continue;
+    const left = remaining.get(line.id) ?? 0;
+    if (left <= 0) continue;
+    const pid = line.merchandise.product.id;
+    units.set(pid, (units.get(pid) ?? 0) + left);
+  }
+  const products = [...units.keys()].sort((a, b) =>
+    compareNumericIds(numericProductId(a), numericProductId(b)),
+  );
+
+  for (const bundle of bundles) {
+    if (!bundle.id || !bundle.tiers?.some((t) => t.gift)) continue;
+    for (const pid of products) {
+      if (!coversProduct(bundle, pid)) continue;
+      const tier = bundle.tiers.find((t) => t.quantity === units.get(pid));
+      if (tier?.gift?.productId) {
+        return {
+          bundleId: bundle.id,
+          productId: tier.gift.productId,
+          quantity: Math.max(1, Math.floor(tier.gift.quantity || 1)),
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function giftCandidates(
+  bundles: BundleConfig[],
+  lines: CartLine[],
+  remaining: Map<string, number>,
+): ProductDiscountCandidate[] {
+  const gift = earnedGift(bundles, lines, remaining);
+  if (!gift) return [];
+
+  const candidates: ProductDiscountCandidate[] = [];
+  let left = gift.quantity;
+  for (const line of lines) {
+    if (left <= 0) break;
+    if (line.merchandise.__typename !== 'ProductVariant') continue;
+    if (giftBundleId(line) !== gift.bundleId) continue;
+    if (line.merchandise.product.id !== gift.productId) continue;
+    const take = Math.min(left, line.quantity);
+    left -= take;
+    candidates.push({
+      message: 'Free gift',
+      targets: [{cartLine: take < line.quantity ? {id: line.id, quantity: take} : {id: line.id}}],
+      value: {percentage: {value: 100}},
+    });
+  }
+  return candidates;
+}
+
 /**
  * Build discount candidates for every complete set of a combo the cart holds,
  * marking the units it consumes so the quantity-break pass cannot discount them
@@ -286,9 +388,11 @@ export function cartLinesDiscountsGenerateRun(
   // from this, so a product bought as part of a combo cannot also be discounted
   // by a quantity break — both would otherwise apply to the same units and the
   // customer would be double-discounted.
+  // Gift lines start fully claimed: they never count toward a tier or combo
+  // and never take another offer's discount.
   const remaining = new Map<string, number>();
   for (const line of input.cart.lines) {
-    remaining.set(line.id, line.quantity);
+    remaining.set(line.id, giftBundleId(line) ? 0 : line.quantity);
   }
 
   // Every ProductVariant line, grouped by product, for combo matching.
@@ -305,6 +409,9 @@ export function cartLinesDiscountsGenerateRun(
   for (const combo of config.combos ?? []) {
     candidates.push(...combosForCart(combo, cartByProduct, remaining));
   }
+
+  // ---- Free gift (from the same units a tier would be matched on) ----
+  candidates.push(...giftCandidates(config.bundles ?? [], input.cart.lines, remaining));
 
   // ---- Quantity-break pass (on whatever units the combos left) ----
   for (const bundle of config.bundles ?? []) {

@@ -15,6 +15,7 @@
 // merchant's save — native-bundle mode simply won't apply until the next sync.
 // ---------------------------------------------------------------------------
 import prisma from "../db.server.js";
+import { normalizeTierGift } from "./tier-gift.js";
 
 // Must match the namespace/key in the function's input query
 // (extensions/bundle-discount/src/cart_lines_discounts_generate_run.graphql).
@@ -69,16 +70,22 @@ export function buildBundleFunctionConfig(shopData) {
       const tiers =
         typeof bundle.tiers === "string" ? JSON.parse(bundle.tiers) : bundle.tiers || [];
       return {
+        // The id is what a gift line's `_preventify_gift` property points at.
+        id: bundle.id,
         applyOn: bundle.applyOn || "all",
         productIds,
-        tiers: tiers.map((t) => ({
-          quantity: t.quantity,
-          discountType: t.discountType,
-          discountValue: t.discountValue,
-          bogoBuyX: t.bogoBuyX,
-          priceRounding: t.priceRounding,
-          priceRoundingValue: t.priceRoundingValue,
-        })),
+        tiers: tiers.map((t) => {
+          const gift = normalizeTierGift(t.gift);
+          return {
+            quantity: t.quantity,
+            discountType: t.discountType,
+            discountValue: t.discountValue,
+            bogoBuyX: t.bogoBuyX,
+            priceRounding: t.priceRounding,
+            priceRoundingValue: t.priceRoundingValue,
+            ...(gift ? { gift: { productId: gift.productId, quantity: gift.quantity } } : {}),
+          };
+        }),
       };
     });
 

@@ -4,6 +4,7 @@ import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 import { resolveOrderVerification, isGenuineVerification } from "../lib/verification.server";
+import { GIFT_ORDER_LABEL } from "../lib/tier-gift";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -86,6 +87,13 @@ export const action = async ({ request }) => {
         quantity: item.quantity,
       };
 
+      // Quantity-offer gift: visible on the order so fulfilment can spot it.
+      if (item.isFreeGift) {
+        lineItem.customAttributes = [
+          { key: GIFT_ORDER_LABEL, value: String(item.giftLabel || "Yes").slice(0, 255) },
+        ];
+      }
+
       // Apply per-line discount for one-tick upsell items
       if (item.isOneTickUpsell && item.productPrice !== undefined) {
         const originalPrice = normalizePrice(item.productPrice);
@@ -115,7 +123,16 @@ export const action = async ({ request }) => {
       // Apply per-line discount for bundle items from third-party apps (Pumper/Bundler/in-app)
       // bundleDiscount is the TOTAL discount for all units. Shopify line-item
       // FIXED_AMOUNT discounts are per-unit, so we divide by quantity.
-      if (item.bundleDiscount && item.bundleDiscount > 0 && !item.hasCartDiscount) {
+      if (item.isFreeGift) {
+        // 100% rather than a fixed amount: the draft order bills the variant's
+        // Shopify price, which can differ from the storefront price the amount
+        // was computed from (e.g. market pricing) — a gift must end at zero.
+        lineItem.appliedDiscount = {
+          title: GIFT_ORDER_LABEL,
+          value: 100,
+          valueType: "PERCENTAGE",
+        };
+      } else if (item.bundleDiscount && item.bundleDiscount > 0 && !item.hasCartDiscount) {
         const perUnitDiscount = normalizePrice(item.bundleDiscount) / (item.quantity || 1);
         lineItem.appliedDiscount = {
           // Name the combo that produced the discount so the merchant can tell,

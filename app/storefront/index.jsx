@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import JaldiCODFormApp from './App';
 import { normalizePrice, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
 import { isNativeBundleMode } from './native-bundle';
+import { installGiftCartSync } from './gift-cart-sync';
 
 // Country restriction gate. Returns true if the COD form is allowed to render
 // on this visit. Fail-open: if detection fails/times out, allow rendering.
@@ -998,6 +999,10 @@ async function initializePreventify() {
 
   if (inlinedConfig) {
     try {
+      // Before the country gate: native checkout is exactly what visitors
+      // outside the COD countries get, and the watcher is a no-op without
+      // gift lines in the cart.
+      installGiftCartSync(inlinedConfig);
       // Country gate: when restriction is on and this visitor isn't allowed,
       // don't render the COD form OR hide native buttons (leave native checkout).
       const allowed = await isCountryAllowed(inlinedConfig, shopDomain, initialAppPath);
@@ -1012,6 +1017,7 @@ async function initializePreventify() {
   try {
     const response = await fetch(`${initialAppPath}proxy/config?shop=${shopDomain}`);
     const config = await response.json();
+    installGiftCartSync(config);
     const allowed = await isCountryAllowed(config, shopDomain, initialAppPath);
     if (!allowed) return;
     renderFromConfig(config, shopDomain, productData, appEmbedContainer);

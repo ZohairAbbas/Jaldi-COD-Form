@@ -426,3 +426,151 @@ describe('combo vs quantity-break precedence', () => {
     expect(totalOf(c)).toBeCloseTo(15, 2);
   });
 });
+
+describe('free gifts on quantity tiers', () => {
+  const OFFER = 'gid://shopify/Product/10';
+  const GIFT = 'gid://shopify/Product/20';
+
+  // A gift line the storefront widget added: carries the hidden property.
+  function giftLine(id: string, unit: number, quantity: number, bundleId: string, productId = GIFT) {
+    return {...line(id, unit, quantity, productId, `gid://shopify/ProductVariant/${id}`), giftAttribute: {value: bundleId}};
+  }
+
+  const giftOffer = (id: string, tiers: any[], extra: Record<string, unknown> = {}) => ({
+    id,
+    applyOn: 'specific',
+    productIds: [OFFER],
+    tiers,
+    ...extra,
+  });
+
+  const tierWithGift = (quantity: number, giftQty = 1, discount: Record<string, unknown> = {discountType: 'none'}) => ({
+    quantity,
+    ...discount,
+    gift: {productId: GIFT, quantity: giftQty},
+  });
+
+  const candidatesOf = (res: any) => res.operations[0]?.productDiscountsAdd?.candidates ?? [];
+
+  test('a qualifying tier makes its widget-added gift line 100% free', () => {
+    const res = cartLinesDiscountsGenerateRun(
+      input([line('o', 100, 3, OFFER), giftLine('g', 40, 1, 'b1')], {bundles: [giftOffer('b1', [tierWithGift(3)])]}),
+    );
+    expect(candidatesOf(res)).toEqual([
+      {message: 'Free gift', targets: [{cartLine: {id: 'g'}}], value: {percentage: {value: 100}}},
+    ]);
+  });
+
+  test('the gift and the tier discount both apply, each to its own line', () => {
+    const res = cartLinesDiscountsGenerateRun(
+      input([line('o', 100, 3, OFFER), giftLine('g', 40, 1, 'b1')], {
+        bundles: [giftOffer('b1', [tierWithGift(3, 1, {discountType: 'percentage', discountValue: 10})])],
+      }),
+    );
+    const c = candidatesOf(res);
+    expect(c).toHaveLength(2);
+    expect(c.find((x: any) => x.message === 'Bundle discount').targets).toEqual([{cartLine: {id: 'o'}}]);
+    expect(c.find((x: any) => x.message === 'Free gift').targets).toEqual([{cartLine: {id: 'g'}}]);
+  });
+
+  test('no exact tier match → the gift line is charged', () => {
+    for (const qty of [2, 4]) {
+      const res = cartLinesDiscountsGenerateRun(
+        input([line('o', 100, qty, OFFER), giftLine('g', 40, 1, 'b1')], {bundles: [giftOffer('b1', [tierWithGift(3)])]}),
+      );
+      expect(candidatesOf(res)).toEqual([]);
+    }
+  });
+
+  test('the gift product bought normally (no property) is never made free', () => {
+    const res = cartLinesDiscountsGenerateRun(
+      input([line('o', 100, 3, OFFER), line('g', 40, 1, GIFT)], {bundles: [giftOffer('b1', [tierWithGift(3)])]}),
+    );
+    expect(candidatesOf(res)).toEqual([]);
+  });
+
+  test('a gift line tagged for a different offer is not made free', () => {
+    const res = cartLinesDiscountsGenerateRun(
+      input([line('o', 100, 3, OFFER), giftLine('g', 40, 1, 'other')], {bundles: [giftOffer('b1', [tierWithGift(3)])]}),
+    );
+    expect(candidatesOf(res)).toEqual([]);
+  });
+
+  test('only the configured gift quantity is free', () => {
+    const res = cartLinesDiscountsGenerateRun(
+      input([line('o', 100, 3, OFFER), giftLine('g', 40, 3, 'b1')], {bundles: [giftOffer('b1', [tierWithGift(3, 2)])]}),
+    );
+    expect(candidatesOf(res)).toEqual([
+      {message: 'Free gift', targets: [{cartLine: {id: 'g', quantity: 2}}], value: {percentage: {value: 100}}},
+    ]);
+  });
+
+  test('gift units never count toward a tier, even on an "all products" offer', () => {
+    // 1 offer unit + 1 gift unit must not match a 2-unit tier, and the gift line
+    // alone must not match a 1-unit tier.
+    const res = cartLinesDiscountsGenerateRun(
+      input([line('o', 100, 1, OFFER), giftLine('g', 40, 1, 'b1', OFFER)], {
+        bundles: [
+          {
+            id: 'b1',
+            applyOn: 'all',
+            tiers: [
+              {quantity: 2, discountType: 'percentage', discountValue: 50},
+              {quantity: 1, discountType: 'none', gift: {productId: OFFER, quantity: 1}},
+            ],
+          },
+        ],
+      }),
+    );
+    // The single paid unit matches the 1-unit tier, so its gift (same product) is free.
+    expect(candidatesOf(res)).toEqual([
+      {message: 'Free gift', targets: [{cartLine: {id: 'g'}}], value: {percentage: {value: 100}}},
+    ]);
+  });
+
+  test('one gift per order: the higher-priority offer wins', () => {
+    const OTHER = 'gid://shopify/Product/11';
+    const res = cartLinesDiscountsGenerateRun(
+      input(
+        [
+          line('o', 100, 3, OFFER),
+          line('p', 100, 2, OTHER, 'gid://shopify/ProductVariant/p'),
+          giftLine('g1', 40, 1, 'first'),
+          giftLine('g2', 40, 1, 'second'),
+        ],
+        {
+          bundles: [
+            giftOffer('first', [tierWithGift(2)], {productIds: [OTHER]}),
+            giftOffer('second', [tierWithGift(3)]),
+          ],
+        },
+      ),
+    );
+    const c = candidatesOf(res);
+    expect(c).toHaveLength(1);
+    expect(c[0].targets).toEqual([{cartLine: {id: 'g1'}}]);
+  });
+
+  test('units a combo claims do not count toward the gift tier', () => {
+    const B = 'gid://shopify/Product/30';
+    const res = cartLinesDiscountsGenerateRun(
+      input(
+        [line('o', 100, 3, OFFER), line('b', 50, 1, B, 'gid://shopify/ProductVariant/b'), giftLine('g', 40, 1, 'b1')],
+        {
+          combos: [{id: 'c', items: [{productId: OFFER, quantity: 1}, {productId: B, quantity: 1}], discountType: 'percentage', discountValue: 10}],
+          bundles: [giftOffer('b1', [tierWithGift(3)])],
+        },
+      ),
+    );
+    expect(candidatesOf(res).some((x: any) => x.message === 'Free gift')).toBe(false);
+  });
+
+  test('a gift line never picks up a tier discount of its own', () => {
+    const res = cartLinesDiscountsGenerateRun(
+      input([line('o', 100, 1, OFFER), giftLine('g', 40, 3, 'b1', OFFER)], {
+        bundles: [{id: 'b1', applyOn: 'all', tiers: [{quantity: 3, discountType: 'percentage', discountValue: 50}]}],
+      }),
+    );
+    expect(candidatesOf(res)).toEqual([]);
+  });
+});

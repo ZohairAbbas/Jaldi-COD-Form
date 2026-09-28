@@ -1,4 +1,5 @@
 import React from 'react';
+import GiftStrip from './GiftStrip';
 
 /**
  * Calculate tier price based on discount type
@@ -45,6 +46,11 @@ export default function BundleWidget({
   onVariantMixChange = null,
   variantMixOosError = false,
   inventoryMap = null,
+  // tierId -> resolved free gift (see gift-resolver.js). Tiers whose gift is
+  // unavailable are simply absent, so their strip is hidden.
+  giftsByTierId = null,
+  onGiftVariantChange = null,
+  freeLabel = 'FREE',
 }) {
   const styling = bundleConfig.styling || {};
   const colors = styling.colors || {};
@@ -523,6 +529,23 @@ export default function BundleWidget({
                     </>);
                   })()}
                 </div>
+              )}
+
+              {/* Free gift strip — on every tier that has one, muted when not selected */}
+              {giftsByTierId?.[tier.id] && (
+                <GiftStrip
+                  gift={giftsByTierId[tier.id]}
+                  isSelected={isSelected}
+                  colors={colors}
+                  radius={radius}
+                  space={space}
+                  currencySymbol={currencySymbol}
+                  exchangeRate={exchangeRate}
+                  freeLabel={freeLabel}
+                  isRTL={isRTL}
+                  compact={isHorizontal}
+                  onVariantChange={onGiftVariantChange ? (variantId) => onGiftVariantChange(tier.id, variantId) : null}
+                />
               )}
             </div>
           );
