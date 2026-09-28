@@ -19,7 +19,7 @@ import { appVersion, growzarError, verifyPlatformRequest } from "../lib/growzar.
  * revoked by a 401 (the fallback for an uninstall webhook that never arrived).
  * The Shop row alone proves nothing — it outlives the install.
  */
-export async function isInstalled(shop, { prisma = db } = {}) {
+async function isInstalled(shop, { prisma = db } = {}) {
   const session = await prisma.session.findFirst({
     where: { shop, isOnline: false },
     select: { id: true },
