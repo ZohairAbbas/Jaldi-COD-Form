@@ -3,6 +3,9 @@ query CartInput {
     lines {
       id
       quantity
+      giftAttribute: attribute(key: "_preventify_gift") {
+        value
+      }
       cost {
         amountPerQuantity {
           amount

@@ -1,4 +1,5 @@
 import { validatePhone, getCurrencySymbol, normalizePrice } from './constants.js';
+import { GIFT_ORDER_LABEL } from './tier-gift.js';
 
 // Map country names to country codes for currency lookup
 const COUNTRY_NAME_TO_CODE = {
@@ -86,6 +87,11 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
         variant_id: parseInt(variantId, 10),
         quantity: item.quantity,
         price: lineItemPrice.toString(),
+        // A quantity-offer gift is billed at full price and zeroed by the
+        // bundle discount; the property lets fulfilment spot it on the order.
+        ...(item.isFreeGift ? {
+          properties: [{ name: GIFT_ORDER_LABEL, value: String(item.giftLabel || "Yes").slice(0, 255) }],
+        } : {}),
       };
     });
 

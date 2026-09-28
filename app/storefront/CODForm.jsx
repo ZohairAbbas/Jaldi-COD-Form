@@ -345,7 +345,9 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           sessionId,
           email,
           phone,
-          cartItems: cart.items,
+          // A recovered cart never applies bundle pricing, so a gift would come
+          // back as a full-price line. Leave it out.
+          cartItems: cart.items.filter(item => !item.isFreeGift),
           totalAmount: cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
           formData,
         }),
@@ -1066,7 +1068,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
           shop: config.shopDomain,
           code,
           subtotal,
-          itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+          itemCount: cart.items.reduce((sum, item) => sum + (item.isFreeGift ? 0 : item.quantity), 0),
         }),
       });
 
@@ -1746,6 +1748,8 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
         : 0,
       isShopifyMarkets: item.isShopifyMarkets || false,
       displayCurrencyCode: item.displayCurrencyCode || null,
+      isFreeGift: item.isFreeGift || false,
+      giftLabel: item.giftLabel || null,
     }));
 
     let firstName = formData.firstName || formData.firstname || '';
@@ -2317,7 +2321,11 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   // Calculate subtotal using original prices for upsell items and bundle items, regular price for others
   // Note: For Pumper Bundle items, the price is already the total bundle price, not per-unit
   // For cart discount items (quantity-breaks), prices are per-unit
+  // A free gift is left out of the subtotal AND the bundle discount below: its
+  // value nets to zero, and counting it would push the customer over
+  // free-shipping or discount thresholds they haven't reached.
   const subtotal = cart.items.reduce((sum, item) => {
+    if (item.isFreeGift) return sum;
     if (item.hasBundleDiscount && item.originalPrice) {
       // Pumper Bundle price is already the total for all units, don't multiply by quantity
       return sum + item.originalPrice;
@@ -2343,6 +2351,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   // Note: Pumper Bundle prices are already totals, not per-unit prices
   // Cart discount prices are per-unit, so multiply by quantity
   const bundleDiscount = cart.items.reduce((sum, item) => {
+    if (item.isFreeGift) return sum;
     if (item.hasBundleDiscount && item.originalPrice && item.originalPrice !== item.price) {
       return sum + (item.originalPrice - item.price);
     }
@@ -2382,7 +2391,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
 
   // Calculate cart weight and quantity for shipping conditions
   const cartWeight = cart.items.reduce((sum, item) => sum + ((item.weight || 0) * item.quantity), 0);
-  const totalQuantity = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalQuantity = cart.items.reduce((sum, item) => sum + (item.isFreeGift ? 0 : item.quantity), 0);
 
   // Get eligible shipping rates based on conditions
   const getEligibleShippingRates = () => {
@@ -2450,6 +2459,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
   const hasDisplayPrice = cart.items.some(item => item.displayPrice != null);
   const displaySubtotal = hasDisplayPrice
     ? cart.items.reduce((sum, item) => {
+        if (item.isFreeGift) return sum;
         // For upsell items, use displayOriginalPrice (converted original) since discount is shown separately
         if (item.isUpsell && item.displayOriginalPrice != null) {
           return sum + (item.displayOriginalPrice * item.quantity);
@@ -3296,7 +3306,16 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                             {item.variant && <div style={{ fontSize: '12px', color: '#6B7280' }}>{item.variant}</div>}
                           </div>
                           <div style={{ fontSize: '14px', fontWeight: '600', color: '#111', whiteSpace: 'nowrap', alignSelf: 'center', textAlign: 'right' }}>
-                            {item.hasBundleDiscount && item.originalPrice ? (
+                            {item.isFreeGift ? (
+                              <>
+                                {item.originalPrice > 0 && (
+                                  <div style={{ fontSize: '11px', fontWeight: '400', color: '#9CA3AF', textDecoration: 'line-through' }}>
+                                    {currencySymbol}{(item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice).toFixed(2)}
+                                  </div>
+                                )}
+                                <div style={{ color: '#10b981', textTransform: 'uppercase' }}>{t(lang, 'free')}</div>
+                              </>
+                            ) : item.hasBundleDiscount && item.originalPrice ? (
                               <>
                                 <div style={{ fontSize: '11px', fontWeight: '400', color: '#9CA3AF', textDecoration: 'line-through' }}>
                                   {currencySymbol}{(item.displayOriginalPrice != null ? item.displayOriginalPrice : item.originalPrice).toFixed(2)}
@@ -3318,7 +3337,7 @@ export default function CODForm({ config, cart, onSubmit, onClose, onRemoveItem,
                               <>{currencySymbol}{((item.isUpsell && item.displayOriginalPrice != null ? item.displayOriginalPrice : item.displayPrice != null ? item.displayPrice : (item.isUpsell && item.originalPrice ? item.originalPrice : item.price)) * item.quantity).toFixed(2)}</>
                             )}
                           </div>
-                          {mode === 'popup' && onRemoveItem && (
+                          {mode === 'popup' && onRemoveItem && !item.isFreeGift && (
                             <button type="button" onClick={(e) => { e.preventDefault(); onRemoveItem(item.variantId); }}
                               style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#6B7280', border: 'none', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', fontSize: '12px', lineHeight: '1', padding: '0', fontWeight: '600' }}>
                               ×

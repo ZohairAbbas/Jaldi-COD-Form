@@ -39,7 +39,9 @@ export default function SummaryRail({
               <span className="jaldi-sc-line-meta">
                 {[item.variant, `${t(lang, 'qty')} ${item.quantity}`].filter(Boolean).join(' · ')}
               </span>
-              <span className="jaldi-sc-rail-price">{money(unit * item.quantity)}</span>
+              <span className="jaldi-sc-rail-price">
+                {item.isFreeGift ? t(lang, 'free') : money(unit * item.quantity)}
+              </span>
             </div>
           </div>
         );
