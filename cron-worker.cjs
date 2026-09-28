@@ -26,6 +26,7 @@ const locks = {
   fulfillmentSync: false,
   courierifySync: false,
   googleSheetsSync: false,
+  growzarOutbox: false,
 };
 
 async function runJob(jobName, endpoint) {
@@ -116,6 +117,14 @@ cron.schedule('*/2 * * * *', () => {
   timezone: 'Asia/Karachi'
 });
 
+// Job 6: Growzar event retries - Every minute (usually finds nothing)
+cron.schedule('* * * * *', () => {
+  runJob('growzarOutbox', '/proxy/cron-growzar-outbox');
+}, {
+  scheduled: true,
+  timezone: 'Asia/Karachi'
+});
+
 // ============================================
 // STARTUP
 // ============================================
@@ -131,6 +140,7 @@ console.log('  - Draft order creation: Every 30 minutes');
 console.log('  - Fulfillment sync: Every 3 hours');
 console.log('  - Courierify data sync: Daily at 02:00 PKT');
 console.log('  - Google Sheets sync: Every 2 minutes');
+console.log('  - Growzar event retries: Every minute');
 console.log('========================================');
 
 // Preflight: confirm the app is actually reachable and the secret is accepted.

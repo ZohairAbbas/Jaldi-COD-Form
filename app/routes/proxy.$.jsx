@@ -6,6 +6,7 @@ import { syncCourierifyData } from "../lib/courierify-sync.server";
 import { runGoogleSheetsSync } from "../lib/google-sheets-sync.server";
 import { CRON_STATUS, getCronHealth } from "../lib/cron-health.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
+import { sweepGrowzarOutbox } from "../lib/growzar-outbox.server";
 
 
 const ABANDONED_THRESHOLD_MINUTES = 10;
@@ -33,6 +34,8 @@ export const action = async ({ request, params }) => {
       return handleGoogleSheetsSync(request);
     case "cron-health":
       return handleCronHealth(request);
+    case "cron-growzar-outbox":
+      return handleGrowzarOutbox(request);
     default:
       return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -696,6 +699,43 @@ async function handleCourierifySync(request) {
       { success: false, error: error.message || "Failed to sync Courierify data" },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Retry events Growzar has not yet accepted (lib/growzar-outbox.server).
+ *
+ * Runs every minute and almost always finds nothing, so it only writes a
+ * CronLog row when there was work — a row a minute would bury the jobs that
+ * matter. For the same reason it is not in CRON_JOBS: an idle sweep is not an
+ * overdue one.
+ */
+async function handleGrowzarOutbox(request) {
+  if (request.method !== "POST") {
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
+  }
+  if (!verifyCronSecret(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startTime = Date.now();
+  try {
+    const result = await sweepGrowzarOutbox();
+    if (result.due > 0) {
+      await logCronJob("growzar-outbox", CRON_STATUS.COMPLETED, {
+        processed: result.delivered,
+        errors: result.failed,
+        duration: Date.now() - startTime,
+        message: `${result.delivered} delivered, ${result.failed} failed of ${result.due} due`,
+      });
+    }
+    return Response.json({ success: true, ...result });
+  } catch (error) {
+    await logCronJob("growzar-outbox", CRON_STATUS.FAILED, {
+      message: error.message,
+      duration: Date.now() - startTime,
+    });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 

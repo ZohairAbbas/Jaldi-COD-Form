@@ -796,3 +796,27 @@ model ExternalDeliveryRecord {
   @@index([phone, deliveryOutcome])
   @@index([sourceApp, sourceShopDomain])
 }
+
+// ============================================
+// GROWZAR EVENT OUTBOX (API-CONTRACT §7)
+// ============================================
+
+// Events waiting to reach Growzar. Delivery is at-least-once with backoff
+// (1m, 5m, 30m, 2h, 6h, 12h), so an event has to survive a process restart
+// between attempts — which is why it lives here and not in memory.
+model GrowzarOutboxEvent {
+  id            String    @id @default(cuid())
+  eventId       String    @unique // Envelope eventId; derived from the Shopify webhook ID so a redelivery is not a second event
+  topic         String
+  shop          String // *.myshopify.com domain
+  body          String    @db.Text // Exact serialised envelope, re-sent byte for byte on every attempt
+  status        String    @default("pending") // "pending" | "delivered" | "failed"
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  lastStatus    Int? // HTTP status of the last attempt; null for a network error
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  deliveredAt   DateTime?
+
+  @@index([status, nextAttemptAt])
+}
