@@ -5,6 +5,7 @@ import { getRiskDataForOrder } from "../lib/risk.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 import { resolveOrderVerification, isGenuineVerification } from "../lib/verification.server";
 import { GIFT_ORDER_LABEL } from "../lib/tier-gift";
+import { buildOrderTags } from "../lib/order-tags";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -73,6 +74,7 @@ export const action = async ({ request }) => {
       {
         clientClaim: data.verificationMethod || null,
         allowTrustedBypass: shop.settings?.enableOTP !== false,
+        otpEnabled: shop.settings?.enableOTP === true,
       }
     );
 
@@ -200,14 +202,12 @@ export const action = async ({ request }) => {
     // Build draft order input
     const draftOrderInput = {
       lineItems: lineItems,
-      tags: [
-        "preventify_cod_form",
-        "draft_order_for_card_checkout",
+      tags: buildOrderTags({
+        baseTags: ["preventify_cod_form", "draft_order_for_card_checkout"],
         verificationMethod,
-        riskData?.riskLevel === "HIGH" ? "preventify-high-risk" : null,
-        riskData?.riskLevel === "MEDIUM" ? "preventify-medium-risk" : null,
-        riskData?.riskLevel === "LOW" ? "preventify-trusted-buyer" : null,
-      ].filter(Boolean),
+        riskLevel: riskData?.riskLevel,
+        settings: shop.settings,
+      }),
       note: "",
       customAttributes: [
         // Formerly the order note — now surfaced in the order's Additional details.

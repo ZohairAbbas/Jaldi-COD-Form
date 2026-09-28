@@ -150,6 +150,7 @@ export const action = async ({ request }) => {
     const verificationMethod = await resolveOrderVerification(shop.id, orderData.phone, {
       clientClaim: orderData.verificationMethod || null,
       allowTrustedBypass: shop.settings?.enableOTP !== false,
+      otpEnabled: shop.settings?.enableOTP === true,
     });
 
     // Calculate totals from items if not provided
@@ -244,6 +245,7 @@ export const action = async ({ request }) => {
         presentmentCurrencyCode: orderData.presentmentCurrencyCode, // Shopify Markets currency
         verificationMethod, // Resolved server-side above, not taken from the client
         riskData, // Risk intelligence data for tags/notes
+        tagSettings: shop.settings, // Merchant's order-tag toggles
       },
       shop.shopifyDomain // Pass shop domain for REST API call
     );

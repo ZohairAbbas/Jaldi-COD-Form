@@ -136,6 +136,7 @@ export const action = async ({ request }) => {
     const verificationMethod = await resolveOrderVerification(shop.id, data.phone, {
       clientClaim: data.verificationMethod || null,
       allowTrustedBypass: shop.settings?.enableOTP !== false,
+      otpEnabled: shop.settings?.enableOTP === true,
     });
 
     const admin = {
@@ -207,6 +208,7 @@ export const action = async ({ request }) => {
         presentmentCurrencyCode: data.presentmentCurrencyCode,
         verificationMethod,
         riskData,
+        tagSettings: shop.settings,
         // PayFast-specific overrides (applied inside createShopifyOrder via spread)
         _financialStatus: "paid",
         _paymentGateway: "PayFast",

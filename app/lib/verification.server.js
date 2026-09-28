@@ -159,10 +159,15 @@ export async function resolveTrustedBypass(phone, trustWindowDays = 90) {
  * @param {object} [options]
  * @param {string|null} [options.clientClaim] What the storefront asserted.
  * @param {boolean} [options.allowTrustedBypass] Whether the merchant has the bypass enabled.
- * @returns {Promise<string>}
+ * @param {boolean} [options.otpEnabled] Whether the merchant has verification turned on.
+ *   When false, returns null: no verification was offered, so "skipped" would
+ *   misdescribe the order (the buyer didn't skip anything).
+ * @returns {Promise<string|null>}
  */
 export async function resolveOrderVerification(shopId, phone, options = {}) {
-  const { clientClaim = null, allowTrustedBypass = true } = options;
+  const { clientClaim = null, allowTrustedBypass = true, otpEnabled = true } = options;
+
+  if (!otpEnabled) return null;
 
   let resolved = await resolveVerificationMethod(shopId, phone);
 

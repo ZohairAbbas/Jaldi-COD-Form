@@ -1406,6 +1406,47 @@ export default function Settings() {
           )}
         </s-stack>
       </s-section>
+
+      {/* Order Tags Setting */}
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>Order Tags</s-heading>
+          <s-paragraph>
+            Choose which tags Preventify adds to orders in Shopify. Turn a group off if it clashes with your own tagging or fulfilment rules.
+          </s-paragraph>
+
+          {[
+            {
+              key: "enableSourceTags",
+              title: "Source tags",
+              description: "Marks where the order came from: preventify_cod_form, preventify_payfast, draft_order_for_card_checkout.",
+            },
+            {
+              key: "enableVerificationTags",
+              title: "Verification tags",
+              description: "Records how the phone number was verified: whatsapp_verified, whatsapp_otp_verified, sms_otp_verified, trusted_buyer_verified, verification_skipped. Only added when OTP Verification is enabled.",
+            },
+            {
+              key: "enableRiskTags",
+              title: "Risk tags",
+              description: "Flags the buyer's risk level: preventify-high-risk, preventify-medium-risk, preventify-trusted-buyer.",
+            },
+          ].map(({ key, title, description }) => (
+            <label key={key} style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={settings[key] !== false}
+                onChange={(e) => handleUpdate({ [key]: e.target.checked })}
+                style={{ width: "18px", height: "18px", marginTop: "3px", flexShrink: 0, cursor: "pointer" }}
+              />
+              <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
+                <s-text variant="heading-sm">{title}</s-text>
+                <s-text variant="body-sm" tone="subdued">{description}</s-text>
+              </s-stack>
+            </label>
+          ))}
+        </s-stack>
+      </s-section>
         </>
       )}
 
