@@ -157,6 +157,13 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       orderDetailAttributes.push({ name: "Preventify Risk", value: `${riskData.riskLevel} — ${riskData.riskNote}` });
     }
 
+    const orderTags = buildOrderTags({
+      baseTags: [_orderTags || "preventify_cod_form"],
+      verificationMethod,
+      riskLevel: riskData?.riskLevel,
+      settings: tagSettings,
+    });
+
     // Prepare REST API order payload
     const restOrder = {
       email: customerInfo.email || `noreply+${cleanedPhone || Date.now()}@example.com`,
@@ -166,12 +173,10 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       billing_address: restBillingAddress,
       financial_status: _financialStatus || "pending",
       note: "",
-      tags: buildOrderTags({
-        baseTags: [_orderTags || "preventify_cod_form"],
-        verificationMethod,
-        riskLevel: riskData?.riskLevel,
-        settings: tagSettings,
-      }).join(", "),
+      // Shopify's REST API rejects an empty tags string ("Required parameter
+      // missing or invalid"), which happens when a merchant turns every tag
+      // group off — so omit the key entirely in that case.
+      ...(orderTags.length ? { tags: orderTags.join(", ") } : {}),
       // Shopify Markets: set order currency to the presentment (customer-facing) currency.
       // Only set when presentmentCurrencyCode is provided (i.e., Shopify Markets is active).
       // For non-Markets stores this is undefined and Shopify uses the shop's base currency.
