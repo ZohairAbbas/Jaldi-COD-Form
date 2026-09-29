@@ -16,7 +16,7 @@ import { t } from './translations';
 import { initializePixels, captureUtmParams, resetEventId, trackPurchase, trackSnapchatPurchase, trackTikTokPurchase } from './pixels';
 import { initStorefrontMixpanel, trackStorefrontEvent, trackButtonClick } from './mixpanel-storefront';
 import { normalizePrice, getCurrencyCode, getCurrencySymbol, resolvePixelCurrency, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
-import { isNativeBundleMode } from './native-bundle';
+import { isNativeBundleMode, isCodAllowedForProduct } from './native-bundle';
 import { matchesOfferCountry, offersNeedCountry } from './offer-country';
 import { resolveOrderRedirect } from './order-redirect';
 
@@ -1761,8 +1761,18 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     }));
   };
 
+  // The product page's own instance (not a product card or the cart drawer).
+  const isMainProductPage = currentPageType === 'product' && !isCartDrawer && !isProductCard;
+
   // Helper: check disable list and allow list for product targeting
   const checkSpecificProductAllowed = () => {
+    // With native bundle checkout on, index.jsx also mounts on products the
+    // lists keep the COD form off, so their offers can show. No COD button there.
+    if (isMainProductPage && config?.settings?.nativeBundleCheckout
+      && !isCodAllowedForProduct(config.settings, getPreventifyContainer()?.dataset?.productId)) {
+      return false;
+    }
+
     const itemsToCheck = fullCart.items.length > 0 ? fullCart.items : cart.items;
 
     // Block list: hide if any item in the cart matches a disabled product
@@ -1820,14 +1830,20 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       return true; // Only applies to popup mode
     }
 
+    if (!pageVisibilityAllows()) return false;
+
+    return checkSpecificProductAllowed();
+  };
+
+  // The merchant's "Show on" page-type setting.
+  const pageVisibilityAllows = () => {
     const visibility = config?.settings?.buttonPageVisibility || 'product';
 
     if (visibility === 'disabled') return false;
     if (visibility === 'product' && currentPageType !== 'product') return false;
     if (visibility === 'cart' && currentPageType !== 'cart') return false;
     if (visibility === 'both' && !['product', 'cart'].includes(currentPageType)) return false;
-
-    return checkSpecificProductAllowed();
+    return true;
   };
 
   // Apply the merchant-configured post-order behavior (COD): redirect to a URL,
@@ -2302,7 +2318,14 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // `detectedCountry`/shop-default, which would be the store's operating country
   // (e.g. UAE) even for a visitor in PAK. We pass getRealVisitorCountry() as the
   // override so both files resolve identically from the shared cache.
-  const nativeBundleMode = isNativeBundleMode(config, shopDomain, getRealVisitorCountry());
+  // The main product page also passes its product id: a product in the "Enable
+  // on specific products" list uses the COD form instead of native checkout.
+  const nativeBundleMode = isNativeBundleMode(
+    config,
+    shopDomain,
+    getRealVisitorCountry(),
+    isMainProductPage ? getPreventifyContainer()?.dataset?.productId ?? null : null,
+  );
 
   // ==========================================================================
   // FREE GIFTS ON QUANTITY TIERS
@@ -3172,9 +3195,13 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     return null; // Don't render if mode is not popup
   }
 
+  // Native bundle mode on a product the COD form is kept off: the offers still
+  // render (the COD button is already hidden in native mode).
+  const nativeOffersOnly = nativeBundleMode && isMainProductPage && pageVisibilityAllows();
+
   // Check if button should be visible on current page
   // BUT always render if we're showing a post-purchase upsell or if the COD modal is open
-  if (!shouldShowButton() && !showPostPurchaseUpsell && !isModalOpen && thankYouHtml == null) {
+  if (!shouldShowButton() && !nativeOffersOnly && !showPostPurchaseUpsell && !isModalOpen && thankYouHtml == null) {
     return null; // Don't render if not on the correct page type
   }
 
