@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import JaldiCODFormApp from './App';
 import { normalizePrice, SHOPIFY_COUNTRY_CODE_MAP } from '../lib/constants';
-import { isNativeBundleMode } from './native-bundle';
+import { isNativeBundleMode, isCodAllowedForProduct, mayUseNativeBundleMode } from './native-bundle';
 import { installGiftCartSync } from './gift-cart-sync';
 
 // Country restriction gate. Returns true if the COD form is allowed to render
@@ -535,7 +535,7 @@ function detectPageType() {
 }
 
 // Check if should show on current page based on visibility settings
-function shouldShowOnPage(config) {
+function shouldShowOnPage(config, shopDomain) {
   const pageType = detectPageType();
   const visibility = config.settings.buttonPageVisibility;
 
@@ -549,43 +549,21 @@ function shouldShowOnPage(config) {
 
   if (!pageTypeAllowed) return false;
 
-  // Gate 2: disable on specific products (block list takes priority check first)
-  const disableSpecific = config.settings.disableSpecificProducts;
-  if (disableSpecific) {
-    const disabledIds = config.settings.disabledProductIds || [];
-    if (disabledIds.length > 0) {
-      if (pageType === 'product') {
-        const container = document.querySelector('[data-preventify-app-embed]');
-        const currentProductId = container?.dataset?.productId;
-        if (currentProductId) {
-          const isBlocked = disabledIds.some(pid => {
-            const numericPid = String(pid).replace(/\D/g, '');
-            return numericPid === String(currentProductId);
-          });
-          if (isBlocked) return false;
-        }
-      }
-      // For cart page: let React mount, App.jsx will check cart items
-    }
+  // Gate 2: the "Disable on" / "Enable on specific products" lists
+  if (pageType === 'product') {
+    const container = document.querySelector('[data-preventify-app-embed]');
+    if (isCodAllowedForProduct(config.settings, container?.dataset?.productId)) return true;
+    // The COD form is off for this product, but in native bundle mode its
+    // offers still show with the theme's own checkout. App.jsx keeps the COD
+    // button hidden here. Offers only render in popup mode.
+    return config.settings.formMode === 'popup' && mayUseNativeBundleMode(config, shopDomain);
   }
 
-  // Gate 3: enable on specific products only (allow list)
   const enableSpecific = config.settings.enableSpecificProducts;
   if (!enableSpecific) return true; // Feature off — pass through
 
   const specificIds = config.settings.specificProductIds || [];
   if (specificIds.length === 0) return false; // Feature on but no products selected → hide
-
-  if (pageType === 'product') {
-    // Product page: check current product ID against the list
-    const container = document.querySelector('[data-preventify-app-embed]');
-    const currentProductId = container?.dataset?.productId;
-    if (!currentProductId) return false;
-    return specificIds.some(pid => {
-      const numericPid = String(pid).replace(/\D/g, '');
-      return numericPid === String(currentProductId);
-    });
-  }
 
   // For cart page: cart items aren't available here yet — let React mount and App.jsx will filter
   if (pageType === 'cart') return true;
@@ -615,8 +593,13 @@ function hideNativeButtons(config) {
     });
   }
 
+  // The theme's buttons are the only way to buy a product the COD form is kept
+  // off, so leave them alone there. The app embed's pre-paint CSS matches this.
+  const codOnProduct = pageType === 'product'
+    && isCodAllowedForProduct(settings, document.querySelector('[data-preventify-app-embed]')?.dataset?.productId);
+
   // Hide Add to Cart button on product pages
-  if (settings.hideAddToCartButton && pageType === 'product') {
+  if (settings.hideAddToCartButton && codOnProduct) {
     const addToCartButtons = document.querySelectorAll(
       'button[name="add"], .product-form__submit, [data-add-to-cart], form[action*="/cart/add"] button[type="submit"]:not(.shopify-payment-button__button)'
     );
@@ -626,7 +609,7 @@ function hideNativeButtons(config) {
   }
 
   // Hide Buy Now button on product pages
-  if (settings.hideBuyNowButton && pageType === 'product') {
+  if (settings.hideBuyNowButton && codOnProduct) {
     const buyNowButtons = document.querySelectorAll(
       '.shopify-payment-button, .shopify-payment-button__button, [data-shopify-buttoncontainer], .product-form__buttons .shopify-payment-button'
     );
@@ -1061,7 +1044,7 @@ function renderFromConfig(config, shopDomain, productData, appEmbedContainer) {
     }
 
     // Check if should show main button/form on this page
-    if (!shouldShowOnPage(config)) {
+    if (!shouldShowOnPage(config, shopDomain)) {
       return;
     }
 

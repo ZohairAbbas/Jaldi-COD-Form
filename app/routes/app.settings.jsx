@@ -1258,9 +1258,11 @@ export default function Settings() {
             <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
               <s-text variant="heading-sm">Enable native bundle checkout</s-text>
               <s-text variant="body-sm" tone="subdued">
-                Requires a published bundle. The COD form is only hidden on products that
-                have a bundle — other products keep the COD button. Note: variant-mix
-                bundles are not yet supported in this mode and should use the COD form.
+                Requires a published bundle. The COD button is hidden across the store. To
+                keep the COD form on a few products, select them under Visibility → Enable
+                on Specific Products; every other product keeps native checkout. Note:
+                variant-mix bundles are not yet supported in this mode and should use the
+                COD form.
               </s-text>
             </s-stack>
           </label>
@@ -1530,7 +1532,7 @@ export default function Settings() {
                           style={{ width: "18px", height: "18px" }}
                         />
                         <span style={{ fontSize: "14px" }}>
-                          Hide the <strong>Add to Cart</strong> button on product pages
+                          Hide the <strong>Add to Cart</strong> button on product pages that show the COD button
                         </span>
                       </label>
                       <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
@@ -1541,7 +1543,7 @@ export default function Settings() {
                           style={{ width: "18px", height: "18px" }}
                         />
                         <span style={{ fontSize: "14px" }}>
-                          Hide the <strong>Buy Now</strong> button on product pages
+                          Hide the <strong>Buy Now</strong> button on product pages that show the COD button
                         </span>
                       </label>
                     </s-stack>
@@ -1756,6 +1758,11 @@ export default function Settings() {
                   <div style={{ fontSize: "13px", color: "#6B7280" }}>
                     Hide the COD button on specific product pages and when those products are in the cart. All other products will still show the button.
                   </div>
+                  {settings.nativeBundleCheckout && (
+                    <div style={{ fontSize: "13px", color: "#6B7280", marginTop: "6px" }}>
+                      Native bundle checkout is on: the selected products still show their offers with native checkout.
+                    </div>
+                  )}
                 </div>
               </label>
 
@@ -1853,6 +1860,11 @@ export default function Settings() {
                   <div style={{ fontSize: "13px", color: "#6B7280" }}>
                     Restrict the COD button to specific products only. When enabled, the button will appear only on the selected product pages and when those products are in the cart.
                   </div>
+                  {settings.nativeBundleCheckout && (
+                    <div style={{ fontSize: "13px", color: "#6B7280", marginTop: "6px" }}>
+                      Native bundle checkout is on: the selected products use the COD form and its offers, and every other product keeps its offers with native checkout.
+                    </div>
+                  )}
                 </div>
               </label>
 

@@ -35,14 +35,34 @@
 {% endcomment %}
 {% if preventify_config != blank %}
   {% assign pf_settings = preventify_config.value.settings %}
+  {% comment %}
+    A product the "Disable on" / "Enable on specific products" lists keep the COD
+    form off is bought through the theme's own buttons, so never hide them there.
+    Mirrors isCodAllowedForProduct() in the storefront JS.
+  {% endcomment %}
+  {% assign pf_cod_on_product = false %}
+  {% if template.name == 'product' %}
+    {% assign pf_cod_on_product = true %}
+    {% assign pf_product_gid = 'gid://shopify/Product/' | append: product.id %}
+    {% if pf_settings.disableSpecificProducts %}
+      {% if pf_settings.disabledProductIds contains pf_product_gid %}
+        {% assign pf_cod_on_product = false %}
+      {% endif %}
+    {% endif %}
+    {% if pf_settings.enableSpecificProducts %}
+      {% unless pf_settings.specificProductIds contains pf_product_gid %}
+        {% assign pf_cod_on_product = false %}
+      {% endunless %}
+    {% endif %}
+  {% endif %}
   <style id="preventify-hide-native">
-    {% if pf_settings.hideAddToCartButton and template.name == 'product' %}
+    {% if pf_settings.hideAddToCartButton and pf_cod_on_product %}
       button[name="add"]:not(#preventify-popup *):not(#preventify-embedded *),
       .product-form__submit,
       [data-add-to-cart],
       form[action*="/cart/add"] button[type="submit"]:not(.shopify-payment-button__button) { display: none !important; }
     {% endif %}
-    {% if pf_settings.hideBuyNowButton and template.name == 'product' %}
+    {% if pf_settings.hideBuyNowButton and pf_cod_on_product %}
       .shopify-payment-button, [data-shopify-buttoncontainer] { display: none !important; }
     {% endif %}
     {% if pf_settings.hideCheckoutButton and template.name == 'cart' %}
