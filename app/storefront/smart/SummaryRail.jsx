@@ -27,6 +27,9 @@ export default function SummaryRail({
 
       {items.map((item, idx) => {
         const unit = item.displayPrice != null ? item.displayPrice : item.price;
+        // A discounted bundle line already holds the total for all its units,
+        // the same rule the form's subtotal uses.
+        const lineTotal = item.hasBundleDiscount && item.originalPrice ? unit : unit * item.quantity;
         return (
           <div key={idx} className="jaldi-sc-card jaldi-sc-rail-item">
             {item.image ? (
@@ -40,7 +43,7 @@ export default function SummaryRail({
                 {[item.variant, `${t(lang, 'qty')} ${item.quantity}`].filter(Boolean).join(' · ')}
               </span>
               <span className="jaldi-sc-rail-price">
-                {item.isFreeGift ? t(lang, 'free') : money(unit * item.quantity)}
+                {item.isFreeGift ? t(lang, 'free') : money(lineTotal)}
               </span>
             </div>
           </div>
