@@ -3,7 +3,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getOrCreateShop, getDashboardStats, getMonthlyOrderCount } from "../lib/db.server";
 import db from "../db.server";
-import { getSubscription } from "../lib/mantle.server";
+import { getSubscription } from "../lib/billing.server";
 import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import { getCurrencyCode } from "../lib/constants";
 import { deriveSetupSteps } from "../lib/setup-status.server";

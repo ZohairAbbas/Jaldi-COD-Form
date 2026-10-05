@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Setting up Mantle Billing & Mixpanel Analytics"
+echo "🚀 Setting up Mixpanel Analytics"
 echo "=================================================="
 echo ""
 
@@ -15,17 +15,14 @@ fi
 
 # Check for required environment variables
 echo "Checking environment variables..."
-if ! grep -q "MANTLE_APP_ID" .env || ! grep -q "MIXPANEL_TOKEN" .env; then
+if ! grep -q "MIXPANEL_TOKEN" .env; then
     echo "⚠️  Required environment variables not found in .env"
     echo ""
     echo "Please add the following to your .env file:"
     echo ""
-    echo "MANTLE_APP_ID=your_mantle_app_id_here"
-    echo "MANTLE_API_KEY=your_mantle_api_key_here"
     echo "MIXPANEL_TOKEN=your_mixpanel_project_token_here"
     echo ""
     echo "Get your credentials from:"
-    echo "  - Mantle: https://heymantle.com"
     echo "  - Mixpanel: https://mixpanel.com"
     echo ""
 else
@@ -51,11 +48,10 @@ echo ""
 echo "✅ Setup complete!"
 echo ""
 echo "Next steps:"
-echo "1. Add your Mantle and Mixpanel credentials to .env"
+echo "1. Add your Mixpanel credentials to .env"
 echo "2. Follow the integration guide in INTEGRATION_GUIDE.md"
-echo "3. Configure Mantle webhook at: https://your-app-url.com/webhooks/mantle"
-echo "4. Test the billing flow at: /app/billing"
-echo "5. Verify events in Mixpanel dashboard"
+echo "3. Test the billing flow at: /app/billing"
+echo "4. Verify events in Mixpanel dashboard"
 echo ""
 echo "📚 Documentation:"
 echo "  - SETUP_SUMMARY.md - Quick overview"

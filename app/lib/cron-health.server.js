@@ -27,6 +27,7 @@ export const CRON_JOBS = [
   { key: "fulfillmentSync", jobName: "fulfillment-sync", label: "Fulfillment sync", maxAgeMinutes: 240 },
   { key: "googleSheetsSync", jobName: "google-sheets-sync", label: "Google Sheets sync", maxAgeMinutes: 10 },
   { key: "courierifySync", jobName: "courierify-sync", label: "Courierify sync", maxAgeMinutes: 1800 },
+  { key: "billingSync", jobName: "billing-sync", label: "Billing sync", maxAgeMinutes: 900 },
 ];
 
 /**

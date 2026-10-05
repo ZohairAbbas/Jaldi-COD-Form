@@ -7,6 +7,7 @@ import { runGoogleSheetsSync } from "../lib/google-sheets-sync.server";
 import { CRON_STATUS, getCronHealth } from "../lib/cron-health.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 import { sweepGrowzarOutbox } from "../lib/growzar-outbox.server";
+import { runBillingSweep } from "../lib/billing.server";
 
 
 const ABANDONED_THRESHOLD_MINUTES = 10;
@@ -36,6 +37,8 @@ export const action = async ({ request, params }) => {
       return handleCronHealth(request);
     case "cron-growzar-outbox":
       return handleGrowzarOutbox(request);
+    case "cron-billing-sync":
+      return handleBillingSync(request);
     default:
       return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -697,6 +700,61 @@ async function handleCourierifySync(request) {
 
     return Response.json(
       { success: false, error: error.message || "Failed to sync Courierify data" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Billing sweep (lib/billing.server): reconcile every installed shop's plan
+ * with Shopify, and post the monthly plan charge on legacy Mantle
+ * subscriptions that are due. Charges are only posted when
+ * LEGACY_BILLING_CHARGE=true; otherwise the response lists what would have
+ * been charged.
+ */
+async function handleBillingSync(request) {
+  if (request.method !== "POST") {
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
+  }
+  if (!verifyCronSecret(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startTime = Date.now();
+  await logCronJob("billing-sync", "started");
+
+  try {
+    const result = await runBillingSweep();
+    const duration = Date.now() - startTime;
+
+    const charged = result.charges.filter((c) => c.outcome === "charged").length;
+    const dryRun = result.charges.filter((c) => c.outcome === "dry_run").length;
+
+    await logCronJob("billing-sync", "completed", {
+      message:
+        `Checked ${result.shopsChecked} shops (${result.unreachable} unreachable); ` +
+        `legacy charges: ${charged} posted, ${dryRun} dry-run`,
+      processed: result.shopsChecked,
+      errors: result.errors,
+      duration,
+    });
+
+    return Response.json({
+      ...result,
+      success: result.errors === 0,
+      duration: `${duration}ms`,
+    });
+  } catch (error) {
+    console.error("[billing-sync] Unhandled error:", error);
+
+    const duration = Date.now() - startTime;
+    await logCronJob("billing-sync", "failed", {
+      message: error.message,
+      duration,
+    });
+
+    return Response.json(
+      { success: false, error: error.message || "Billing sync failed" },
       { status: 500 }
     );
   }

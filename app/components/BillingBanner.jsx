@@ -23,7 +23,8 @@ export default function BillingBanner({ subscription, planUsage, isNavigatingToB
     if (status === 'trialing' && trialEndsAt && daysUntil(trialEndsAt) > 0) return 'info';
     if (status === 'expired' || (status === 'trialing' && new Date() > new Date(trialEndsAt))) return 'critical';
     if (status === 'cancelled') return 'critical';
-    if (status === 'past_due') return 'critical';
+    // Shopify freezes a subscription when the store's bill goes unpaid.
+    if (status === 'past_due' || status === 'frozen') return 'critical';
     // Kept below the terminal states above: a subscription that is cancelling
     // but still inside its paid period retains full access, so it warns rather
     // than reading as critical.
@@ -171,8 +172,8 @@ export default function BillingBanner({ subscription, planUsage, isNavigatingToB
     );
   }
 
-  // Payment failed or past due
-  if (status === 'past_due') {
+  // Payment failed or past due (Shopify reports this as a frozen subscription)
+  if (status === 'past_due' || status === 'frozen') {
     return (
       <s-banner
         tone="critical"

@@ -1,13 +1,19 @@
 /**
  * Plan Limits Configuration
  *
- * Defines order limits per plan. These are LOCAL constants
- * controlled by the app, not dependent on Mantle.
- * Plan names must match the names configured in Mantle dashboard.
+ * Defines order limits per plan. These are LOCAL constants controlled by the
+ * app; Shopify owns pricing and charging.
+ *
+ * `handle` must match the plan handle in the Partner Dashboard (Pricing
+ * content) exactly — Shopify sends it back as `plan_handle` after a merchant
+ * approves a plan. `price` is display-only and must be kept in step with the
+ * Dashboard by hand.
  */
 
 export const PLAN_LIMITS = {
   Free: {
+    handle: 'free',
+    price: 0,
     monthlyOrderLimit: 200,
     features: [
       '200 orders/month',
@@ -21,6 +27,8 @@ export const PLAN_LIMITS = {
     ],
   },
   Basic: {
+    handle: 'basic',
+    price: 4.99,
     monthlyOrderLimit: 1000,
     features: [
       '1000 orders/month',
@@ -30,6 +38,8 @@ export const PLAN_LIMITS = {
     ],
   },
   Pro: {
+    handle: 'pro',
+    price: 14.99,
     monthlyOrderLimit: null, // Unlimited
     features: [
       'Unlimited orders',
@@ -40,6 +50,39 @@ export const PLAN_LIMITS = {
 };
 
 export const DEFAULT_PLAN_NAME = 'Free';
+
+/** Plan names, cheapest first. */
+export const PLAN_NAMES = Object.keys(PLAN_LIMITS);
+
+/**
+ * Map a Shopify plan handle (from `plan_handle` or the Partner API) to a plan
+ * name. Returns null when unrecognised, so the caller can fall back rather
+ * than guess.
+ */
+export function planNameFromHandle(handle) {
+  if (!handle) return null;
+  const needle = String(handle).trim().toLowerCase();
+  return PLAN_NAMES.find((name) => PLAN_LIMITS[name].handle === needle) || null;
+}
+
+/**
+ * Map a Shopify subscription's display name to a plan name. Subscriptions
+ * Mantle created are named exactly "Basic" / "Pro"; Shopify App Pricing ones
+ * carry the Dashboard plan name.
+ *
+ * Fragile by nature — a Dashboard rename breaks it — so callers must treat
+ * null as "unknown, keep the previous plan", never as Free.
+ */
+export function planNameFromSubscriptionName(subscriptionName) {
+  if (!subscriptionName) return null;
+  const needle = String(subscriptionName).trim().toLowerCase();
+  return (
+    PLAN_NAMES.find((name) => name.toLowerCase() === needle) ||
+    // Tolerate names like "Preventify Pro" / "Basic plan".
+    PLAN_NAMES.find((name) => new RegExp(`\\b${name.toLowerCase()}\\b`).test(needle)) ||
+    null
+  );
+}
 
 export const USAGE_WARNING_THRESHOLD = 85;
 export const USAGE_LIMIT_THRESHOLD = 100;
@@ -82,12 +125,18 @@ export function getPlanFeatures(planName) {
 }
 
 /**
+ * Subscription statuses that grant no paid plan. `canceled` is the spelling
+ * Mantle wrote for some rows; Shopify's own statuses are lowercased on sync.
+ */
+export const INACTIVE_STATUSES = ['cancelled', 'canceled', 'expired', 'frozen', 'declined'];
+
+/**
  * Get the effective plan name based on subscription status.
- * Treats cancelled/expired subscriptions as Free plan.
+ * Treats inactive subscriptions as Free plan.
  */
 export function getEffectivePlanName(subscription) {
   if (!subscription) return DEFAULT_PLAN_NAME;
   const { status, planName } = subscription;
-  if (['cancelled', 'expired'].includes(status)) return DEFAULT_PLAN_NAME;
+  if (INACTIVE_STATUSES.includes(status)) return DEFAULT_PLAN_NAME;
   return planName || DEFAULT_PLAN_NAME;
 }

@@ -28,6 +28,17 @@ export const action = async ({ request }) => {
     console.error("Failed to mark abandoned carts on uninstall:", err.message);
   }
 
+  // Shopify cancels the app's subscriptions on uninstall. Clear the sync stamp
+  // so a quick reinstall re-checks Shopify instead of trusting the stale plan.
+  try {
+    await db.subscription.updateMany({
+      where: { shop: { shopifyDomain: shop } },
+      data: { lastCheckedAt: null },
+    });
+  } catch (err) {
+    console.error("Failed to reset subscription sync on uninstall:", err.message);
+  }
+
   // Tell Growzar (API-CONTRACT §7, D-17), so it can switch this shop to
   // reconnect mode instead of showing stale data with no explanation. Only the
   // outbox insert is awaited; the send happens after we answer Shopify and is

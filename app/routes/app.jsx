@@ -5,7 +5,7 @@ import { authenticate } from "../shopify.server";
 import ErrorPage from "../components/ErrorPage";
 import { getOrCreateShop, getMonthlyOrderCount } from "../lib/db.server";
 import { syncStorefrontConfigByDomain } from "../lib/storefront-config.server";
-import { getSubscription } from "../lib/mantle.server";
+import { syncSubscription } from "../lib/billing.server";
 import { getSheetsAlertForShop } from "../lib/google-sheets.server";
 import { getPlanLimit, getUsagePercentage, getUsageStatus, getEffectivePlanName } from "../lib/plan-limits";
 import MixpanelProvider from "../components/MixpanelProvider";
@@ -33,7 +33,11 @@ export const loader = async ({ request }) => {
     console.error("[Preventify] admin-load metafield sync failed:", e)
   );
 
-  const subscription = await getSubscription(shop.id);
+  // Reconcile the plan with Shopify (at most every few minutes per shop).
+  // Shopify App Pricing sends no subscription webhooks, so this is how a
+  // cancellation or freeze made outside the app reaches the banners. Never
+  // blocks the app: a failed lookup returns the row as it was.
+  const subscription = await syncSubscription(admin, shop);
 
   // Integrations the merchant must act on themselves. Null unless something is
   // genuinely broken, so the common case renders nothing. One indexed lookup.
