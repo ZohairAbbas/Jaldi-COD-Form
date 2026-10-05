@@ -101,20 +101,28 @@ model GoogleSheetsIntegration {
   shop                    Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
+// Local mirror of the shop's Shopify subscription (lib/billing.server.js).
+// Shopify App Pricing is the source of truth; Merchant360 (admin-app) reads
+// planName, status, trialEndsAt and currentPeriodEnd directly, so keep those
+// names and their values stable.
 model Subscription {
-  id                String    @id @default(cuid())
-  shopId            String    @unique
-  mantleCustomerId  String?
-  planId            String?
-  planName          String?
-  status            String    @default("trialing")
-  currentPeriodEnd  DateTime?
-  cancelAtPeriodEnd Boolean   @default(false)
-  trialEndsAt       DateTime?
-  usageCharges      Json      @default("[]")
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  shop              Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                    String    @id @default(cuid())
+  shopId                String    @unique
+  // Shopify App Pricing plan handle (free | basic | pro), when known.
+  planHandle            String?
+  planName              String?
+  // Lowercased Shopify status (active | frozen | ...), or "none" for no subscription.
+  status                String    @default("trialing")
+  // gid://shopify/AppSubscription/..., kept for support and reconciliation.
+  shopifySubscriptionId String?
+  currentPeriodEnd      DateTime?
+  cancelAtPeriodEnd     Boolean   @default(false)
+  trialEndsAt           DateTime?
+  // Last time this row was reconciled with Shopify; drives the sync TTL.
+  lastCheckedAt         DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  shop                  Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([status])

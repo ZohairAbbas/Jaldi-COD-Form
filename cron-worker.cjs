@@ -27,6 +27,7 @@ const locks = {
   courierifySync: false,
   googleSheetsSync: false,
   growzarOutbox: false,
+  billingSync: false,
 };
 
 async function runJob(jobName, endpoint) {
@@ -125,6 +126,16 @@ cron.schedule('* * * * *', () => {
   timezone: 'Asia/Karachi'
 });
 
+// Job 7: Billing sync - Every 6 hours. Reconciles plans with Shopify (App
+// Pricing sends no webhooks) and posts the monthly charge on legacy Mantle
+// subscriptions. A charge lands within hours of falling due, not days.
+cron.schedule('15 */6 * * *', () => {
+  runJob('billingSync', '/proxy/cron-billing-sync');
+}, {
+  scheduled: true,
+  timezone: 'Asia/Karachi'
+});
+
 // ============================================
 // STARTUP
 // ============================================
@@ -141,6 +152,7 @@ console.log('  - Fulfillment sync: Every 3 hours');
 console.log('  - Courierify data sync: Daily at 02:00 PKT');
 console.log('  - Google Sheets sync: Every 2 minutes');
 console.log('  - Growzar event retries: Every minute');
+console.log('  - Billing sync: Every 6 hours');
 console.log('========================================');
 
 // Preflight: confirm the app is actually reachable and the secret is accepted.
