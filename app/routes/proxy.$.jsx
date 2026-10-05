@@ -732,7 +732,8 @@ async function handleBillingSync(request) {
 
     await logCronJob("billing-sync", "completed", {
       message:
-        `Checked ${result.shopsChecked} shops (${result.unreachable} unreachable); ` +
+        `Checked ${result.shopsChecked} shops (${result.unreachable} unreachable, ` +
+        `${result.uninstalledSettled} uninstalled settled); ` +
         `legacy charges: ${charged} posted, ${dryRun} dry-run`,
       processed: result.shopsChecked,
       errors: result.errors,

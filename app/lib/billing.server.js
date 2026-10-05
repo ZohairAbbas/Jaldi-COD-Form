@@ -34,6 +34,33 @@ const SWEEP_CONCURRENCY = 5;
 /** Admin API statuses that mean the store itself can't be reached. */
 const UNREACHABLE_SHOP_CODES = [401, 402, 403, 404, 423];
 
+/**
+ * Whether a failed lookup is the store's own state rather than a job fault.
+ * Besides HTTP codes, Shopify answers a store it is reviewing with a 200 and
+ * "Access denied for currentAppInstallation field. Shop is under review."
+ */
+function isUnreachableShop(error) {
+  return (
+    UNREACHABLE_SHOP_CODES.includes(error.response?.code) ||
+    /shop is under review/i.test(error.message || '')
+  );
+}
+
+/**
+ * Subscription fields for a shop that no longer has the app: Shopify cancels
+ * an app's subscriptions on uninstall.
+ */
+export const UNINSTALLED_SUBSCRIPTION = {
+  planName: DEFAULT_PLAN_NAME,
+  planHandle: null,
+  shopifySubscriptionId: null,
+  status: 'cancelled',
+  currentPeriodEnd: null,
+  trialEndsAt: null,
+  cancelAtPeriodEnd: false,
+  lastCheckedAt: null,
+};
+
 const PARTNER_API_VERSION = process.env.SHOPIFY_PARTNER_API_VERSION || '2026-07';
 
 /**
@@ -387,6 +414,8 @@ async function sweepShop(shop, { now, live }) {
  *     merchants who never open the app (App Pricing sends no webhooks).
  *  2. Post the monthly plan charge on legacy Mantle subscriptions, exactly as
  *     Mantle did, until they are moved to Shopify App Pricing.
+ * Shops without the app are settled to cancelled, in case the uninstall
+ * webhook was missed (or predates this code).
  */
 export async function runBillingSweep({ now = new Date(), live = legacyChargingEnabled() } = {}) {
   const installed = await prisma.session.findMany({
@@ -412,7 +441,7 @@ export async function runBillingSweep({ now = new Date(), live = legacyChargingE
         // A closed, frozen or uninstalled-but-not-yet-cleaned-up store answers
         // 401/402/403/404/423. That's the store's state, not a job fault, and
         // counting it would keep cron-health red for as long as it lingers.
-        if (UNREACHABLE_SHOP_CODES.includes(error.response?.code)) {
+        if (isUnreachableShop(error)) {
           result.unreachable++;
           continue;
         }
@@ -423,6 +452,15 @@ export async function runBillingSweep({ now = new Date(), live = legacyChargingE
     }
   };
   await Promise.all(Array.from({ length: SWEEP_CONCURRENCY }, worker));
+
+  const settled = await prisma.subscription.updateMany({
+    where: {
+      shop: { shopifyDomain: { notIn: installed.map((s) => s.shop) } },
+      status: { notIn: ['none', 'cancelled'] },
+    },
+    data: UNINSTALLED_SUBSCRIPTION,
+  });
+  result.uninstalledSettled = settled.count;
 
   return result;
 }
