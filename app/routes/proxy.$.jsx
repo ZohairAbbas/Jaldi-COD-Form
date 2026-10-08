@@ -6,7 +6,9 @@ import { syncCourierifyData } from "../lib/courierify-sync.server";
 import { runGoogleSheetsSync } from "../lib/google-sheets-sync.server";
 import { CRON_STATUS, getCronHealth } from "../lib/cron-health.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
-import { sweepGrowzarOutbox } from "../lib/growzar-outbox.server";
+import { enqueueGrowzarEvent, sweepGrowzarOutbox } from "../lib/growzar-outbox.server";
+import { abandonmentRow } from "../lib/growzar-rows";
+import { factsFromShop } from "../lib/growzar-shop-facts.server";
 import { runBillingSweep } from "../lib/billing.server";
 
 
@@ -224,7 +226,7 @@ async function handleCronAbandonedCarts(request) {
           console.error("Failed to parse form data:", e);
         }
 
-        await db.abandonedCart.create({
+        const cart = await db.abandonedCart.create({
           data: {
             shopId: session.shopId,
             sessionId: session.sessionId,
@@ -236,6 +238,24 @@ async function handleCronAbandonedCarts(request) {
             totalAmount: session.totalAmount,
           },
         });
+
+        // form.abandoned (API-CONTRACT §7), fired here because this is the
+        // one place a session becomes an abandonment. The body is the feed
+        // row; the eventId derives from the abandonment id, so a re-run can
+        // never be a second event. Shops Growzar does not sync are skipped
+        // inside enqueueGrowzarEvent. Never fails the cron.
+        try {
+          await enqueueGrowzarEvent({
+            topic: "form.abandoned",
+            shop: shopDomain,
+            occurredAt: cart.abandonedAt,
+            actor: { type: "system" },
+            data: abandonmentRow(cart, factsFromShop(session.shop)),
+            sourceId: cart.id,
+          });
+        } catch (eventError) {
+          console.error(`Failed to queue Growzar form.abandoned for ${cart.id}:`, eventError.message);
+        }
 
         results.processed++;
         results.byShop[shopDomain].processed++;
