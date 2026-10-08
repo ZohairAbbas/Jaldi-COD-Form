@@ -51,6 +51,21 @@ model Shop {
   // Function (native-checkout bundles mode). Null until first created; used as
   // an idempotency guard so we don't create duplicates.
   bundleDiscountId    String?
+  // Shop facts for the Growzar feeds (API-CONTRACT §6.1), read from Shopify and
+  // refreshed at most once a day by lib/growzar-shop-facts.server.js. The
+  // country is the PRIMARY LOCATION's (needs read_locations), never the billing
+  // address, which is the account holder's and returned GB for Karachi stores.
+  // Kept apart from currencyCode above so the feeds never change what the
+  // pixels report.
+  shopCurrency        String?
+  shopTimezone        String?
+  shopCountryCode     String? // ISO-3166 alpha-2, from the primary location
+  shopFactsSyncedAt   DateTime?
+  // Event gate (contract §7): events are emitted only for shops Growzar has made
+  // a signed feed request for, and stop after Growzar answers 410 until the
+  // next signed request.
+  growzarSeenAt       DateTime?
+  growzarStoppedAt    DateTime?
   abandonedCarts      AbandonedCart[]
   downsells           Downsell[]
   formConfig          FormConfig?
@@ -279,6 +294,10 @@ model Order {
   fulfillmentSyncedAt DateTime? // Last time cron checked this order
   riskLevel           String? // "LOW" | "MEDIUM" | "HIGH" | null (set at creation)
   verificationMethod  String?
+  // Discounts applied at creation, written from 2026-10 on (null before):
+  // { total, bundle, oneTick, recovery, code, downsellId }. `total` on the COD
+  // path is PRE-discount, so this is what makes the charged amount exact.
+  discounts           Json?
   shop                Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
@@ -286,6 +305,7 @@ model Order {
   @@index([createdAt])
   @@index([deliveryOutcome])
   @@index([phone])
+  @@index([shopId, updatedAt, id])
 }
 
 model OrderSession {
@@ -339,6 +359,7 @@ model AbandonedCart {
   @@index([sessionId])
   @@index([abandonedAt])
   @@index([recovered])
+  @@index([shopId, updatedAt, id])
 }
 
 model CronLog {
@@ -832,4 +853,38 @@ model GrowzarOutboxEvent {
   deliveredAt   DateTime?
 
   @@index([status, nextAttemptAt])
+}
+
+// ============================================
+// GROWZAR READ API (Phase 5)
+// ============================================
+
+// History of the verification settings the /growzar/settings feed exports.
+// Written ONLY by the Postgres trigger on "Settings" (migration
+// 20261008150000_growzar_read_api), so no writer can forget it. One baseline
+// row per field per shop was seeded when the trigger was created.
+model SettingsChange {
+  id        String   @id @default(cuid())
+  shopId    String
+  field     String
+  from      String?
+  to        String?
+  source    String   @default("trigger") // "baseline" | "trigger"
+  changedAt DateTime @default(now())
+
+  @@index([shopId, changedAt, id])
+}
+
+// Hard deletes of rows a Growzar feed returns, so a deletion is reported and
+// never left as silent absence (contract §6.2). Written by AFTER DELETE
+// triggers on "Order" and "AbandonedCart" (GDPR redaction, shop purge). No
+// foreign key: the ids must outlive the rows, and the shop row itself.
+model GrowzarTombstone {
+  id        String   @id @default(cuid())
+  shopId    String
+  entity    String // "order" | "abandoned_cart"
+  entityId  String
+  deletedAt DateTime @default(now())
+
+  @@index([shopId, entity, deletedAt])
 }

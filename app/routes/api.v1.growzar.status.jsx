@@ -8,9 +8,9 @@ import { appVersion, growzarError, verifyPlatformRequest } from "../lib/growzar.
  * and what it can do there this release. Authenticated with the platform key
  * and the request signature (§2.1); the key alone gets a 401.
  *
- * `capabilities` is empty in Phase 1 on purpose: Preventify has no read API
- * for Growzar yet (R2), and an empty list is what makes Growzar show a locked
- * section with a preview rather than a broken one.
+ * `capabilities` lists the read feeds this release serves (Phase 5): each
+ * entry appears only once its feed ships, which is how Growzar knows what it
+ * can read here.
  */
 
 /**
@@ -43,7 +43,7 @@ export const loader = async ({ request }) => {
       installed,
       appVersion: appVersion(),
       shop: auth.shop,
-      capabilities: [],
+      capabilities: ["form_orders:read", "abandonments:read", "settings:read"],
       planRelevantFeatures: [],
     });
   } catch (error) {

@@ -320,6 +320,16 @@ export async function createShopifyOrder(admin, orderData, shopDomain) {
       confirmationNumber: order.confirmation_number || order.order_number?.toString(),
       financialStatus: order.financial_status,
       orderStatusUrl: order.order_status_url,
+      // Stored on the Order row (Order.discounts) so the charged amount can be
+      // derived exactly: Order.total on this path is the PRE-discount total.
+      discounts: {
+        total: totalDiscountAmount,
+        bundle: bundleDiscount,
+        oneTick: oneTickDiscount,
+        recovery: recoveryDiscountAmount,
+        code: userDiscountAmount,
+        downsellId: recoveryDiscount?.downsellId || null,
+      },
     };
   } catch (error) {
     console.error("Shopify order creation error:", error);

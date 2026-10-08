@@ -253,6 +253,7 @@ export const action = async ({ request }) => {
         shopifyOrderId: shopifyResult.orderId,
         shopifyOrderNumber: shopifyResult.orderNumber,
         verificationMethod, // Server-resolved, so the DB matches the Shopify tag
+        discounts: shopifyResult.discounts ?? undefined,
         customFields: JSON.stringify({
           ...(typeof data.customFields === "string"
             ? JSON.parse(data.customFields || "{}")

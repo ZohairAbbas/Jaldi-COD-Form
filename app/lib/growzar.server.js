@@ -298,9 +298,12 @@ export function buildEnvelope({ topic, shop, occurredAt, actor, data = {}, sourc
  * `body` is the exact serialised envelope. It is stored in the outbox and sent
  * byte for byte on every retry; only the timestamp and signature are fresh.
  *
- * Retryable: network errors, timeouts, 5xx (contract §7) and 429. Any other
- * 4xx is Growzar saying the event itself is wrong, and sending it again will
- * not change the answer.
+ * Retryable: network errors, timeouts, 5xx (contract §7), 429, and 401 —
+ * Growzar answers 401 while it does not yet hold this app's secret, a
+ * configuration gap rather than a rejection (§7; a real uninstall event was
+ * lost to it on 2026-09-28). 410 means Growzar has no store for the shop: the
+ * outbox stops emitting for it. Any other 4xx is Growzar saying the event
+ * itself is wrong, and sending it again will not change the answer.
  */
 export async function postEvent(body, { env = process.env, fetchImpl = fetch, now = Date.now() } = {}) {
   const config = getGrowzarConfig(env);
@@ -327,7 +330,7 @@ export async function postEvent(body, { env = process.env, fetchImpl = fetch, no
     if (response.ok) return { ok: true, status: response.status };
     return {
       ok: false,
-      retryable: response.status >= 500 || response.status === 429,
+      retryable: response.status >= 500 || response.status === 429 || response.status === 401,
       status: response.status,
       error: `HTTP ${response.status}`,
     };

@@ -23,6 +23,26 @@ const IN_FLIGHT_LEASE_MS = 2 * 60_000;
 const SWEEP_BATCH = 50;
 
 /**
+ * Topics sent only to shops Growzar syncs (contract §7, "who to emit for"):
+ * one Growzar has made a signed feed request for (Shop.growzarSeenAt), and
+ * that has not answered 410 since (Shop.growzarStoppedAt). app.uninstalled is
+ * the Phase 1 event and keeps its ungated behaviour.
+ */
+export const GATED_TOPICS = new Set(["form.abandoned"]);
+
+export function gateOpen(shopRow) {
+  return Boolean(shopRow?.growzarSeenAt) && !shopRow?.growzarStoppedAt;
+}
+
+async function shopGateOpen(shopDomain, db) {
+  const row = await db.shop.findUnique({
+    where: { shopifyDomain: shopDomain },
+    select: { growzarSeenAt: true, growzarStoppedAt: true },
+  });
+  return gateOpen(row);
+}
+
+/**
  * Record the outcome of one attempt. `attempts` counts attempts made, so the
  * first failure schedules the first retry (1m) and the seventh gives up.
  */
@@ -53,6 +73,15 @@ export function outcomeUpdate(row, result, now = new Date()) {
 async function attempt(row, { db = prisma, send = postEvent } = {}) {
   const result = await send(row.body);
   const update = outcomeUpdate(row, result);
+  if (result.status === 410) {
+    // Growzar has no store for this shop: stop emitting gated topics for it
+    // until its next signed request (lib/growzar-feed.server.js reopens it).
+    try {
+      await db.shop.updateMany({ where: { shopifyDomain: row.shop }, data: { growzarStoppedAt: new Date() } });
+    } catch (error) {
+      console.error(`[growzar-outbox] could not close the event gate for ${row.shop}:`, error.message);
+    }
+  }
   try {
     await db.growzarOutboxEvent.update({ where: { id: row.id }, data: update });
   } catch (error) {
@@ -79,6 +108,15 @@ export async function enqueueGrowzarEvent(
   { topic, shop, occurredAt, actor, data, sourceId },
   { db = prisma, send = postEvent } = {},
 ) {
+  if (GATED_TOPICS.has(topic)) {
+    try {
+      if (!(await shopGateOpen(shop, db))) return { queued: false, gated: true };
+    } catch (error) {
+      console.error(`[growzar-outbox] not queuing ${topic} for ${shop}: gate check failed (${error.message})`);
+      return { queued: false };
+    }
+  }
+
   let envelope;
   try {
     envelope = buildEnvelope({ topic, shop, occurredAt, actor, data, sourceId });
@@ -136,6 +174,16 @@ export async function sweepGrowzarOutbox({ db = prisma, send = postEvent, now = 
   let failed = 0;
 
   for (const row of due) {
+    // A 410 for this shop may have arrived after the row was queued.
+    if (GATED_TOPICS.has(row.topic) && !(await shopGateOpen(row.shop, db))) {
+      await db.growzarOutboxEvent.updateMany({
+        where: { id: row.id, status: "pending" },
+        data: { status: "failed", lastError: "shop_not_connected: event gate closed" },
+      });
+      failed += 1;
+      continue;
+    }
+
     const lease = await db.growzarOutboxEvent.updateMany({
       where: { id: row.id, status: "pending", nextAttemptAt: row.nextAttemptAt },
       data: { nextAttemptAt: new Date(now.getTime() + IN_FLIGHT_LEASE_MS) },
