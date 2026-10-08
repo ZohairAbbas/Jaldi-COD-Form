@@ -53,7 +53,7 @@ describe("GET /api/v1/growzar/status", () => {
       installed: true,
       appVersion: "test-1",
       shop: SHOP,
-      capabilities: [],
+      capabilities: ["form_orders:read", "abandonments:read", "settings:read"],
       planRelevantFeatures: [],
     });
     expect(findSession).toHaveBeenCalledWith(expect.objectContaining({ where: { shop: SHOP, isOnline: false } }));

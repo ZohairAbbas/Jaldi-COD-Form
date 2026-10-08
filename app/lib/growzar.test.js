@@ -247,12 +247,15 @@ describe("events", () => {
     );
   });
 
-  test("5xx, 429 and network errors are retryable; other 4xx are not", async () => {
+  test("5xx, 429, 401 and network errors are retryable; other 4xx are not", async () => {
     const withStatus = (status) => postEvent("{}", { env, fetchImpl: async () => new Response(null, { status }) });
     expect((await withStatus(500)).retryable).toBe(true);
     expect((await withStatus(503)).retryable).toBe(true);
     expect((await withStatus(429)).retryable).toBe(true);
+    // Contract §7: Growzar answers 401 while it lacks this app's secret.
+    expect((await withStatus(401)).retryable).toBe(true);
     expect((await withStatus(400)).retryable).toBe(false);
+    expect((await withStatus(410)).retryable).toBe(false);
     const network = await postEvent("{}", { env, fetchImpl: async () => { throw new TypeError("fetch failed"); } });
     expect(network).toMatchObject({ ok: false, retryable: true, status: null });
   });

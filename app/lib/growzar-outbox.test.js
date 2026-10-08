@@ -29,7 +29,7 @@ function fakeDb() {
         (r) =>
           r.id === where.id &&
           r.status === where.status &&
-          r.nextAttemptAt.getTime() === where.nextAttemptAt.getTime(),
+          (!where.nextAttemptAt || r.nextAttemptAt.getTime() === where.nextAttemptAt.getTime()),
       );
       matches.forEach((r) => Object.assign(r, data));
       return { count: matches.length };
@@ -40,7 +40,17 @@ function fakeDb() {
         .map((r) => ({ ...r })),
     ),
   };
-  return { growzarOutboxEvent: table };
+  const shops = new Map();
+  const shop = {
+    shops,
+    findUnique: vi.fn(async ({ where }) => shops.get(where.shopifyDomain) ?? null),
+    updateMany: vi.fn(async ({ where, data }) => {
+      const row = shops.get(where.shopifyDomain);
+      if (row) Object.assign(row, data);
+      return { count: row ? 1 : 0 };
+    }),
+  };
+  return { growzarOutboxEvent: table, shop };
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -178,5 +188,65 @@ describe("sweepGrowzarOutbox", () => {
     const result = await sweepGrowzarOutbox({ db, send, now: NOW });
     expect(result.delivered + result.failed).toBe(0);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("the event gate (contract §7)", () => {
+  const abandoned = { ...event, topic: "form.abandoned", sourceId: "ab_1", data: { id: "ab_1" } };
+
+  test("form.abandoned is not queued for a shop Growzar has never asked about", async () => {
+    const db = fakeDb();
+    const send = vi.fn();
+    expect(await enqueueGrowzarEvent(abandoned, { db, send })).toEqual({ queued: false, gated: true });
+    expect(db.growzarOutboxEvent.rows).toHaveLength(0);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test("it is queued once Growzar has made a signed request for the shop, and only once", async () => {
+    const db = fakeDb();
+    db.shop.shops.set("acme.myshopify.com", { growzarSeenAt: NOW, growzarStoppedAt: null });
+    const send = vi.fn(async () => ({ ok: true, status: 202 }));
+    expect((await enqueueGrowzarEvent(abandoned, { db, send })).queued).toBe(true);
+    expect((await enqueueGrowzarEvent(abandoned, { db, send })).duplicate).toBe(true);
+    expect(db.growzarOutboxEvent.rows).toHaveLength(1);
+  });
+
+  test("app.uninstalled keeps its ungated Phase 1 behaviour", async () => {
+    const db = fakeDb();
+    expect((await enqueueGrowzarEvent(event, { db, send: vi.fn(async () => ({ ok: true, status: 202 })) })).queued).toBe(true);
+  });
+
+  test("a 410 closes the gate and is not retried; pending events for the shop then stop", async () => {
+    const db = fakeDb();
+    db.shop.shops.set("acme.myshopify.com", { growzarSeenAt: NOW, growzarStoppedAt: null });
+    const gone = vi.fn(async () => ({ ok: false, retryable: false, status: 410, error: "HTTP 410" }));
+    await enqueueGrowzarEvent(abandoned, { db, send: gone });
+    await flush();
+    expect(db.growzarOutboxEvent.rows[0].status).toBe("failed");
+    expect(db.shop.shops.get("acme.myshopify.com").growzarStoppedAt).toBeInstanceOf(Date);
+
+    expect((await enqueueGrowzarEvent({ ...abandoned, sourceId: "ab_2" }, { db, send: gone })).gated).toBe(true);
+  });
+
+  test("the sweep drops a queued gated event once the gate has closed", async () => {
+    const db = fakeDb();
+    db.shop.shops.set("acme.myshopify.com", { growzarSeenAt: NOW, growzarStoppedAt: null });
+    const send = vi.fn(async () => ({ ok: false, retryable: true, status: 503, error: "HTTP 503" }));
+    await enqueueGrowzarEvent(abandoned, { db, send });
+    await flush();
+    db.shop.shops.get("acme.myshopify.com").growzarStoppedAt = NOW;
+    send.mockClear();
+
+    // The failed first attempt scheduled its retry from the real clock.
+    const result = await sweepGrowzarOutbox({ db, send, now: new Date(Date.now() + 3_600_000) });
+    expect(send).not.toHaveBeenCalled();
+    expect(result.failed).toBe(1);
+    expect(db.growzarOutboxEvent.rows[0]).toMatchObject({ status: "failed" });
+  });
+
+  test("a 401 from Growzar is retried on the ladder", () => {
+    const update = outcomeUpdate({ attempts: 0 }, { ok: false, retryable: true, status: 401, error: "HTTP 401" }, NOW);
+    expect(update.status).toBe("pending");
+    expect(update.nextAttemptAt).toEqual(at(60_000));
   });
 });
