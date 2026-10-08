@@ -95,6 +95,8 @@ export const action = async ({ request }) => {
         total,
         items: JSON.stringify(items),
         paymentMethod: "card",
+        // Shopify's totals on this path are already net of discounts.
+        discounts: { total: parseFloat(payload.total_discounts || 0) },
         status: payload.financial_status === "paid" ? "confirmed" : "pending",
         customFields: JSON.stringify({}),
       },
