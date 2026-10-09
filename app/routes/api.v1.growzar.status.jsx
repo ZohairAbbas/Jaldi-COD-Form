@@ -43,7 +43,7 @@ export const loader = async ({ request }) => {
       installed,
       appVersion: appVersion(),
       shop: auth.shop,
-      capabilities: ["form_orders:read", "abandonments:read", "settings:read"],
+      capabilities: ["form_orders:read", "abandonments:read", "settings:read", "offers:read", "fraud_events:read"],
       planRelevantFeatures: [],
     });
   } catch (error) {

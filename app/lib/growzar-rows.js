@@ -232,3 +232,92 @@ export function settingsChangeRow(change) {
     updatedAt: iso(change.changedAt),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Offers and events (pack G-PRV5-3, G-PRV5-4)
+// ---------------------------------------------------------------------------
+
+/**
+ * /growzar/offers: Upsell (pre/post-purchase and one-tick), Downsell and
+ * Bundle as one list. No styling fields. The lifetime counters are the
+ * columns Preventify has always kept, with no dates and no deduplication;
+ * dated, per-visitor events are /growzar/offer-events.
+ */
+export function offerRow(source, offer, facts) {
+  const base = {
+    id: offer.id,
+    name: offer.name,
+    enabled: offer.enabled,
+    createdAt: iso(offer.createdAt),
+    updatedAt: iso(offer.updatedAt),
+    lifetimeImpressions: offer.impressions ?? 0,
+    lifetimeAccepts: offer.accepts ?? 0,
+  };
+  if (source === "upsell") {
+    const oneTick = offer.upsellType === "one-tick";
+    return {
+      ...base,
+      type: oneTick ? "one_tick" : "upsell",
+      subtype: offer.upsellType,
+      status: null,
+      discountType: offer.discountType,
+      discountValue: offer.discountValue,
+      // One-tick offers sell at a set price rather than a discount.
+      price: oneTick ? money(offer.upsellPrice, facts.shopCurrency) : null,
+      lifetimeDeclines: offer.declines ?? 0,
+    };
+  }
+  if (source === "downsell") {
+    return {
+      ...base,
+      type: "downsell",
+      subtype: null,
+      status: null,
+      discountType: offer.discountType,
+      discountValue: offer.discountValue,
+      price: null,
+      lifetimeDeclines: offer.declines ?? 0,
+    };
+  }
+  const combo = offer.bundleType === "combo";
+  return {
+    ...base,
+    type: "bundle",
+    subtype: offer.bundleType,
+    // Shown on the storefront only when enabled AND published.
+    status: offer.status,
+    // Quantity bundles discount per tier (several values); a combo has one.
+    discountType: combo ? offer.comboDiscountType : "tiered",
+    discountValue: combo ? offer.comboDiscountValue : null,
+    price: null,
+    lifetimeDeclines: null,
+  };
+}
+
+export function offerEventRow(event) {
+  return {
+    id: event.id,
+    offerType: event.offerType,
+    offerId: event.offerId,
+    kind: event.kind,
+    sessionId: event.sessionId,
+    createdAt: iso(event.createdAt),
+    updatedAt: iso(event.updatedAt),
+  };
+}
+
+export function fraudEventRow(event, facts) {
+  return {
+    id: event.id,
+    kind: event.kind,
+    rule: event.rule,
+    channel: event.channel,
+    path: event.path,
+    riskLevel: event.riskLevel,
+    ...phoneFields(event.phone, facts.shopCountry),
+    sessionId: event.sessionId,
+    orderId: numericId(event.orderId),
+    createdAt: iso(event.createdAt),
+    updatedAt: iso(event.updatedAt),
+  };
+}
