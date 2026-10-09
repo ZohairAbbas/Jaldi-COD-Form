@@ -102,6 +102,14 @@ export async function redactCustomer({ shopDomain, email, phone, orderIds = [] }
       })
     ).count;
 
+    // Fraud/verification events carry the buyer's phone (Growzar G-PRV5-4).
+    // The tombstone trigger reports each deletion to Growzar.
+    if (phoneVariants.length) {
+      counts.fraudEvents = (
+        await prisma.fraudEvent.deleteMany({ where: { shopId: shop.id, phone: { in: phoneVariants } } })
+      ).count;
+    }
+
     counts.customerProfiles = (
       await prisma.customerProfile.deleteMany({
         where: {
@@ -209,6 +217,9 @@ export async function redactShop({ shopDomain }) {
     ["abandonedCarts", prisma.abandonedCart],
     ["customerProfiles", prisma.customerProfile],
     ["blockedUsers", prisma.blockedUser],
+    // No foreign key to Shop: these would never cascade.
+    ["offerEvents", prisma.offerEvent],
+    ["fraudEvents", prisma.fraudEvent],
   ]) {
     counts[key] = await deleteInChunks(model, { shopId: shop.id });
   }

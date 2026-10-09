@@ -1,5 +1,6 @@
 import { createShopifyOrder, validateOrderData } from "../lib/order.server";
-import { getUpsells, getEnabledPixels, isUserBlocked } from "../lib/db.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
+import { getUpsells, getEnabledPixels, findBlockingRule } from "../lib/db.server";
 import { firePurchaseEvent, fireTikTokEvents } from "../lib/pixels.server";
 import { normalizePrice, CORE_FIELD_IDS, parseJsonColumn, resolvePixelCurrency } from "../lib/constants";
 import { matchesOfferCountryServer } from "../lib/offer-country.server";
@@ -83,8 +84,9 @@ export const action = async ({ request }) => {
 
     // Check if user is blocked (fraud prevention)
     if (shop.settings?.enableUserBlocking) {
-      const blocked = await isUserBlocked(shop.id, orderData.email, orderData.phone);
-      if (blocked) {
+      const blockedBy = await findBlockingRule(shop.id, orderData.email, orderData.phone);
+      if (blockedBy) {
+        recordFraudEvent({ shopId: shop.id, kind: "blocked", rule: blockedBy, path: "cod", phone: orderData.phone, sessionId: orderData.sessionId });
         return Response.json({
           success: false,
           error: blockMessage,
@@ -98,6 +100,7 @@ export const action = async ({ request }) => {
       const maxQty = shop.settings.maxQuantityPerOrder || 0;
       const orderQty = (orderData.items || []).reduce((sum, i) => sum + (parseInt(i.quantity, 10) || 0), 0);
       if (maxQty > 0 && orderQty > maxQty) {
+        recordFraudEvent({ shopId: shop.id, kind: "quantity_gate", rule: "max_quantity", path: "cod", phone: orderData.phone, sessionId: orderData.sessionId });
         return Response.json({
           success: false,
           error: blockMessage,
@@ -124,6 +127,7 @@ export const action = async ({ request }) => {
             select: { id: true },
           });
           if (recentOrder) {
+            recordFraudEvent({ shopId: shop.id, kind: "repeat_order_gate", rule: "limit_orders", path: "cod", phone: orderData.phone, sessionId: orderData.sessionId });
             return Response.json({
               success: false,
               error: blockMessage,

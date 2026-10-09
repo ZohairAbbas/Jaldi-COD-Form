@@ -1,4 +1,5 @@
 import { createWhatsAppLoginSession } from "../lib/whatsapp.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
@@ -10,7 +11,7 @@ export const action = async ({ request }) => {
     // Mints a login session whose completion marks a phone verified. No shop
     // record is needed — the session is global — but the caller must still be a
     // real storefront.
-    const { data, errorResponse } = await authenticateJsonProxyRequest(request, {
+    const { data, shopDomain, errorResponse } = await authenticateJsonProxyRequest(request, {
       requireShopRecord: false,
     });
     if (errorResponse) return errorResponse;
@@ -22,6 +23,9 @@ export const action = async ({ request }) => {
     }
 
     const { token, deepLink } = await createWhatsAppLoginSession(phone);
+    // The login session itself is global; the event belongs to the storefront
+    // that started it. Skipped when no Shop row matches.
+    recordFraudEvent({ shopDomain, kind: "otp_sent", channel: "whatsapp_login", phone, dedupeKey: `login:${token}:sent` });
 
     return Response.json({ token, deepLink });
   } catch (error) {

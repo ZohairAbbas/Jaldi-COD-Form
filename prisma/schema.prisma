@@ -888,3 +888,51 @@ model GrowzarTombstone {
 
   @@index([shopId, entity, deletedAt])
 }
+
+// Dated offer events (pack G-PRV5-3), written beside the lifetime counters on
+// Upsell / Downsell / Bundle by the storefront stat routes. `sessionId` is a
+// random per-tab id the storefront sends as `sid` (no PII); one event per
+// offer, kind and tab. Calls from storefront scripts older than the `sid`
+// change arrive without one and are kept undeduplicated (Postgres treats NULLs
+// as distinct in the unique index). `accepted` means the buyer clicked accept,
+// not that they bought: purchases are the offer lines on /growzar/form-orders.
+model OfferEvent {
+  id        String   @id @default(cuid())
+  shopId    String
+  offerType String // "upsell" | "one_tick" | "downsell" | "bundle"
+  offerId   String
+  sessionId String?
+  kind      String // "shown" | "accepted" | "declined"
+  orderId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([offerId, kind, sessionId])
+  @@index([shopId, updatedAt, id])
+}
+
+// Refusals and verification steps (pack G-PRV5-4). Logged beside the existing
+// checks without changing any decision. Never holds an IP, a fingerprint, an
+// OTP code or a blocked value: `rule` is the BlockedUser type.
+model FraudEvent {
+  id        String   @id @default(cuid())
+  shopId    String
+  // blocked | quantity_gate | repeat_order_gate | otp_sent | otp_verified |
+  // otp_failed | otp_expired. (risk_gate is reserved: no risk rule refuses
+  // or forces prepayment today.)
+  kind      String
+  rule      String? // blocked: "phone" | "email"; otp_failed: "incorrect" | "too_many_attempts"
+  channel   String? // "whatsapp" | "whatsapp_login"
+  path      String? // where it happened: "cod" | "payfast_initiate" | "payfast_transact" | "draft_order"
+  riskLevel String?
+  phone     String? // as normalised by buyer.server normalizePhone, else as typed
+  sessionId String?
+  orderId   String?
+  // Makes a polled step (WhatsApp login status) one event, not one per poll.
+  dedupeKey String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shopId, updatedAt, id])
+  @@index([shopId, phone])
+}
