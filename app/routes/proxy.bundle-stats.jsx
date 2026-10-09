@@ -1,11 +1,13 @@
 import { incrementBundleStat } from "../lib/db.server";
+import { recordOfferStat } from "../lib/growzar-events.server";
 import { requireProxyShop, ProxyAuthError } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
   // Counters only, but unauthenticated they let anyone inflate or skew a
   // merchant's bundle analytics. Params are on the query string, not a JSON body.
+  let auth;
   try {
-    await requireProxyShop(request, { requireShopRecord: false });
+    auth = await requireProxyShop(request, { requireShopRecord: false });
   } catch (error) {
     if (error instanceof ProxyAuthError) return error.response;
     throw error;
@@ -37,7 +39,9 @@ export const action = async ({ request }) => {
   }
 
   try {
-    await incrementBundleStat(bundleId, dbStat);
+    const offer = await incrementBundleStat(bundleId, dbStat);
+    // Dated event beside the counter (Growzar, pack G-PRV5-3). Not awaited.
+    recordOfferStat({ auth, offer, offerType: "bundle", stat: dbStat, sid: url.searchParams.get("sid") });
     return Response.json({ success: true });
   } catch (error) {
     console.error("Error tracking bundle stat:", error);

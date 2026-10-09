@@ -29,12 +29,12 @@ export async function verifyOTP(shopId, phone, otpCode) {
   });
 
   if (!otpSession) {
-    return { success: false, error: "OTP expired or not found. Please request a new one." };
+    return { success: false, reason: "expired", error: "OTP expired or not found. Please request a new one." };
   }
 
   // Check max attempts (3)
   if (otpSession.attempts >= 3) {
-    return { success: false, error: "Too many attempts. Please request a new OTP." };
+    return { success: false, reason: "too_many_attempts", error: "Too many attempts. Please request a new OTP." };
   }
 
   // Increment attempts
@@ -48,6 +48,7 @@ export async function verifyOTP(shopId, phone, otpCode) {
     const remaining = 2 - otpSession.attempts; // Already incremented
     return {
       success: false,
+      reason: "incorrect",
       error: remaining > 0
         ? `Incorrect OTP. ${remaining} attempt(s) remaining.`
         : "Too many attempts. Please request a new OTP.",

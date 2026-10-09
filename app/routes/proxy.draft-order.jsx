@@ -1,4 +1,5 @@
-import { isUserBlocked } from "../lib/db.server";
+import { findBlockingRule } from "../lib/db.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
 import { normalizePrice, parseJsonColumn } from "../lib/constants";
 import { upsertGlobalBuyer, normalizePhone } from "../lib/buyer.server";
 import { getRiskDataForOrder } from "../lib/risk.server";
@@ -20,8 +21,9 @@ export const action = async ({ request }) => {
 
     // Check if user is blocked (fraud prevention)
     if (shop.settings?.enableUserBlocking) {
-      const blocked = await isUserBlocked(shop.id, data.email, data.phone);
-      if (blocked) {
+      const blockedBy = await findBlockingRule(shop.id, data.email, data.phone);
+      if (blockedBy) {
+        recordFraudEvent({ shopId: shop.id, kind: "blocked", rule: blockedBy, path: "draft_order", phone: data.phone, sessionId: data.sessionId });
         const message = shop.settings.blockedUserMessage
           || "You are not allowed to place orders. Please contact support.";
         return Response.json({

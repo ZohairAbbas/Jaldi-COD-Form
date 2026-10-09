@@ -1772,6 +1772,14 @@ export async function syncBlockedUsers(shopId, type, values) {
  * Check if a user is blocked by email or phone
  */
 export async function isUserBlocked(shopId, email, phone) {
+  return (await findBlockingRule(shopId, email, phone)) !== null;
+}
+
+/**
+ * Which BlockedUser rule type refuses this buyer: "email", "phone", or null.
+ * The type only, never the blocked value (it is logged for Growzar).
+ */
+export async function findBlockingRule(shopId, email, phone) {
   const checks = [];
 
   if (email && email.trim()) {
@@ -1801,8 +1809,8 @@ export async function isUserBlocked(shopId, email, phone) {
     }
   }
 
-  if (checks.length === 0) return false;
+  if (checks.length === 0) return null;
 
   const results = await Promise.all(checks);
-  return results.some(r => r !== null);
+  return results.find(r => r !== null)?.type ?? null;
 }

@@ -1,4 +1,5 @@
-import { getEnabledPixels, isUserBlocked } from "../lib/db.server";
+import { getEnabledPixels, findBlockingRule } from "../lib/db.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
 import { buildHmac, executeTransaction, getTransactionStatus, isPayfastSuccess, isPayfastPending } from "../lib/payfast.server";
 import { createShopifyOrder } from "../lib/order.server";
 import { firePurchaseEvent, fireTikTokEvents } from "../lib/pixels.server";
@@ -28,8 +29,9 @@ export const action = async ({ request }) => {
 
     // Fraud check (non-blocking if already passed initiate, but double-check)
     if (shop.settings?.enableUserBlocking) {
-      const blocked = await isUserBlocked(shop.id, data.email, data.phone);
-      if (blocked) {
+      const blockedBy = await findBlockingRule(shop.id, data.email, data.phone);
+      if (blockedBy) {
+        recordFraudEvent({ shopId: shop.id, kind: "blocked", rule: blockedBy, path: "payfast_transact", phone: data.phone, sessionId: data.sessionId });
         const message = shop.settings.blockedUserMessage
           || "You are not allowed to place orders. Please contact support.";
         return Response.json({ success: false, error: message }, { status: 403 });

@@ -1,4 +1,5 @@
 import { verifyOTP } from "../lib/sms.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
 import { markBuyerVerified } from "../lib/buyer.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 import { issueVerificationToken, VERIFICATION_TAGS } from "../lib/verification.server";
@@ -21,7 +22,16 @@ export const action = async ({ request }) => {
       return Response.json({ error: "Phone and OTP are required" }, { status: 400 });
     }
 
-    const result = await verifyOTP(shopData.id, phone, otp);
+    const { reason, ...result } = await verifyOTP(shopData.id, phone, otp);
+
+    // Growzar (pack G-PRV5-4). Not awaited; the code itself is never logged.
+    recordFraudEvent({
+      shopId: shopData.id,
+      kind: result.success ? "otp_verified" : reason === "expired" ? "otp_expired" : "otp_failed",
+      rule: result.success || reason === "expired" ? null : reason ?? null,
+      channel: "whatsapp",
+      phone,
+    });
 
     // On successful OTP verification, mark buyer as globally verified
     if (result.success) {

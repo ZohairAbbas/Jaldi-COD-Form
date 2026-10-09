@@ -1,4 +1,5 @@
 import { sendWhatsAppOTP } from "../lib/whatsapp.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 
 export const action = async ({ request }) => {
@@ -20,6 +21,8 @@ export const action = async ({ request }) => {
     }
 
     const result = await sendWhatsAppOTP(shopData.id, phone);
+    // Only once WhatsApp accepted the message (sendWhatsAppOTP throws otherwise).
+    recordFraudEvent({ shopId: shopData.id, kind: "otp_sent", channel: "whatsapp", phone });
 
     return Response.json(result);
   } catch (error) {

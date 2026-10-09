@@ -19,6 +19,7 @@ import { normalizePrice, getCurrencyCode, getCurrencySymbol, resolvePixelCurrenc
 import { isNativeBundleMode, isCodAllowedForProduct } from './native-bundle';
 import { matchesOfferCountry, offersNeedCountry } from './offer-country';
 import { resolveOrderRedirect } from './order-redirect';
+import { getOfferSid } from './offer-sid';
 
 // The element carrying the product data-* attributes. Merchants either enable the
 // app embed or place a manual Popup Button / Embedded Form app block (in which
@@ -1450,7 +1451,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
             // Track bundle impression (once — guarded below with other side effects)
             if (!configSideEffectsRanRef.current) {
               const resolvedPath = window.PREVENTIFY_APP_PATH || data.appPath || '/apps/preventify/';
-              fetch(`${resolvedPath}proxy/bundle-stats?bundleId=${matchedBundle.id}&stat=impression`, { method: 'POST' }).catch(() => {});
+              fetch(`${resolvedPath}proxy/bundle-stats?bundleId=${matchedBundle.id}&stat=impression&sid=${getOfferSid()}`, { method: 'POST' }).catch(() => {});
             }
           }
         }
@@ -2191,7 +2192,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
     setSelectedComboId(comboId);
 
     if (appPath) {
-      fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=accept`, { method: 'POST' }).catch(() => {});
+      fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=accept&sid=${getOfferSid()}`, { method: 'POST' }).catch(() => {});
     }
 
     return true;
@@ -2210,7 +2211,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
   const handleComboImpression = useCallback((comboId) => {
     if (!appPath) return;
-    fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=impression`, { method: 'POST' }).catch(() => {});
+    fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=impression&sid=${getOfferSid()}`, { method: 'POST' }).catch(() => {});
   }, [appPath]);
 
   // Native-checkout path: there is no COD form to open, so the card adds its
@@ -2251,7 +2252,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
       } catch (err) { /* cosmetic only */ }
 
       if (appPath) {
-        fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=accept`, { method: 'POST' }).catch(() => {});
+        fetch(`${appPath}proxy/bundle-stats?bundleId=${comboId}&stat=accept&sid=${getOfferSid()}`, { method: 'POST' }).catch(() => {});
       }
 
       const action = resolved.combo.nativeAction || 'stay';
@@ -2578,7 +2579,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
 
     // Track accept stat
     if (activeBundleConfig && appPath) {
-      fetch(`${appPath}proxy/bundle-stats?bundleId=${activeBundleConfig.id}&stat=accept`, { method: 'POST' }).catch(() => {});
+      fetch(`${appPath}proxy/bundle-stats?bundleId=${activeBundleConfig.id}&stat=accept&sid=${getOfferSid()}`, { method: 'POST' }).catch(() => {});
     }
   };
 
@@ -2954,7 +2955,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Track upsell stats
   const trackUpsellStat = async (upsellId, stat) => {
     try {
-      await fetch(`${appPath}proxy/upsell-stats?upsellId=${upsellId}&stat=${stat}`, {
+      await fetch(`${appPath}proxy/upsell-stats?upsellId=${upsellId}&stat=${stat}&sid=${getOfferSid()}`, {
         method: 'POST',
       });
     } catch (error) {
@@ -2965,7 +2966,7 @@ export default function JaldiCODFormApp({ mode, shopDomain, currentProduct: init
   // Track downsell stats
   const trackDownsellStat = async (downsellId, stat) => {
     try {
-      await fetch(`${appPath}proxy/downsell-stats?downsellId=${downsellId}&stat=${stat}`, {
+      await fetch(`${appPath}proxy/downsell-stats?downsellId=${downsellId}&stat=${stat}&sid=${getOfferSid()}`, {
         method: 'POST',
       });
     } catch (error) {

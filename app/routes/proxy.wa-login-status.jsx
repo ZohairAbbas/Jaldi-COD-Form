@@ -1,4 +1,6 @@
 import { checkWhatsAppLoginStatus } from "../lib/whatsapp.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
+import db from "../db.server";
 import { authenticateJsonProxyRequest } from "../lib/proxy-auth.server";
 import { issueVerificationToken, VERIFICATION_TAGS } from "../lib/verification.server";
 
@@ -24,6 +26,12 @@ export const action = async ({ request }) => {
 
     const result = await checkWhatsAppLoginStatus(token);
 
+    // Polled every few seconds, so each outcome is keyed to the login token
+    // and logged once. An unknown token is ignored: it has no session behind it.
+    if (result.status === "verified" || result.status === "expired") {
+      logLoginOutcome(shopDomain, token, result);
+    }
+
     // A completed login is proof the buyer controls the number — they messaged
     // from it. Issue the token that releases their saved details.
     if (result.status === "verified" && result.phone) {
@@ -43,3 +51,17 @@ export const action = async ({ request }) => {
     return Response.json({ status: "expired" });
   }
 };
+
+async function logLoginOutcome(shopDomain, token, result) {
+  const session = await db.whatsAppLoginSession
+    .findUnique({ where: { token }, select: { phone: true } })
+    .catch(() => null);
+  if (!session) return;
+  await recordFraudEvent({
+    shopDomain,
+    kind: result.status === "verified" ? "otp_verified" : "otp_expired",
+    channel: "whatsapp_login",
+    phone: session.phone,
+    dedupeKey: `login:${token}:${result.status}`,
+  });
+}

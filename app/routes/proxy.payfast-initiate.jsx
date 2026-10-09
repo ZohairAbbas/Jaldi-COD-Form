@@ -1,4 +1,5 @@
-import { isUserBlocked } from "../lib/db.server";
+import { findBlockingRule } from "../lib/db.server";
+import { recordFraudEvent } from "../lib/growzar-events.server";
 import { getPayfastToken, buildHmac, validateCustomer } from "../lib/payfast.server";
 import { normalizePrice } from "../lib/constants";
 import { normalizePhone } from "../lib/buyer.server";
@@ -27,8 +28,9 @@ export const action = async ({ request }) => {
 
     // Fraud check
     if (shop.settings?.enableUserBlocking) {
-      const blocked = await isUserBlocked(shop.id, data.email, data.phone);
-      if (blocked) {
+      const blockedBy = await findBlockingRule(shop.id, data.email, data.phone);
+      if (blockedBy) {
+        recordFraudEvent({ shopId: shop.id, kind: "blocked", rule: blockedBy, path: "payfast_initiate", phone: data.phone, sessionId: data.sessionId });
         const message = shop.settings.blockedUserMessage
           || "You are not allowed to place orders. Please contact support.";
         return Response.json({ success: false, error: message }, { status: 403 });
