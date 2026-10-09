@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { abandonmentRow, lineOffer, money, numericId, orderRow, parseItems, settingValue, settingsRow } from "./growzar-rows";
+import { abandonmentRow, fraudEventRow, lineOffer, money, numericId, offerRow, orderRow, parseItems, settingValue, settingsRow } from "./growzar-rows";
 
 const facts = { shopCurrency: "PKR", shopTimezone: "Asia/Karachi", shopCountry: "PK", shopCountrySource: "location" };
 
@@ -159,5 +159,32 @@ describe("settings", () => {
     expect(settingsRow(base).otpChannel).toBe("whatsapp");
     expect(settingsRow({ ...base, enableOTP: false }).otpChannel).toBeNull();
     expect(settingsRow(base, new Date("2026-10-08T00:00:00Z")).updatedAt).toBe("2026-10-08T00:00:00.000Z");
+  });
+});
+
+describe("offers and events", () => {
+  const at = new Date("2026-10-09T00:00:00Z");
+  const common = { id: "cm_o", name: "Offer", enabled: true, createdAt: at, updatedAt: at, impressions: 10, accepts: 3, declines: 2 };
+
+  test("a one-tick upsell sells at a price; counters are labelled lifetime", () => {
+    const row = offerRow("upsell", { ...common, upsellType: "one-tick", discountType: "none", discountValue: 0, upsellPrice: 499 }, facts);
+    expect(row).toMatchObject({ type: "one_tick", subtype: "one-tick", price: { amount: "499.00", currency: "PKR" }, lifetimeImpressions: 10, lifetimeAccepts: 3, lifetimeDeclines: 2 });
+    expect(row).not.toHaveProperty("acceptButtonBgColor");
+  });
+
+  test("pre-purchase upsell and downsell keep their discount", () => {
+    expect(offerRow("upsell", { ...common, upsellType: "pre-purchase", discountType: "percentage", discountValue: 10 }, facts)).toMatchObject({ type: "upsell", discountType: "percentage", discountValue: 10, price: null });
+    expect(offerRow("downsell", { ...common, discountType: "fixed", discountValue: 50 }, facts)).toMatchObject({ type: "downsell", discountType: "fixed", discountValue: 50 });
+  });
+
+  test("bundles: tiered quantity bundles, one discount for a combo, no declines counter", () => {
+    expect(offerRow("bundle", { ...common, bundleType: "quantity", status: "published" }, facts)).toMatchObject({ type: "bundle", subtype: "quantity", status: "published", discountType: "tiered", discountValue: null, lifetimeDeclines: null });
+    expect(offerRow("bundle", { ...common, bundleType: "combo", status: "inactive", comboDiscountType: "percentage", comboDiscountValue: 15 }, facts)).toMatchObject({ discountType: "percentage", discountValue: 15 });
+  });
+
+  test("fraud events: phone normalized on the way out, nothing else about the buyer", () => {
+    const row = fraudEventRow({ id: "fe1", kind: "blocked", rule: "phone", channel: null, path: "cod", riskLevel: null, phone: "+923001234567", sessionId: "s1", orderId: null, createdAt: at, updatedAt: at }, facts);
+    expect(row).toMatchObject({ kind: "blocked", rule: "phone", path: "cod", phone: "+923001234567", phoneRaw: "+923001234567" });
+    expect(Object.keys(row)).not.toContain("dedupeKey");
   });
 });

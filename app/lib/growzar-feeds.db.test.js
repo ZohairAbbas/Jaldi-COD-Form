@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 /**
@@ -35,6 +36,7 @@ let db;
 let growzar;
 let routes;
 let cron;
+let events;
 let gdpr;
 
 beforeAll(async () => {
@@ -50,7 +52,14 @@ beforeAll(async () => {
     abandonments: await import("../routes/api.v1.growzar.abandonments"),
     settings: await import("../routes/api.v1.growzar.settings"),
     settingsChanges: await import("../routes/api.v1.growzar.settings-changes"),
+    offers: await import("../routes/api.v1.growzar.offers"),
+    offerEvents: await import("../routes/api.v1.growzar.offer-events"),
+    fraudEvents: await import("../routes/api.v1.growzar.fraud-events"),
+    order: await import("../routes/proxy.order"),
+    bundleStats: await import("../routes/proxy.bundle-stats"),
+    otpVerify: await import("../routes/proxy.otp-verify"),
   };
+  events = await import("./growzar-events.server");
   cron = await import("../routes/proxy.$");
 });
 
@@ -63,7 +72,7 @@ const T0 = new Date("2026-10-01T10:00:00.000Z");
 async function reset() {
   await db.$executeRawUnsafe(
     `TRUNCATE "GrowzarTombstone", "SettingsChange", "GrowzarOutboxEvent", "Order", "AbandonedCart",
-       "OrderSession", "Settings", "Session", "Shop" CASCADE`,
+       "OrderSession", "Settings", "Session", "OfferEvent", "FraudEvent", "OTPSession", "Shop" CASCADE`,
   );
 }
 
@@ -358,6 +367,190 @@ describe.skipIf(!usable)("Growzar feeds (real Postgres)", () => {
       await runCron();
       expect(await db.abandonedCart.count()).toBe(1);
       expect(await db.growzarOutboxEvent.count({ where: { topic: "form.abandoned" } })).toBe(0);
+    });
+  });
+
+  describe("P2: offers and fraud events", () => {
+    /** The writers are fire-and-forget; wait for the row instead of a fixed sleep. */
+    async function eventually(read, until) {
+      for (let i = 0; i < 50; i += 1) {
+        const value = await read();
+        if (until(value)) return value;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return read();
+    }
+
+    const VERIFIED = (domain) => ({ verified: true, shopDomain: domain });
+
+    test("offer events: one per offer, kind and tab; no sid is kept undeduplicated; another shop's offer is ignored", async () => {
+      const a = await makeShop("a.myshopify.com");
+      const b = await makeShop("b.myshopify.com");
+      const offer = await db.bundle.create({ data: { shopId: a.id } });
+      const other = await db.bundle.create({ data: { shopId: b.id } });
+
+      const shown = (sid, auth = VERIFIED("a.myshopify.com"), row = offer) =>
+        events.recordOfferStat({ auth, offer: row, offerType: "bundle", stat: "impressions", sid });
+      await shown("tab0000000001");
+      await shown("tab0000000001");
+      await shown("tab0000000002");
+      await shown(null);
+      await shown(null);
+      await shown("tab0000000003", VERIFIED("a.myshopify.com"), other); // offer of shop B via shop A's storefront
+      await shown("tab0000000004", { verified: false, shopDomain: "a.myshopify.com" });
+      await events.recordOfferStat({ auth: VERIFIED("a.myshopify.com"), offer, offerType: "bundle", stat: "accepts", sid: "tab0000000001" });
+
+      expect(await db.offerEvent.count({ where: { kind: "shown" } })).toBe(4);
+      expect(await db.offerEvent.count({ where: { offerId: other.id } })).toBe(0);
+
+      const feed = await get(routes.offerEvents, "/api/v1/growzar/offer-events", "a.myshopify.com");
+      expect(feed.body.data).toHaveLength(5);
+      expect(feed.body.data.find((e) => e.kind === "accepted")).toMatchObject({ offerType: "bundle", offerId: offer.id, sessionId: "tab0000000001" });
+    });
+
+    /** A storefront call as Shopify's app proxy signs it (sorted params, HMAC with the API secret). */
+    function proxyRequest(path, params) {
+      const query = { shop: "a.myshopify.com", path_prefix: "/apps/preventify", timestamp: String(Math.floor(Date.now() / 1000)), logged_in_customer_id: "", ...params };
+      const message = Object.keys(query).sort().map((k) => `${k}=${query[k]}`).join("");
+      const signature = createHmac("sha256", ENV.SHOPIFY_API_SECRET).update(message).digest("hex");
+      return new Request(`https://preventify.example.test${path}?${new URLSearchParams({ ...query, signature })}`, { method: "POST" });
+    }
+
+    test("the signed stat route: the counter still increments every time, the dated event once per tab", async () => {
+      const a = await makeShop("a.myshopify.com");
+      const offer = await db.bundle.create({ data: { shopId: a.id } });
+      for (let i = 0; i < 2; i += 1) {
+        const res = await routes.bundleStats.action({
+          request: proxyRequest("/proxy/bundle-stats", { bundleId: offer.id, stat: "impression", sid: "tab0000000001" }),
+        });
+        expect(res.status).toBe(200);
+      }
+      expect((await db.bundle.findUnique({ where: { id: offer.id } })).impressions).toBe(2);
+      const rows = await eventually(() => db.offerEvent.findMany(), (r) => r.length >= 1);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ offerType: "bundle", kind: "shown", sessionId: "tab0000000001" });
+
+      // Without a valid signature the route refuses, as before this change.
+      const unsigned = new Request(`https://preventify.example.test/proxy/bundle-stats?bundleId=${offer.id}&stat=impression`, { method: "POST" });
+      expect((await routes.bundleStats.action({ request: unsigned })).status).toBe(400);
+    });
+
+    test("/offers merges the three tables, pages with limit=2, and reports a deleted offer", async () => {
+      const a = await makeShop("a.myshopify.com");
+      await makeShop("b.myshopify.com");
+      await db.upsell.create({ data: { shopId: a.id, upsellType: "one-tick", upsellPrice: 499, enabled: true } });
+      await db.upsell.create({ data: { shopId: a.id, upsellType: "pre-purchase" } });
+      await db.downsell.create({ data: { shopId: a.id } });
+      const gone = await db.bundle.create({ data: { shopId: a.id, bundleType: "combo" } });
+      await db.bundle.create({ data: { shopId: a.id } });
+      const since = new Date(Date.now() - 60_000).toISOString();
+
+      const seen = [];
+      let path = "/api/v1/growzar/offers?limit=2";
+      for (let pages = 0; pages < 10; pages += 1) {
+        const { body } = await get(routes.offers, path, "a.myshopify.com");
+        seen.push(...body.data);
+        if (!body.pagination.hasMore) break;
+        path = `/api/v1/growzar/offers?limit=2&cursor=${body.pagination.nextCursor}`;
+      }
+      expect(seen).toHaveLength(5);
+      expect(new Set(seen.map((o) => o.id)).size).toBe(5);
+      expect(seen.map((o) => o.type).sort()).toEqual(["bundle", "bundle", "downsell", "one_tick", "upsell"]);
+
+      await db.bundle.delete({ where: { id: gone.id } });
+      const after = await get(routes.offers, `/api/v1/growzar/offers?updatedSince=${since}`, "a.myshopify.com");
+      expect(after.body.deletedOfferIds).toEqual([gone.id]);
+      expect(after.body.data).toHaveLength(4);
+      expect((await get(routes.offers, "/api/v1/growzar/offers", "b.myshopify.com")).body.data).toHaveLength(0);
+    });
+
+    test("a blocked buyer and a quantity refusal are logged; the decision is unchanged", async () => {
+      const a = await makeShop("a.myshopify.com");
+      await db.settings.create({ data: { shopId: a.id, enableUserBlocking: true, blockHighQuantityEnabled: true, maxQuantityPerOrder: 2 } });
+      const { normalizePhoneForBlocking } = await import("./db.server");
+      await db.blockedUser.create({ data: { shopId: a.id, type: "phone", value: normalizePhoneForBlocking("+923001234567") } });
+
+      const submit = (phone, quantity) =>
+        routes.order.action({
+          request: new Request("https://a.myshopify.com/apps/preventify/proxy/order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              shop: "a.myshopify.com",
+              sessionId: "sess_p2",
+              firstName: "Test",
+              address: "1 Test Street",
+              city: "Lahore",
+              countryCode: "PAK",
+              phone,
+              items: [{ variantId: "1", quantity, price: 10 }],
+            }),
+          }),
+        });
+
+      expect((await submit("+923001234567", 1)).status).toBe(403);
+      expect((await submit("+923007654321", 5)).status).toBe(403);
+
+      const rows = await eventually(() => db.fraudEvent.findMany({ orderBy: { createdAt: "asc" } }), (r) => r.length >= 2);
+      expect(rows.map((r) => [r.kind, r.rule, r.path, r.sessionId])).toEqual([
+        ["blocked", "phone", "cod", "sess_p2"],
+        ["quantity_gate", "max_quantity", "cod", "sess_p2"],
+      ]);
+
+      const feed = await get(routes.fraudEvents, "/api/v1/growzar/fraud-events", "a.myshopify.com");
+      expect(feed.body.data[0]).toMatchObject({ kind: "blocked", rule: "phone", phone: "+923001234567" });
+      // The rule type only: the blocked value itself never leaves the app.
+      expect(feed.body.data[0]).not.toHaveProperty("value");
+    });
+
+    test("OTP verify logs failed and verified, never the code", async () => {
+      const a = await makeShop("a.myshopify.com");
+      await db.oTPSession.create({ data: { shopId: a.id, phone: "+923001234567", otp: "482913", expiresAt: new Date(Date.now() + 300_000) } });
+      const verify = (otp) =>
+        routes.otpVerify.action({
+          request: new Request("https://a.myshopify.com/apps/preventify/proxy/otp-verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ shop: "a.myshopify.com", phone: "+923001234567", otp }),
+          }),
+        });
+
+      const wrong = await (await verify("000000")).json();
+      expect(wrong).not.toHaveProperty("reason");
+      await verify("482913");
+
+      const rows = await eventually(() => db.fraudEvent.findMany({ orderBy: { createdAt: "asc" } }), (r) => r.length >= 2);
+      expect(rows.map((r) => [r.kind, r.rule, r.channel])).toEqual([
+        ["otp_failed", "incorrect", "whatsapp"],
+        ["otp_verified", null, "whatsapp"],
+      ]);
+      expect(JSON.stringify(rows)).not.toContain("482913");
+    });
+
+    test("a polled step is one event (dedupeKey)", async () => {
+      const a = await makeShop("a.myshopify.com");
+      for (let i = 0; i < 3; i += 1) {
+        await events.recordFraudEvent({ shopDomain: "a.myshopify.com", kind: "otp_verified", channel: "whatsapp_login", phone: "03001234567", dedupeKey: "login:tok:verified" });
+      }
+      const rows = await db.fraudEvent.findMany({ where: { shopId: a.id } });
+      expect(rows).toHaveLength(1);
+      // Stored the way buyer.server normalizePhone stores phones (a light
+      // clean, not E.164), so GDPR redaction matches it; E.164 is on the way out.
+      expect(rows[0].phone).toBe("03001234567");
+    });
+
+    test("GDPR redaction deletes the buyer's fraud events and reports them", async () => {
+      const a = await makeShop("a.myshopify.com");
+      await events.recordFraudEvent({ shopId: a.id, kind: "blocked", rule: "phone", phone: "03001112223" });
+      await events.recordFraudEvent({ shopId: a.id, kind: "otp_sent", channel: "whatsapp", phone: "03004445556" });
+      const target = await db.fraudEvent.findFirst({ where: { kind: "blocked" } });
+      const since = new Date(Date.now() - 1000).toISOString();
+
+      await gdpr.redactCustomer({ shopDomain: "a.myshopify.com", phone: "03001112223" });
+
+      const feed = await get(routes.fraudEvents, `/api/v1/growzar/fraud-events?updatedSince=${since}`, "a.myshopify.com");
+      expect(feed.body.deletedFraudEventIds).toEqual([target.id]);
+      expect(feed.body.data).toHaveLength(1);
     });
   });
 });

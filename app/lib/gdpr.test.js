@@ -10,6 +10,8 @@ const db = {
   globalBuyer: { findUnique: vi.fn(), delete: vi.fn() },
   shopBuyerProfile: { deleteMany: vi.fn(), count: vi.fn(), findMany: vi.fn() },
   deviceFingerprint: { deleteMany: vi.fn() },
+  offerEvent: { deleteMany: vi.fn(), findMany: vi.fn() },
+  fraudEvent: { deleteMany: vi.fn(), findMany: vi.fn() },
 };
 
 vi.mock("../db.server.js", () => ({ default: db }));
@@ -24,6 +26,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.shop.findUnique.mockResolvedValue({ id: "shop_a" });
   for (const model of [
+    db.offerEvent,
+    db.fraudEvent,
     db.order,
     db.orderSession,
     db.abandonedCart,
@@ -73,6 +77,7 @@ describe("redactCustomer — scoping", () => {
       db.abandonedCart,
       db.customerProfile,
       db.blockedUser,
+      db.fraudEvent,
     ]) {
       expect(model.deleteMany).toHaveBeenCalled();
       expect(model.deleteMany.mock.calls[0][0].where.shopId).toBe("shop_a");
